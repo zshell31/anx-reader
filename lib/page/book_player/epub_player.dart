@@ -135,8 +135,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   void setTranslationMode(TranslationModeEnum mode) {
     webViewController.evaluateJavascript(source: '''
-      if (typeof reader.view !== 'undefined' && reader.view.setTranslationMode) {
-        reader.view.setTranslationMode('${mode.code}');
+      if (globalThis.reader?.view?.setTranslationMode) {
+        globalThis.reader.view.setTranslationMode('${mode.code}');
       }
       ''');
   }
@@ -627,6 +627,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     controller.addJavaScriptHandler(
         handlerName: 'onLoadEnd',
         callback: (args) {
+          setTranslationMode(Prefs().getBookTranslationMode(widget.book.id));
           widget.onLoadEnd();
         });
 

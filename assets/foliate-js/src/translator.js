@@ -12,10 +12,10 @@ if (typeof window !== 'undefined') {
 }
 
 // Translation function that calls Flutter's translation service
-const translate = async (text) => {
+const translate = async (text, contextText) => {
   try {
     // Call Flutter's translation handler
-      const result = await window.flutter_inappwebview.callHandler('translateText', text)
+      const result = await window.flutter_inappwebview.callHandler('translateText', text, contextText)
       return result || `Translation failed: ${text}`
   } catch (error) {
     console.error('Translation failed:', error)
@@ -27,6 +27,7 @@ export class Translator {
   #translationMode = TranslationMode.OFF
   observedElements = new Set()
   #translatedElements = new WeakMap()
+  #translationInputs = new WeakMap()
   #observer = null
   
   constructor() {
@@ -100,8 +101,18 @@ export class Translator {
         
     const textElements = this.#walkTextNodes(doc.body || doc.documentElement)
     // console.log(`Found ${textElements.length} text elements to observe`)
-    
-    textElements.forEach(element => {
+
+    let previousText = ''
+    const translationInputs = textElements.map(element => {
+      const existingInput = this.#translationInputs.get(element)
+      const text = existingInput?.text ?? element.innerText?.trim() ?? ''
+      const input = existingInput ?? { text, contextText: previousText }
+      this.#translationInputs.set(element, input)
+      if (text) previousText = text
+      return { element, input }
+    })
+
+    translationInputs.forEach(({ element }) => {
       if (!this.observedElements.has(element)) {
         this.#observer.observe(element)
         this.observedElements.add(element)
@@ -126,6 +137,7 @@ export class Translator {
     this.#observer.disconnect()
     this.observedElements.clear()
     this.#translatedElements = new WeakMap()
+    this.#translationInputs = new WeakMap()
     
     // Reinitialize observer
     this.#initializeObserver()
@@ -176,11 +188,12 @@ export class Translator {
     if (this.#translationMode === TranslationMode.OFF) return
     if (this.#translatedElements.has(element)) return
     
-    const text = element.innerText?.trim()
+    const input = this.#translationInputs.get(element)
+    const text = input?.text ?? element.innerText?.trim()
     if (!text) return
     
     try {
-      const translatedText = await translate(text)
+      const translatedText = await translate(text, input?.contextText ?? '')
       
       // Mark as translated to prevent re-processing
       this.#translatedElements.set(element, {

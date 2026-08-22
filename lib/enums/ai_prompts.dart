@@ -54,10 +54,12 @@ Avoid verbatim repetition; preserve core information
 You are a professional translator. Translate the following text into {{to_locale}}.
 
 Source language: {{from_locale}}
-Source text: {{text}}
+Previous source context (for disambiguation and context only): {{contextText}}
+Current source text to translate: {{text}}
 
 Requirements:
-- Output ONLY the translated text, nothing else.
+- Translate ONLY the current source text. Do not translate or include the previous source context.
+- Output ONLY the translation of the current source text, nothing else.
 - Do not include any explanations, notes, commentary, or the original text.
 - Preserve paragraph structure and formatting.
 - Maintain the tone and style of the original text.

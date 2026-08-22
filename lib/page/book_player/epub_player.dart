@@ -865,12 +865,13 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       callback: (args) async {
         try {
           String text = args[0];
+          final contextText = args.length > 1 ? args[1]?.toString() ?? '' : '';
           final service = Prefs().fullTextTranslateService;
           final from = Prefs().fullTextTranslateFrom;
           final to = Prefs().fullTextTranslateTo;
 
-          return await service.provider
-              .translateTextOnly(text, from, to, isFullText: true);
+          return await service.provider.translateTextOnly(text, from, to,
+              contextText: contextText, isFullText: true);
         } catch (e) {
           AnxLog.severe('Translation error: $e');
           return 'Translation error: $e';

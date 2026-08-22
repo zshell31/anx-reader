@@ -33,6 +33,7 @@ class AiTranslateProvider extends TranslateServiceProvider {
             text,
             mapLanguageCode(to),
             mapLanguageCode(from),
+            contextText: contextText,
           )
         : generatePromptTranslate(
             text,
@@ -61,6 +62,7 @@ class AiTranslateProvider extends TranslateServiceProvider {
               text,
               mapLanguageCode(to),
               mapLanguageCode(from),
+              contextText: contextText,
             )
           : generatePromptTranslate(
               text,

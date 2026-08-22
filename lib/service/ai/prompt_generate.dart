@@ -125,7 +125,8 @@ PromptTemplatePayload generatePromptTranslate(
 }
 
 PromptTemplatePayload generatePromptFullTextTranslate(
-    String text, String toLocale, String fromLocale) {
+    String text, String toLocale, String fromLocale,
+    {String? contextText}) {
   final prompt = Prefs().getAiPrompt(AiPrompts.fullTextTranslate);
   final normalized = _normalizePrompt(prompt);
   final template = ChatPromptTemplate.fromPromptMessages([
@@ -137,6 +138,7 @@ PromptTemplatePayload generatePromptFullTextTranslate(
       'text': text.trim(),
       'to_locale': toLocale,
       'from_locale': fromLocale,
+      'contextText': (contextText ?? '').trim(),
     },
     identifier: AiPrompts.fullTextTranslate,
   );

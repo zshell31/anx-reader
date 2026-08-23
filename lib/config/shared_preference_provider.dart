@@ -602,6 +602,19 @@ class Prefs extends ChangeNotifier {
     return prefs.getBool('autoTranslateSelection') ?? false;
   }
 
+  String? get externalDictionaryComponent {
+    return prefs.getString('externalDictionaryComponent');
+  }
+
+  set externalDictionaryComponent(String? value) {
+    if (value == null) {
+      prefs.remove('externalDictionaryComponent');
+    } else {
+      prefs.setString('externalDictionaryComponent', value);
+    }
+    notifyListeners();
+  }
+
   set autoMarkSelection(bool status) {
     prefs.setBool('autoMarkSelection', status);
     notifyListeners();

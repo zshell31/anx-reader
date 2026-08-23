@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/constants/note_annotations.dart';
 import 'package:anx_reader/dao/book_note.dart';
@@ -5,6 +7,7 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/env_var.dart';
 import 'package:anx_reader/utils/toast/common.dart';
@@ -289,6 +292,30 @@ class ExcerptMenuState extends State<ExcerptMenu> {
             icon: const Icon(EvaIcons.globe),
             text: L10n.of(context).contextMenuSearch,
           ),
+          // External Android dictionary
+          if (Platform.isAndroid)
+            IconAndText(
+              compact: true,
+              onTap: () async {
+                widget.onClose();
+                final result = await ExternalDictionaryService()
+                    .lookup(widget.annoContent);
+                if (!context.mounted) return;
+                switch (result) {
+                  case DictionaryLookupStatus.noHandlers:
+                    AnxToast.show(
+                      L10n.of(context).dictionaryNoCompatibleApp,
+                    );
+                  case DictionaryLookupStatus.failed:
+                    AnxToast.show(L10n.of(context).dictionaryLaunchFailed);
+                  case DictionaryLookupStatus.unsupported:
+                  case DictionaryLookupStatus.launched:
+                    break;
+                }
+              },
+              icon: const Icon(Icons.menu_book),
+              text: L10n.of(context).contextMenuDictionary,
+            ),
           // toggle translation menu
           IconAndText(
             compact: true,

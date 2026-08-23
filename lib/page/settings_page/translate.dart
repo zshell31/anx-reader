@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/lang_list.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/service/translate/index.dart';
+import 'package:anx_reader/page/settings_page/external_dictionary_setting.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/common/container/filled_container.dart';
 import 'package:anx_reader/widgets/settings/service_config_form.dart';
@@ -36,6 +39,18 @@ class _TranslateSettingState extends State<TranslateSetting> {
   Widget build(BuildContext context) {
     return settingsSections(
       sections: [
+        if (Platform.isAndroid)
+          SettingsSection(
+            title: Text(L10n.of(context).settingsDictionary),
+            tiles: const [
+              CustomSettingsTile(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: ExternalDictionarySettingsTile(),
+                ),
+              ),
+            ],
+          ),
         SettingsSection(
           title: Text(L10n.of(context).underlineTranslation),
           tiles: [

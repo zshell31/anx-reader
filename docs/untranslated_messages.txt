@@ -1,5 +1,11 @@
 {
   "ar": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -28,6 +34,12 @@
   ],
 
   "de": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -56,6 +68,12 @@
   ],
 
   "es": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -84,6 +102,12 @@
   ],
 
   "fr": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -112,6 +136,12 @@
   ],
 
   "it": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -140,6 +170,12 @@
   ],
 
   "ja": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -168,6 +204,12 @@
   ],
 
   "ko": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -196,6 +238,12 @@
   ],
 
   "pt": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -224,6 +272,12 @@
   ],
 
   "ro": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -252,6 +306,12 @@
   ],
 
   "ru": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -280,6 +340,12 @@
   ],
 
   "tr": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -308,6 +374,12 @@
   ],
 
   "zh": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -322,6 +394,12 @@
   ],
 
   "zh_CN": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "clearCachedTranslationsForBook",
     "clearCachedTranslationsTitle",
     "clearCachedTranslationsMessage",
@@ -330,6 +408,12 @@
   ],
 
   "zh_LZH": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -358,6 +442,12 @@
   ],
 
   "zh_TW": [
+    "contextMenuDictionary",
+    "settingsDictionary",
+    "settingsExternalDictionary",
+    "dictionaryAskEveryTime",
+    "dictionaryNoCompatibleApp",
+    "dictionaryLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",

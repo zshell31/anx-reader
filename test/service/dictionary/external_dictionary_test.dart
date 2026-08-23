@@ -195,4 +195,14 @@ class _FakeGateway implements ExternalDictionaryGateway {
     final index = launches.length - 1;
     return launchResults[index.clamp(0, launchResults.length - 1)];
   }
+
+  @override
+  Future<bool> isPackageInstalled(String packageName) async => true;
+
+  @override
+  Future<bool> copyText({
+    required String text,
+    required String message,
+  }) async =>
+      true;
 }

@@ -1,11 +1,14 @@
 {
   "ar": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -35,11 +38,14 @@
 
   "de": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -69,11 +75,14 @@
 
   "es": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -103,11 +112,14 @@
 
   "fr": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -137,11 +149,14 @@
 
   "it": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -171,11 +186,14 @@
 
   "ja": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -205,11 +223,14 @@
 
   "ko": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -239,11 +260,14 @@
 
   "pt": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -273,11 +297,14 @@
 
   "ro": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -307,11 +334,14 @@
 
   "ru": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -341,11 +371,14 @@
 
   "tr": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -375,11 +408,14 @@
 
   "zh": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -395,11 +431,14 @@
 
   "zh_CN": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "clearCachedTranslationsForBook",
     "clearCachedTranslationsTitle",
     "clearCachedTranslationsMessage",
@@ -409,11 +448,14 @@
 
   "zh_LZH": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -443,11 +485,14 @@
 
   "zh_TW": [
     "contextMenuDictionary",
+    "contextMenuGoogleTranslate",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
     "dictionaryNoCompatibleApp",
     "dictionaryLaunchFailed",
+    "googleTranslateAppNotInstalled",
+    "googleTranslateAppLaunchFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",

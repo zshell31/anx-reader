@@ -1,56 +1,19 @@
 import 'dart:io';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/service/android/process_text.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:flutter/services.dart';
 
-const String externalDictionaryChannelName =
-    'com.anxcye.anx_reader/external_dictionary';
-
-class ExternalDictionaryHandler {
-  const ExternalDictionaryHandler({
-    required this.label,
-    required this.packageName,
-    required this.activityName,
-    required this.componentName,
-  });
-
-  factory ExternalDictionaryHandler.fromMap(Map<Object?, Object?> map) {
-    return ExternalDictionaryHandler(
-      label: map['label']! as String,
-      packageName: map['packageName']! as String,
-      activityName: map['activityName']! as String,
-      componentName: map['componentName']! as String,
-    );
-  }
-
-  final String label;
-  final String packageName;
-  final String activityName;
-  final String componentName;
-}
-
-enum DictionaryLaunchStatus {
-  launched,
-  handlerUnavailable,
-  noHandlers,
-  failed,
-}
+typedef ExternalDictionaryHandler = ProcessTextHandler;
+typedef ExternalDictionaryGateway = ProcessTextGateway;
+typedef DictionaryLaunchStatus = ProcessTextLaunchStatus;
 
 enum DictionaryLookupStatus {
   launched,
   noHandlers,
   unsupported,
   failed,
-}
-
-abstract interface class ExternalDictionaryGateway {
-  Future<List<ExternalDictionaryHandler>> listHandlers();
-
-  Future<DictionaryLaunchStatus> launch({
-    required String text,
-    String? componentName,
-  });
 }
 
 abstract interface class ExternalDictionaryPreferenceStore {
@@ -70,41 +33,8 @@ class PrefsExternalDictionaryPreferenceStore
   }
 }
 
-class MethodChannelExternalDictionaryGateway
-    implements ExternalDictionaryGateway {
-  const MethodChannelExternalDictionaryGateway({
-    MethodChannel channel = const MethodChannel(externalDictionaryChannelName),
-  }) : _channel = channel;
-
-  final MethodChannel _channel;
-
-  @override
-  Future<List<ExternalDictionaryHandler>> listHandlers() async {
-    final result = await _channel.invokeListMethod<Object?>('listHandlers');
-    return (result ?? const <Object?>[])
-        .map((entry) => ExternalDictionaryHandler.fromMap(
-              Map<Object?, Object?>.from(entry! as Map),
-            ))
-        .toList(growable: false);
-  }
-
-  @override
-  Future<DictionaryLaunchStatus> launch({
-    required String text,
-    String? componentName,
-  }) async {
-    final result = await _channel.invokeMethod<String>('launch', {
-      'text': text,
-      if (componentName != null) 'componentName': componentName,
-    });
-    return switch (result) {
-      'launched' => DictionaryLaunchStatus.launched,
-      'handlerUnavailable' => DictionaryLaunchStatus.handlerUnavailable,
-      'noHandlers' => DictionaryLaunchStatus.noHandlers,
-      _ => DictionaryLaunchStatus.failed,
-    };
-  }
-}
+typedef MethodChannelExternalDictionaryGateway
+    = MethodChannelProcessTextGateway;
 
 class ExternalDictionaryService {
   ExternalDictionaryService({

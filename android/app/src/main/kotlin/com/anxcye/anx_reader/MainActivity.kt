@@ -1,12 +1,18 @@
 package com.anxcye.anx_reader
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
-import android.content.pm.PackageManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
+import android.widget.Toast
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
 
@@ -52,7 +58,7 @@ class MainActivity : AudioServiceActivity() {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            EXTERNAL_DICTIONARY_CHANNEL,
+            PROCESS_TEXT_CHANNEL,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "listHandlers" -> result.success(listProcessTextHandlers())
@@ -64,6 +70,23 @@ class MainActivity : AudioServiceActivity() {
                     }
                     val componentName = call.argument<String>("componentName")
                     result.success(launchProcessText(text, componentName))
+                }
+                "isPackageInstalled" -> {
+                    val requestedPackage = call.argument<String>("packageName")
+                    if (requestedPackage == null) {
+                        result.error("INVALID_ARGUMENT", "Package name is required", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(isPackageInstalled(requestedPackage))
+                }
+                "copyText" -> {
+                    val text = call.argument<String>("text")
+                    val message = call.argument<String>("message")
+                    if (text == null || message == null) {
+                        result.error("INVALID_ARGUMENT", "Text and message are required", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(copyText(text, message))
                 }
                 else -> result.notImplemented()
             }
@@ -106,7 +129,12 @@ class MainActivity : AudioServiceActivity() {
                 )
             }
             .distinctBy { it.getValue("componentName") }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.getValue("label") })
+            .sortedWith(
+                compareBy<Map<String, String>> {
+                    it.getValue("label").lowercase(Locale.ROOT)
+                }
+                    .thenBy { it.getValue("componentName") },
+            )
 
     private fun launchProcessText(text: String, requestedComponent: String?): String {
         val handlers = processTextActivities()
@@ -122,6 +150,7 @@ class MainActivity : AudioServiceActivity() {
             }
             if (!isAvailable) return "handlerUnavailable"
             intent.component = component
+            Log.i(LOG_TAG, "Launching PROCESS_TEXT component ${component.flattenToString()}")
         }
 
         return try {
@@ -137,9 +166,35 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
+    private fun isPackageInstalled(requestedPackage: String): Boolean =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    requestedPackage,
+                    PackageManager.PackageInfoFlags.of(0),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(requestedPackage, 0)
+            }
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        }
+
+    private fun copyText(text: String, message: String): Boolean =
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Selected text", text))
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            true
+        } catch (_: Exception) {
+            false
+        }
+
     companion object {
         private const val INSTALL_INFO_CHANNEL = "com.anxcye.anx_reader/install_info"
-        private const val EXTERNAL_DICTIONARY_CHANNEL =
-            "com.anxcye.anx_reader/external_dictionary"
+        private const val PROCESS_TEXT_CHANNEL = "com.anxcye.anx_reader/process_text"
+        private const val LOG_TAG = "AnxProcessText"
     }
 }

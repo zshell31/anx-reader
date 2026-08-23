@@ -9,6 +9,7 @@ import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
+import 'package:anx_reader/service/translate/google_translate_app.dart';
 import 'package:anx_reader/utils/env_var.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/book_share/excerpt_share_service.dart';
@@ -315,6 +316,33 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               },
               icon: const Icon(Icons.menu_book),
               text: L10n.of(context).contextMenuDictionary,
+            ),
+          // Official Google Translate Android app
+          if (Platform.isAndroid)
+            IconAndText(
+              compact: true,
+              onTap: () async {
+                widget.onClose();
+                final result = await GoogleTranslateAppService()
+                    .translate(widget.annoContent);
+                if (!context.mounted) return;
+                switch (result) {
+                  case GoogleTranslateAppStatus.notInstalled:
+                    AnxToast.show(
+                      L10n.of(context).googleTranslateAppNotInstalled,
+                    );
+                  case GoogleTranslateAppStatus.failed:
+                    AnxToast.show(
+                      L10n.of(context).googleTranslateAppLaunchFailed,
+                    );
+                  case GoogleTranslateAppStatus.unsupported:
+                  case GoogleTranslateAppStatus.clipboardFallback:
+                  case GoogleTranslateAppStatus.launched:
+                    break;
+                }
+              },
+              icon: const Icon(Icons.g_translate),
+              text: L10n.of(context).contextMenuGoogleTranslate,
             ),
           // toggle translation menu
           IconAndText(

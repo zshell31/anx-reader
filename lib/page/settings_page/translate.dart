@@ -310,8 +310,7 @@ class FullTextTranslateServicePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final services =
-        TranslateService.activeValues.where((s) => !s.isWebView).toList();
+    final services = TranslateService.fullTextValues;
 
     return ListView.builder(
       itemCount: services.length,

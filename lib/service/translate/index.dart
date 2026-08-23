@@ -7,6 +7,7 @@ import 'package:anx_reader/service/config/config_item.dart';
 import 'package:anx_reader/service/translate/ai.dart';
 import 'package:anx_reader/service/translate/deepl.dart';
 import 'package:anx_reader/service/translate/google_api.dart';
+import 'package:anx_reader/service/translate/google_translate.dart';
 import 'package:anx_reader/service/translate/microsoft_api.dart';
 import 'package:anx_reader/service/translate/web_view.dart';
 import 'package:anx_reader/utils/env_var.dart';
@@ -27,7 +28,7 @@ enum TranslateService {
       case TranslateService.bingWeb:
         return BingWebTranslateProvider();
       case TranslateService.googleWeb:
-        return GoogleWebTranslateProvider();
+        return GoogleTranslateProvider();
       case TranslateService.microsoftApi:
         return MicrosoftApiTranslateProvider();
       case TranslateService.googleApi:
@@ -45,16 +46,15 @@ enum TranslateService {
   /// Check if the service is a WebView provider.
   bool get isWebView => provider is WebViewTranslateProvider;
 
-  /// The provider used by the selected-text translation UI.
-  TranslateService get forSelection =>
-      this == TranslateService.googleWeb ? TranslateService.googleApi : this;
-
   static List<TranslateService> get activeValues => values
       .where((e) => e != TranslateService.ai || EnvVar.enableAIFeature)
       .toList();
 
-  static List<TranslateService> get selectionValues =>
-      activeValues.where((e) => e != TranslateService.googleWeb).toList();
+  static List<TranslateService> get selectionValues => activeValues;
+
+  static List<TranslateService> get fullTextValues => activeValues
+      .where((service) => service != bingWeb && service != googleWeb)
+      .toList();
 }
 
 TranslateService getTranslateService(String name) {
@@ -230,7 +230,6 @@ abstract class TranslateServiceProvider {
 Widget translateText(String text,
     {TranslateService? service, String? contextText}) {
   service ??= Prefs().translateService;
-  service = service.forSelection;
   final from = Prefs().translateFrom;
   final to = Prefs().translateTo;
 
@@ -259,7 +258,6 @@ void saveTranslateServiceConfig(
 Future<String> translateTextOnly(String text,
     {TranslateService? service, String? contextText}) async {
   service ??= Prefs().translateService;
-  service = service.forSelection;
   final from = Prefs().translateFrom;
   final to = Prefs().translateTo;
 

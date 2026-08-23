@@ -565,19 +565,14 @@ class Prefs extends ChangeNotifier {
   }
 
   set translateService(TranslateService service) {
-    prefs.setString('translateService', service.forSelection.name);
+    prefs.setString('translateService', service.name);
     notifyListeners();
   }
 
   TranslateService get translateService {
-    final service = getTranslateService(
+    return getTranslateService(
       prefs.getString('translateService') ?? 'bingWeb',
     );
-    final selectionService = service.forSelection;
-    if (selectionService != service) {
-      prefs.setString('translateService', selectionService.name);
-    }
-    return selectionService;
   }
 
   set translateFrom(LangListEnum from) {

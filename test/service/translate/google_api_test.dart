@@ -148,22 +148,22 @@ void main() {
       await Prefs().initPrefs();
     });
 
-    test('persisted googleWeb selection migrates to googleApi', () async {
+    test('persisted googleWeb selection remains googleWeb', () async {
       await Prefs().prefs.setString('translateService', 'googleWeb');
 
-      expect(Prefs().translateService, TranslateService.googleApi);
-      expect(Prefs().prefs.getString('translateService'), 'googleApi');
+      expect(Prefs().translateService, TranslateService.googleWeb);
+      expect(Prefs().prefs.getString('translateService'), 'googleWeb');
       expect(TranslateService.selectionValues,
-          isNot(contains(TranslateService.googleWeb)));
+          contains(TranslateService.googleWeb));
       expect(TranslateService.selectionValues,
           contains(TranslateService.googleApi));
     });
 
-    test('setting googleWeb selection stores googleApi', () {
+    test('setting googleWeb selection stores googleWeb', () {
       Prefs().translateService = TranslateService.googleWeb;
 
-      expect(Prefs().translateService, TranslateService.googleApi);
-      expect(Prefs().prefs.getString('translateService'), 'googleApi');
+      expect(Prefs().translateService, TranslateService.googleWeb);
+      expect(Prefs().prefs.getString('translateService'), 'googleWeb');
     });
 
     test('unrelated providers are unchanged', () {
@@ -175,7 +175,6 @@ void main() {
       ];
 
       for (final service in services) {
-        expect(service.forSelection, service);
         Prefs().translateService = service;
         expect(Prefs().translateService, service);
         expect(Prefs().prefs.getString('translateService'), service.name);

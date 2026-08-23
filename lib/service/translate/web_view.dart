@@ -110,23 +110,3 @@ class BingWebTranslateProvider extends WebViewTranslateProvider {
     return 'https://www.bing.com/translator?from=${mapLanguageCode(from)}&to=${mapLanguageCode(to)}&text=${Uri.encodeComponent(text)}';
   }
 }
-
-class GoogleWebTranslateProvider extends WebViewTranslateProvider {
-  @override
-  TranslateService get service => TranslateService.googleWeb;
-
-  @override
-  String getLabel(BuildContext context) => L10n.of(context).translateGoogleWeb;
-
-  /// Google uses 'auto' for auto language detection.
-  @override
-  String mapLanguageCode(LangListEnum lang) {
-    if (lang == LangListEnum.auto) return 'auto';
-    return lang.code;
-  }
-
-  @override
-  String getUrl(String text, LangListEnum from, LangListEnum to) {
-    return 'https://translate.google.com/?sl=${mapLanguageCode(from)}&tl=${mapLanguageCode(to)}&text=${Uri.encodeComponent(text)}&op=translate';
-  }
-}

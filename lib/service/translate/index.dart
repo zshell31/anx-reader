@@ -45,9 +45,16 @@ enum TranslateService {
   /// Check if the service is a WebView provider.
   bool get isWebView => provider is WebViewTranslateProvider;
 
+  /// The provider used by the selected-text translation UI.
+  TranslateService get forSelection =>
+      this == TranslateService.googleWeb ? TranslateService.googleApi : this;
+
   static List<TranslateService> get activeValues => values
       .where((e) => e != TranslateService.ai || EnvVar.enableAIFeature)
       .toList();
+
+  static List<TranslateService> get selectionValues =>
+      activeValues.where((e) => e != TranslateService.googleWeb).toList();
 }
 
 TranslateService getTranslateService(String name) {
@@ -195,15 +202,20 @@ abstract class TranslateServiceProvider {
           mainAxisSize: MainAxisSize.min,
           children: [
             content(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                    onPressed: () =>
-                        Clipboard.setData(ClipboardData(text: snapshot.data!)),
-                    child: Text(L10n.of(context).commonCopy))
-              ],
-            )
+            if (snapshot.hasData &&
+                snapshot.data!.trim().isNotEmpty &&
+                snapshot.data != '...')
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Clipboard.setData(
+                      ClipboardData(text: snapshot.data!),
+                    ),
+                    child: Text(L10n.of(context).commonCopy),
+                  ),
+                ],
+              ),
           ],
         );
       },
@@ -218,6 +230,7 @@ abstract class TranslateServiceProvider {
 Widget translateText(String text,
     {TranslateService? service, String? contextText}) {
   service ??= Prefs().translateService;
+  service = service.forSelection;
   final from = Prefs().translateFrom;
   final to = Prefs().translateTo;
 
@@ -246,6 +259,7 @@ void saveTranslateServiceConfig(
 Future<String> translateTextOnly(String text,
     {TranslateService? service, String? contextText}) async {
   service ??= Prefs().translateService;
+  service = service.forSelection;
   final from = Prefs().translateFrom;
   final to = Prefs().translateTo;
 

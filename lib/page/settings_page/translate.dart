@@ -119,7 +119,7 @@ class _TranslateSettingState extends State<TranslateSetting> {
         SettingsSection(
           title: Text(L10n.of(context).translationServiceConfiguration),
           tiles: [
-            for (var service in TranslateService.activeValues)
+            for (var service in TranslateService.selectionValues)
               CustomSettingsTile(
                 child: TranslateSettingItem(service: service),
               ),
@@ -290,9 +290,9 @@ class TranslateServicePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-      itemCount: TranslateService.activeValues.length,
+      itemCount: TranslateService.selectionValues.length,
       itemBuilder: (context, index) {
-        final service = TranslateService.activeValues.elementAt(index);
+        final service = TranslateService.selectionValues.elementAt(index);
         return ListTile(
           title: Text(service.getLabel(context)),
           onTap: () {

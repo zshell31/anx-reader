@@ -7,10 +7,14 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 
-const _urlGoogleApi =
+const googleTranslationApiEndpoint =
     'https://translation.googleapis.com/language/translate/v2';
 
 class GoogleApiTranslateProvider extends TranslateServiceProvider {
+  GoogleApiTranslateProvider({Dio? dio}) : _dio = dio ?? Dio();
+
+  final Dio _dio;
+
   @override
   TranslateService get service => TranslateService.googleApi;
 
@@ -58,46 +62,78 @@ class GoogleApiTranslateProvider extends TranslateServiceProvider {
     LangListEnum to,
     Map<String, dynamic> config,
   ) async* {
+    final apiKey = config['api_key']?.toString().trim() ?? '';
+
+    if (apiKey.isEmpty) {
+      yield* Stream.error(const GoogleApiTranslationException(
+        'Configure a Google Cloud Translation API key in translation settings.',
+      ));
+      return;
+    }
+
     try {
-      final apiKey = config['api_key']?.toString() ?? '';
-
-      if (apiKey.isEmpty) {
-        yield* Stream.error(Exception('Please set Google API Key in settings'));
-        return;
-      }
-
       yield "...";
 
-      final params = {
-        'key': apiKey,
+      final body = <String, dynamic>{
         'q': text,
         'target': mapLanguageCode(to),
         'format': 'text',
       };
 
       if (from != LangListEnum.auto) {
-        params['source'] = mapLanguageCode(from);
+        body['source'] = mapLanguageCode(from);
       }
 
-      final uri = Uri.parse(_urlGoogleApi).replace(queryParameters: params);
-
-      final response = await Dio().post(uri.toString());
+      final response = await _dio.post<dynamic>(
+        googleTranslationApiEndpoint,
+        data: body,
+        options: Options(
+          headers: <String, String>{
+            Headers.contentTypeHeader: Headers.jsonContentType,
+            'X-Goog-Api-Key': apiKey,
+          },
+        ),
+      );
 
       if (response.statusCode == 200) {
-        final data = response.data;
-        if (data['data'] != null &&
-            data['data']['translations'] != null &&
-            (data['data']['translations'] as List).isNotEmpty) {
-          yield data['data']['translations'][0]['translatedText'];
-        } else {
-          yield* Stream.error(Exception('Google API returned unexpected data'));
-        }
+        yield parseGoogleTranslationResponse(response.data);
       } else {
-        yield* Stream.error(Exception('Google API Error: ${response.data}'));
+        throw GoogleApiTranslationException(
+          _messageForStatus(response.statusCode),
+        );
       }
-    } catch (e) {
-      AnxLog.severe("Translate Google API Error: error=$e");
-      yield* Stream.error(Exception(e));
+    } on GoogleApiTranslationException catch (error) {
+      AnxLog.severe('Google Cloud translation failed: ${error.message}');
+      yield* Stream.error(error);
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      final message = statusCode == null
+          ? 'Unable to reach Google Cloud Translation. Check your network connection.'
+          : _messageForStatus(statusCode);
+      AnxLog.severe(
+        'Google Cloud translation request failed: '
+        'status=${statusCode ?? 'network'}, type=${error.type.name}',
+      );
+      yield* Stream.error(GoogleApiTranslationException(message));
+    } catch (error) {
+      AnxLog.severe(
+        'Google Cloud translation returned an invalid response: '
+        '${error.runtimeType}',
+      );
+      yield* Stream.error(const GoogleApiTranslationException(
+        'Google Cloud Translation returned an unexpected response.',
+      ));
+    }
+  }
+
+  String _messageForStatus(int? statusCode) {
+    switch (statusCode) {
+      case 400:
+        return 'Google Cloud Translation rejected the request. Check the selected languages.';
+      case 403:
+        return 'Google Cloud Translation denied the request. Check that the API key is valid, the API is enabled, and quota is available.';
+      default:
+        return 'Google Cloud Translation request failed${statusCode == null ? '' : ' (HTTP $statusCode)'}. Please try again.';
     }
   }
 
@@ -131,4 +167,36 @@ class GoogleApiTranslateProvider extends TranslateServiceProvider {
   void saveConfig(Map<String, dynamic> config) {
     Prefs().saveTranslateServiceConfig(service, config);
   }
+}
+
+String parseGoogleTranslationResponse(dynamic responseData) {
+  if (responseData is! Map) {
+    throw const GoogleApiTranslationException(
+      'Google Cloud Translation returned an unexpected response.',
+    );
+  }
+
+  final data = responseData['data'];
+  final translations = data is Map ? data['translations'] : null;
+  final first = translations is List && translations.isNotEmpty
+      ? translations.first
+      : null;
+  final translatedText = first is Map ? first['translatedText'] : null;
+
+  if (translatedText is! String || translatedText.isEmpty) {
+    throw const GoogleApiTranslationException(
+      'Google Cloud Translation returned an unexpected response.',
+    );
+  }
+
+  return translatedText;
+}
+
+class GoogleApiTranslationException implements Exception {
+  const GoogleApiTranslationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

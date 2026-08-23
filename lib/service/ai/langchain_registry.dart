@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/providers/current_reading.dart';
+import 'package:anx_reader/service/ai/openai_chat_compatibility.dart';
 import 'package:anx_reader/service/ai/tools/ai_tool_registry.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:langchain_anthropic/langchain_anthropic.dart';
@@ -76,10 +77,14 @@ class LangchainAiRegistry {
   }
 
   BaseChatModel _buildOpenAi(LangchainAiConfig config) {
+    final baseUrl = config.baseUrl ?? 'https://api.openai.com/v1';
     return ChatOpenAI(
       apiKey: config.apiKey.isEmpty ? null : config.apiKey,
-      baseUrl: config.baseUrl ?? 'https://api.openai.com/v1',
+      baseUrl: baseUrl,
       headers: config.headers.isEmpty ? null : config.headers,
+      client: OpenAiChatCompatibilityPolicy.isOfficialOpenAiEndpoint(baseUrl)
+          ? OpenAiChatCompatibilityClient()
+          : null,
       defaultOptions: config.toOpenAIOptions(),
     );
   }

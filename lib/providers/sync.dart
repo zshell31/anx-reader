@@ -12,6 +12,7 @@ import 'package:anx_reader/providers/sync_status.dart';
 import 'package:anx_reader/providers/tb_groups.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
+import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/service/database_sync_manager.dart';
 import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/utils/get_path/databases_path.dart';
@@ -271,6 +272,15 @@ class Sync extends _$Sync {
     }
 
     AnxLog.info('Sync ping success');
+
+    // Cache documents are merge-synchronized even when the main database
+    // timestamps show that no whole-database transfer is necessary.
+    try {
+      await TranslationCacheSyncService(client: client).sync();
+    } catch (e, s) {
+      AnxLog.warning(
+          'Translation cache sync failed; main sync continues: $e\n$s');
+    }
 
     // Determine sync direction
     SyncDirection? finalDirection = await determineSyncDirection(direction);

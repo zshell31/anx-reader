@@ -9,6 +9,7 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
+import 'package:anx_reader/service/translate/translation_cache_database.dart';
 import 'package:anx_reader/utils/platform_utils.dart';
 import 'package:anx_reader/utils/save_file_to_download.dart';
 import 'package:anx_reader/utils/get_path/get_temp_dir.dart';
@@ -168,6 +169,7 @@ class _SyncSettingState extends ConsumerState<SyncSetting> {
     _showDataDialog(L10n.of(context).exporting);
 
     final File prefsBackupFile = await _createPrefsBackupFile();
+    await translationCacheDatabase.close();
 
     RootIsolateToken token = RootIsolateToken.instance!;
     final zipPath = await compute(createZipFile, {
@@ -257,7 +259,8 @@ class _SyncSettingState extends ConsumerState<SyncSetting> {
       _copyDirectorySync(Directory('$extractPath${pathSeparator}bgimg'),
           getBgimgDir(path: docPath));
 
-      DBHelper.close();
+      await DBHelper.close();
+      await translationCacheDatabase.close();
       _copyDirectorySync(Directory('$extractPath${pathSeparator}databases'),
           await getAnxDataBasesDir());
       DBHelper().initDB();
@@ -328,6 +331,13 @@ Future<String> createZipFile(Map<String, dynamic> params) async {
     final dbFile = File('${dbDir.path}/app_database.db');
     if (await dbFile.exists()) {
       await encoder.addFile(dbFile, 'databases/app_database.db');
+    }
+    final translationCacheFile = File('${dbDir.path}/translation_cache.db');
+    if (await translationCacheFile.exists()) {
+      await encoder.addFile(
+        translationCacheFile,
+        'databases/translation_cache.db',
+      );
     }
   } else {
     final dbDir = await getAnxDataBasesDir();

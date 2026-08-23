@@ -19,7 +19,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "de": [
@@ -42,7 +47,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "es": [
@@ -65,7 +75,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "fr": [
@@ -88,7 +103,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "it": [
@@ -111,7 +131,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "ja": [
@@ -134,7 +159,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "ko": [
@@ -157,7 +187,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "pt": [
@@ -180,7 +215,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "ro": [
@@ -203,7 +243,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "ru": [
@@ -226,7 +271,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "tr": [
@@ -249,7 +299,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "zh": [
@@ -258,7 +313,20 @@
     "settingsAiProviderReasoningEffortAuto",
     "settingsAiProviderReasoningEffortLow",
     "settingsAiProviderReasoningEffortMedium",
-    "settingsAiProviderReasoningEffortHigh"
+    "settingsAiProviderReasoningEffortHigh",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
+  ],
+
+  "zh_CN": [
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "zh_LZH": [
@@ -281,7 +349,12 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ],
 
   "zh_TW": [
@@ -304,6 +377,11 @@
     "settingsAdvancedHttpProxyTest",
     "settingsAdvancedHttpProxyTesting",
     "settingsAdvancedHttpProxyTestSuccess",
-    "settingsAdvancedHttpProxyTestFailed"
+    "settingsAdvancedHttpProxyTestFailed",
+    "clearCachedTranslationsForBook",
+    "clearCachedTranslationsTitle",
+    "clearCachedTranslationsMessage",
+    "cachedTranslationsCleared",
+    "translationCacheBookUnavailable"
   ]
 }

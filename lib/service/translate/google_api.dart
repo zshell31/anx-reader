@@ -38,9 +38,27 @@ class GoogleApiTranslateProvider extends TranslateServiceProvider {
     LangListEnum to, {
     String? contextText,
     bool isFullText = false,
-  }) async* {
+  }) =>
+      _translateStream(text, from, to, getConfig());
+
+  @override
+  Stream<String> translateStreamForRoute(
+    String text,
+    LangListEnum from,
+    LangListEnum to, {
+    String? contextText,
+    bool isFullText = false,
+    Object? routeSnapshot,
+  }) =>
+      _translateStream(text, from, to, routeSnapshot! as Map<String, dynamic>);
+
+  Stream<String> _translateStream(
+    String text,
+    LangListEnum from,
+    LangListEnum to,
+    Map<String, dynamic> config,
+  ) async* {
     try {
-      final config = getConfig();
       final apiKey = config['api_key']?.toString() ?? '';
 
       if (apiKey.isEmpty) {

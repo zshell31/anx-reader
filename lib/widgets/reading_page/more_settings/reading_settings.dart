@@ -8,6 +8,8 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/reading_info.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/settings_page/subpage/fonts.dart';
+import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
+import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/common/anx_segmented_button.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -329,6 +331,52 @@ class _ReadingMoreSettingsState extends State<ReadingMoreSettings> {
                 ),
               ],
             ),
+            if (isReading)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.delete_outline),
+                title: Text(L10n.of(context).clearCachedTranslationsForBook),
+                onTap: () async {
+                  final book = epubPlayerKey.currentState!.widget.book;
+                  final fingerprint = await fullTextTranslationCoordinator
+                      .resolveBookFingerprint(book);
+                  if (!context.mounted) return;
+                  if (fingerprint == null) {
+                    AnxToast.show(
+                        L10n.of(context).translationCacheBookUnavailable);
+                    return;
+                  }
+                  final count = await fullTextTranslationCacheService
+                      .activeCountForBook(fingerprint);
+                  if (!context.mounted) return;
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: Text(
+                          L10n.of(dialogContext).clearCachedTranslationsTitle),
+                      content: Text(L10n.of(dialogContext)
+                          .clearCachedTranslationsMessage(count)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: Text(L10n.of(dialogContext).commonCancel),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: Text(L10n.of(dialogContext).commonConfirm),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true) return;
+                  final cleared = await fullTextTranslationCacheService
+                      .clearBook(fingerprint);
+                  if (context.mounted) {
+                    AnxToast.show(
+                        L10n.of(context).cachedTranslationsCleared(cleared));
+                  }
+                },
+              ),
           ],
         ),
       );

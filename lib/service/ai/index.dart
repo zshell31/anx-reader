@@ -7,6 +7,7 @@ import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/providers/ai_providers.dart';
 import 'package:anx_reader/service/ai/ai_key_rotator.dart';
+import 'package:anx_reader/service/ai/effective_route.dart';
 import 'package:anx_reader/service/ai/langchain_ai_config.dart';
 import 'package:anx_reader/service/ai/langchain_registry.dart';
 import 'package:anx_reader/service/ai/langchain_runner.dart';
@@ -62,6 +63,39 @@ Stream<String> aiGenerateStream(
       regenerate: regenerate,
       useAgent: useAgent,
       registry: registry);
+}
+
+Stream<String> aiGenerateStreamWithRoute(
+  List<ChatMessage> messages,
+  EffectiveAiRoute? route,
+) async* {
+  if (route == null) {
+    final context = navigatorKey.currentContext;
+    yield context == null
+        ? 'AI service not configured'
+        : L10n.of(context).aiServiceNotConfigured;
+    return;
+  }
+  final registry = LangchainAiRegistry(null);
+  final pipeline = registry.resolveByProtocol(route.protocol, route.config);
+  await _throttleIfNeeded();
+  yield* _executeStream(
+    model: pipeline.model,
+    pipeline: pipeline,
+    sanitizedMessages: _sanitizeMessagesForPrompt(messages),
+    useAgent: false,
+  );
+
+  final provider = route.provider;
+  if (provider != null) {
+    Prefs().saveAiProviders(route.providers.map((item) {
+      if (item.id != provider.id) return item;
+      return item.copyWith(
+        keyIndex: item.keyIndex + 1,
+        updatedAt: DateTime.now(),
+      );
+    }).toList());
+  }
 }
 
 void cancelActiveAiRequest() {
@@ -133,68 +167,40 @@ Stream<String> _generateStream({
   // Try new provider system without ref (reads directly from Prefs storage)
   if (overrideConfig == null) {
     try {
-      final rawProviders = Prefs().getAiProviders();
-      if (rawProviders.isNotEmpty) {
-        final providers = rawProviders
-            .map((json) => AiProvider.fromJson(json as Map<String, dynamic>))
-            .toList();
+      final route = resolveEffectiveAiRouteFromPrefs(identifier: identifier);
+      final provider = route?.provider;
+      if (route != null && provider != null) {
+        config = route.config;
+        AnxLog.info(
+            'aiGenerateStream (no-ref new): ${provider.id}, model: ${config.model}, baseUrl: ${config.baseUrl}');
 
-        AiProvider? provider;
-        if (identifier != null) {
-          try {
-            provider = providers.firstWhere((p) => p.id == identifier);
-          } catch (_) {
-            provider = null;
-          }
-        } else {
-          final selectedId = Prefs().selectedAiService;
-          try {
-            provider = providers.firstWhere((p) => p.id == selectedId);
-          } catch (_) {}
-          provider ??= providers.where((p) => p.enabled).firstOrNull;
-        }
+        final pipeline = registry.resolveByProtocol(
+          route.protocol,
+          config,
+          useAgent: useAgent,
+        );
+        final model = pipeline.model;
 
-        if (provider != null &&
-            provider.enabled &&
-            AiKeyRotator.hasValidKey(provider)) {
-          final apiKey = AiKeyRotator.getNextKey(provider);
-          if (apiKey != null) {
-            config = LangchainAiConfig.fromProvider(
-              providerId: provider.id,
-              model: provider.model,
-              apiKey: apiKey,
-              url: provider.url,
-              reasoningEffort: provider.reasoningEffort,
+        await _throttleIfNeeded();
+        yield* _executeStream(
+          model: model,
+          pipeline: pipeline,
+          sanitizedMessages: sanitizedMessages,
+          useAgent: useAgent,
+        );
+
+        // Advance key index in persistent storage for round-robin rotation.
+        final updatedProviders = route.providers.map((item) {
+          if (item.id == provider.id) {
+            return item.copyWith(
+              keyIndex: item.keyIndex + 1,
+              updatedAt: DateTime.now(),
             );
-
-            AnxLog.info(
-                'aiGenerateStream (no-ref new): ${provider.id}, model: ${config.model}, baseUrl: ${config.baseUrl}');
-
-            final pipeline = registry.resolveByProtocol(
-                provider.protocol, config,
-                useAgent: useAgent);
-            final model = pipeline.model;
-
-            await _throttleIfNeeded();
-            yield* _executeStream(
-              model: model,
-              pipeline: pipeline,
-              sanitizedMessages: sanitizedMessages,
-              useAgent: useAgent,
-            );
-
-            // Advance key index in persistent storage for round-robin rotation
-            final updatedProviders = providers.map((p) {
-              if (p.id == provider!.id) {
-                return p.copyWith(
-                    keyIndex: p.keyIndex + 1, updatedAt: DateTime.now());
-              }
-              return p;
-            }).toList();
-            Prefs().saveAiProviders(updatedProviders);
-            return;
           }
-        }
+          return item;
+        }).toList();
+        Prefs().saveAiProviders(updatedProviders);
+        return;
       }
     } catch (e) {
       AnxLog.warning(

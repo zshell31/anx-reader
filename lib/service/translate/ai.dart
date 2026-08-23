@@ -3,6 +3,7 @@ import 'package:anx_reader/enums/lang_list.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/service/ai/prompt_generate.dart';
 import 'package:anx_reader/service/ai/index.dart';
+import 'package:anx_reader/service/ai/effective_route.dart';
 import 'package:anx_reader/service/config/config_item.dart';
 import 'package:anx_reader/service/translate/index.dart';
 import 'package:anx_reader/widgets/ai/ai_stream.dart';
@@ -49,12 +50,36 @@ class AiTranslateProvider extends TranslateServiceProvider {
   }
 
   @override
+  Object captureRouteSnapshot() =>
+      EffectiveAiRouteSnapshot(resolveEffectiveAiRouteFromPrefs());
+
+  @override
   Stream<String> translateStream(
     String text,
     LangListEnum from,
     LangListEnum to, {
     String? contextText,
     bool isFullText = false,
+  }) async* {
+    yield* translateStreamForRoute(
+      text,
+      from,
+      to,
+      contextText: contextText,
+      isFullText: isFullText,
+      routeSnapshot:
+          EffectiveAiRouteSnapshot(resolveEffectiveAiRouteFromPrefs()),
+    );
+  }
+
+  @override
+  Stream<String> translateStreamForRoute(
+    String text,
+    LangListEnum from,
+    LangListEnum to, {
+    String? contextText,
+    bool isFullText = false,
+    Object? routeSnapshot,
   }) async* {
     try {
       final payload = isFullText
@@ -73,12 +98,15 @@ class AiTranslateProvider extends TranslateServiceProvider {
 
       final messages = payload.buildMessages();
 
-      await for (final result
-          in aiGenerateStream(messages, regenerate: false)) {
+      await for (final result in aiGenerateStreamWithRoute(
+        messages,
+        (routeSnapshot! as EffectiveAiRouteSnapshot).route,
+      )) {
         yield result;
       }
     } catch (e) {
-      yield L10n.of(navigatorKey.currentContext!).translateError + e.toString();
+      yield* Stream<String>.error(Exception(
+          L10n.of(navigatorKey.currentContext!).translateError + e.toString()));
     }
   }
 

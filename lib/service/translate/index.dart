@@ -97,6 +97,27 @@ abstract class TranslateServiceProvider {
     bool isFullText = false,
   });
 
+  /// Captures output-affecting route configuration before cache lookup.
+  Object? captureRouteSnapshot() => getConfig();
+
+  /// Execute with the captured route so a settings change during cache lookup
+  /// cannot make the fingerprint differ from the provider request.
+  Stream<String> translateStreamForRoute(
+    String text,
+    LangListEnum from,
+    LangListEnum to, {
+    String? contextText,
+    bool isFullText = false,
+    Object? routeSnapshot,
+  }) =>
+      translateStream(
+        text,
+        from,
+        to,
+        contextText: contextText,
+        isFullText: isFullText,
+      );
+
   /// Translate text only (no widget), with retry logic.
   Future<String> translateTextOnly(
     String text,
@@ -104,18 +125,20 @@ abstract class TranslateServiceProvider {
     LangListEnum to, {
     String? contextText,
     bool isFullText = false,
+    Object? routeSnapshot,
   }) async {
     const int maxRetries = 2;
 
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         String? lastResult;
-        await for (String result in translateStream(
+        await for (String result in translateStreamForRoute(
           text,
           from,
           to,
           contextText: contextText,
           isFullText: isFullText,
+          routeSnapshot: routeSnapshot,
         )) {
           lastResult = result;
         }

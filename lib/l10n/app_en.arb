@@ -904,5 +904,20 @@
   "aiChatFontSize": "Font Size",
   "aiModelSwitchTitle": "Switch Model",
   "aiModelEnterManually": "Enter model name",
-  "aiModelOrSelectBelow": "Or select from list:"
+  "aiModelOrSelectBelow": "Or select from list:",
+  "clearCachedTranslationsForBook": "Clear cached translations for this book",
+  "clearCachedTranslationsTitle": "Clear cached translations?",
+  "clearCachedTranslationsMessage": "This will mark {count} cached translations for deletion and synchronize the change to your other devices.",
+  "@clearCachedTranslationsMessage": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "cachedTranslationsCleared": "Cleared {count} cached translations.",
+  "@cachedTranslationsCleared": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "translationCacheBookUnavailable": "The book fingerprint could not be calculated; no persistent cache was changed."
 }

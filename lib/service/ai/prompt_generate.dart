@@ -147,3 +147,7 @@ PromptTemplatePayload generatePromptFullTextTranslate(
 String _normalizePrompt(String template) {
   return template.replaceAll('{{', '{').replaceAll('}}', '}');
 }
+
+/// The exact normalization applied before full-text prompt construction.
+String normalizePromptForFingerprint(String template) =>
+    _normalizePrompt(template);

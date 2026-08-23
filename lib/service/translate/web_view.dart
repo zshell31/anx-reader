@@ -84,6 +84,7 @@ abstract class WebViewTranslateProvider extends TranslateServiceProvider {
     LangListEnum to, {
     String? contextText,
     bool isFullText = false,
+    Object? routeSnapshot,
   }) async {
     // WebView providers do not support text-only translation
     return "";

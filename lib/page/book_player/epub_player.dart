@@ -903,6 +903,24 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     contextMenuEntry = null;
   }
 
+  Future<void> _showSelectionContextMenuFromWebView() async {
+    if (!AnxPlatform.isAndroid) return;
+
+    try {
+      await webViewController.evaluateJavascript(source: '''
+        (function() {
+          if (typeof window.showContextMenu !== 'function') return;
+          if (window.showContextMenu()) return;
+          window.setTimeout(function() {
+            window.showContextMenu();
+          }, 250);
+        })();
+      ''');
+    } catch (e) {
+      AnxLog.warning('Failed to show Android selection context menu: $e');
+    }
+  }
+
   Future<void> _handlePointerEvents(PointerEvent event) async {
     if (await isFootNoteOpen() || Prefs().pageTurnStyle == PageTurn.scroll) {
       return;
@@ -936,7 +954,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     contextMenu = ContextMenu(
       settings: ContextMenuSettings(hideDefaultSystemContextMenuItems: true),
       onCreateContextMenu: (hitTestResult) async {
-        // webViewController.evaluateJavascript(source: "showContextMenu()");
+        await _showSelectionContextMenuFromWebView();
       },
       onHideContextMenu: () {
         // removeOverlay();

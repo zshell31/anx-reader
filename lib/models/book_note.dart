@@ -7,6 +7,7 @@ class BookNote {
   String type;
   String color;
   String? readerNote;
+  String? sharedAnnotationId;
   DateTime? createTime;
   DateTime updateTime;
 
@@ -23,6 +24,7 @@ class BookNote {
     required this.type,
     required this.color,
     this.readerNote,
+    this.sharedAnnotationId,
     this.createTime,
     required this.updateTime,
   });
@@ -37,6 +39,7 @@ class BookNote {
       'type': type,
       'color': color,
       'reader_note': readerNote,
+      'shared_annotation_id': sharedAnnotationId,
       'create_time': createTime?.toIso8601String(),
       'update_time': updateTime.toIso8601String(),
     };
@@ -65,6 +68,7 @@ class BookNote {
       type: map['type'] as String? ?? '',
       color: map['color'] as String? ?? '',
       readerNote: map['reader_note'] as String?,
+      sharedAnnotationId: map['shared_annotation_id'] as String?,
       createTime:
           createTimeString != null ? DateTime.tryParse(createTimeString) : null,
       updateTime: updateTimeString != null

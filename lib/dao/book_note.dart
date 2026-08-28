@@ -34,6 +34,30 @@ class BookNoteDao extends BaseDao {
     return insert(table, bookNote.toMap());
   }
 
+  /// Projection-only insert. Unlike [save], this never treats CFI as identity.
+  Future<int> insertSharedProjection(BookNote bookNote) async {
+    if (bookNote.sharedAnnotationId == null) {
+      throw ArgumentError.notNull('bookNote.sharedAnnotationId');
+    }
+    return insert(table, bookNote.toMap());
+  }
+
+  Future<void> bindSharedAnnotation(int noteId, String sharedAnnotationId) =>
+      update(
+        table,
+        {'shared_annotation_id': sharedAnnotationId},
+        where: 'id = ? AND shared_annotation_id IS NULL',
+        whereArgs: [noteId],
+      );
+
+  Future<BookNote?> selectBySharedAnnotationId(String sharedAnnotationId) =>
+      querySingle(
+        table,
+        mapper: BookNote.fromDb,
+        where: 'shared_annotation_id = ?',
+        whereArgs: [sharedAnnotationId],
+      );
+
   Future<List<BookNote>> selectBookNoteByCfiAndBookId(
       String cfi, int bookId) async {
     return queryList(
@@ -54,6 +78,13 @@ class BookNoteDao extends BaseDao {
       orderBy: 'update_time DESC',
     );
   }
+
+  Future<List<BookNote>> selectUnboundAnnotations() => queryList(
+        table,
+        mapper: BookNote.fromDb,
+        where: 'shared_annotation_id IS NULL AND $_typeFilter',
+        orderBy: 'book_id, id',
+      );
 
   Future<void> updateBookNoteById(BookNote bookNote) async {
     await update(

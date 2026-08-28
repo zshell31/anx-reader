@@ -13,7 +13,7 @@ import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Current app database version
-const int currentDbVersion = 7;
+const int currentDbVersion = 8;
 
 const createBookSQL = '''
 CREATE TABLE tb_books (
@@ -425,6 +425,14 @@ class DBHelper {
             VALUES (?, '...', 0, datetime('now'), datetime('now'))
           ''', [groupId]);
         }
+        continue case7;
+      case7:
+      case 7:
+        await db.execute(
+            'ALTER TABLE tb_notes ADD COLUMN shared_annotation_id TEXT');
+        await db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
+          idx_tb_notes_shared_annotation_id ON tb_notes(shared_annotation_id)
+          WHERE shared_annotation_id IS NOT NULL''');
     }
 
     if (oldVersion != 0 && Prefs().webdavStatus) {

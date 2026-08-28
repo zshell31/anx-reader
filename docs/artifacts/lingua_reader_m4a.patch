@@ -1,0 +1,544 @@
+From 79272554e2365080045d44965c5ecdedc43efeef Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 27 Aug 2026 22:28:52 +0000
+Subject: [PATCH] Implement annotation protocol v2
+
+---
+ src/annotation-sync.ts                    |  2 +-
+ src/annotations/adapters.ts               |  1 +
+ src/annotations/merge.ts                  | 62 ++++++++++++++---------
+ src/annotations/migrate.ts                | 27 ++++++++++
+ src/annotations/types.ts                  | 14 +++--
+ src/local-annotation-storage.ts           | 20 +++++---
+ src/webdav-annotation-transport.ts        | 10 ++--
+ tests/annotation-sync.test.ts             |  3 +-
+ tests/annotations.test.ts                 | 15 +++---
+ tests/automatic-sync.test.ts              |  3 +-
+ tests/local-annotation-storage.test.ts    |  6 +--
+ tests/webdav-annotation-transport.test.ts |  7 +--
+ 12 files changed, 112 insertions(+), 58 deletions(-)
+ create mode 100644 src/annotations/migrate.ts
+
+diff --git a/src/annotation-sync.ts b/src/annotation-sync.ts
+index 3d69cfb..2060e0c 100644
+--- a/src/annotation-sync.ts
++++ b/src/annotation-sync.ts
+@@ -123,7 +123,7 @@ function normalizeLocalIdentity(
+ ): LocalAnnotationDocumentData {
+   if (
+     local.version !== 3
+-    || local.document.schemaVersion !== 1
++    || local.document.schemaVersion !== 2
+     || local.document.book.fingerprintAlgorithm !== "md5"
+   ) {
+     throw new AnnotationSyncUnavailableError(
+diff --git a/src/annotations/adapters.ts b/src/annotations/adapters.ts
+index 9eb0c6d..b7fcffe 100644
+--- a/src/annotations/adapters.ts
++++ b/src/annotations/adapters.ts
+@@ -70,6 +70,7 @@ export function vocabularyEntryToSharedAnnotation(entry: VocabularyEntry): Share
+ 
+   return {
+     id: entry.id,
++    motivation: "selection",
+     createdAt: entry.createdAt,
+     updatedAt,
+     target: {
+diff --git a/src/annotations/merge.ts b/src/annotations/merge.ts
+index 331b5ed..2744639 100644
+--- a/src/annotations/merge.ts
++++ b/src/annotations/merge.ts
+@@ -3,7 +3,6 @@ import type {
+   AiThreadEnrichment,
+   AnnotationBookDocument,
+   AnnotationEnrichment,
+-  AnnotationPresentation,
+   MaterialAnnotationEnrichment,
+   SharedAnnotation
+ } from "./types";
+@@ -19,6 +18,8 @@ export function mergeAnnotationDocuments(
+   local: AnnotationBookDocument,
+   remote: AnnotationBookDocument
+ ): AnnotationBookDocument {
++  validateDocument(local);
++  validateDocument(remote);
+   const localFingerprint = canonicalMd5Fingerprint(local.book.fingerprint);
+   const remoteFingerprint = canonicalMd5Fingerprint(remote.book.fingerprint);
+   if (
+@@ -35,25 +36,27 @@ export function mergeAnnotationDocuments(
+ }
+ 
+ export function canonicalMd5Fingerprint(fingerprint: string): string {
+-  return fingerprint.toLowerCase();
++  const canonical = fingerprint.toLowerCase();
++  if (!/^[0-9a-f]{32}$/.test(canonical)) throw new Error("Invalid MD5 fingerprint");
++  return canonical;
+ }
+ 
+ function mergeAnnotation(local: SharedAnnotation, remote: SharedAnnotation): SharedAnnotation {
+   assertIdentity("annotation", local, remote, ["createdAt"]);
+   const winner = newerOrDeterministic(local, remote, [
+-    "presentation",
+     "enrichments",
+     "deletedAt"
+   ]);
+-  return withTombstone({
++  const merged = withTombstone({
+     ...winner,
+     target: {
+       ...winner.target,
+       selectors: winner.target.selectors.map((selector) => ({ ...selector }))
+     },
+-    presentation: mergeOptionalPresentation(local.presentation, remote.presentation),
+     enrichments: mergeById(local.enrichments, remote.enrichments, mergeEnrichment)
+   }, local.deletedAt, remote.deletedAt);
++  delete (merged as Record<string, unknown>).presentation;
++  return merged;
+ }
+ 
+ function mergeEnrichment(
+@@ -107,21 +110,8 @@ function mergeMessage(local: AiMessage, remote: AiMessage): AiMessage {
+   );
+ }
+ 
+-function mergeTimestampedValue<T extends { updatedAt: string }>(local: T, remote: T): T {
+-  return { ...newerOrDeterministic(local, remote, []) };
+-}
+-
+-function mergeOptionalPresentation(
+-  local?: AnnotationPresentation,
+-  remote?: AnnotationPresentation
+-): AnnotationPresentation | undefined {
+-  if (!local) return remote ? { ...remote } : undefined;
+-  if (!remote) return { ...local };
+-  return mergeTimestampedValue(local, remote);
+-}
+-
+ function compareMessages(left: AiMessage, right: AiMessage): number {
+-  return left.sequence - right.sequence || left.id.localeCompare(right.id);
++  return left.sequence - right.sequence || ordinalCompare(left.id, right.id);
+ }
+ 
+ function mergeById<T extends { id: string }>(
+@@ -134,7 +124,7 @@ function mergeById<T extends { id: string }>(
+     const current = values.get(item.id);
+     values.set(item.id, current ? merge(current, item) : merge(item, item));
+   }
+-  return [...values.values()].sort((left, right) => left.id.localeCompare(right.id));
++  return [...values.values()].sort((left, right) => ordinalCompare(left.id, right.id));
+ }
+ 
+ function assertIdentity<T extends { id: string }>(
+@@ -153,7 +143,9 @@ function newerOrDeterministic<T extends { updatedAt: string }>(
+   remote: T,
+   ignoredKeys: (keyof T)[]
+ ): T {
+-  const timestampOrder = local.updatedAt.localeCompare(remote.updatedAt);
++  validateTimestamp(local.updatedAt);
++  validateTimestamp(remote.updatedAt);
++  const timestampOrder = ordinalCompare(local.updatedAt, remote.updatedAt);
+   if (timestampOrder !== 0) return timestampOrder > 0 ? local : remote;
+   const left = comparableValue(local, ignoredKeys);
+   const right = comparableValue(remote, ignoredKeys);
+@@ -179,7 +171,8 @@ function withTombstone<T extends { deletedAt?: string }>(
+ }
+ 
+ function maxTimestamp(left: string, right: string): string {
+-  return left.localeCompare(right) >= 0 ? left : right;
++  validateTimestamp(left); validateTimestamp(right);
++  return ordinalCompare(left, right) >= 0 ? left : right;
+ }
+ 
+ function maxOptionalTimestamp(left?: string, right?: string): string | undefined {
+@@ -197,10 +190,33 @@ function canonicalValue(value: unknown): unknown {
+   if (value && typeof value === "object") {
+     const source = value as Record<string, unknown>;
+     const result: Record<string, unknown> = {};
+-    for (const key of Object.keys(source).sort()) {
++    for (const key of Object.keys(source).sort(ordinalCompare)) {
+       if (source[key] !== undefined) result[key] = canonicalValue(source[key]);
+     }
+     return result;
+   }
+   return value;
+ }
++
++export function ordinalCompare(left: string, right: string): number {
++  return left < right ? -1 : left > right ? 1 : 0;
++}
++
++export function validateTimestamp(value: string): void {
++  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
++    || new Date(value).toISOString() !== value) throw new Error(`Invalid canonical timestamp: ${value}`);
++}
++
++function validateDocument(document: AnnotationBookDocument): void {
++  if (document.schemaVersion !== 2 || document.book.fingerprintAlgorithm !== "md5") {
++    throw new Error("Unsupported annotation document identity");
++  }
++  canonicalMd5Fingerprint(document.book.fingerprint);
++  for (const annotation of document.annotations) {
++    validateTimestamp(annotation.createdAt); validateTimestamp(annotation.updatedAt);
++    if (annotation.deletedAt) validateTimestamp(annotation.deletedAt);
++    if (annotation.motivation !== "selection" && annotation.motivation !== "bookmark") {
++      throw new Error("Invalid annotation motivation");
++    }
++  }
++}
+diff --git a/src/annotations/migrate.ts b/src/annotations/migrate.ts
+new file mode 100644
+index 0000000..41f2323
+--- /dev/null
++++ b/src/annotations/migrate.ts
+@@ -0,0 +1,27 @@
++import type { AnnotationBookDocument, SharedAnnotation } from "./types";
++
++export interface AnnotationV1MigrationResult {
++  document: AnnotationBookDocument;
++  localPresentation: Record<string, unknown>;
++}
++
++/** Presentation is returned as local sidecar data and never placed in v2 bytes. */
++export function migrateAnnotationDocumentV1(value: Record<string, unknown>): AnnotationV1MigrationResult {
++  if (value.schemaVersion !== 1 || !value.book || !Array.isArray(value.annotations)) {
++    throw new Error("Not an annotation schema-v1 document");
++  }
++  const localPresentation: Record<string, unknown> = {};
++  const annotations = value.annotations.map((item) => {
++    if (!item || typeof item !== "object") throw new Error("Invalid v1 annotation");
++    const source = item as Record<string, unknown>;
++    if (source.presentation !== undefined && typeof source.id === "string") {
++      localPresentation[source.id] = structuredClone(source.presentation);
++    }
++    const { presentation: _presentation, ...rest } = source;
++    return { ...rest, motivation: "selection" } as unknown as SharedAnnotation;
++  });
++  return {
++    document: { ...value, schemaVersion: 2, book: value.book, annotations } as AnnotationBookDocument,
++    localPresentation
++  };
++}
+diff --git a/src/annotations/types.ts b/src/annotations/types.ts
+index 577b75c..9a64d19 100644
+--- a/src/annotations/types.ts
++++ b/src/annotations/types.ts
+@@ -36,6 +36,7 @@ export interface AnnotationTarget {
+   context?: string;
+   chapter?: string;
+   selectors: AnnotationSelector[];
++  [property: string]: unknown;
+ }
+ 
+ export type AnnotationEnrichmentKind =
+@@ -58,6 +59,7 @@ export interface AnnotationEnrichmentBase {
+   createdAt: string;
+   updatedAt: string;
+   deletedAt?: string;
++  [property: string]: unknown;
+ }
+ 
+ export interface MaterialAnnotationEnrichment extends AnnotationEnrichmentBase {
+@@ -98,24 +100,20 @@ export interface AiThreadEnrichment extends AnnotationEnrichmentBase {
+ 
+ export type AnnotationEnrichment = MaterialAnnotationEnrichment | AiThreadEnrichment;
+ 
+-export interface AnnotationPresentation {
+-  type?: string;
+-  color?: string;
+-  updatedAt: string;
+-}
+-
+ export interface SharedAnnotation {
+   id: string;
+   createdAt: string;
+   updatedAt: string;
+   deletedAt?: string;
++  motivation: "selection" | "bookmark";
+   target: AnnotationTarget;
+-  presentation?: AnnotationPresentation;
+   enrichments: AnnotationEnrichment[];
++  [property: string]: unknown;
+ }
+ 
+ export interface AnnotationBookDocument {
+-  schemaVersion: 1;
++  schemaVersion: 2;
+   book: SharedBookIdentity;
+   annotations: SharedAnnotation[];
++  [property: string]: unknown;
+ }
+diff --git a/src/local-annotation-storage.ts b/src/local-annotation-storage.ts
+index 984760d..7189152 100644
+--- a/src/local-annotation-storage.ts
++++ b/src/local-annotation-storage.ts
+@@ -4,6 +4,7 @@ import {
+   type VocabularyCompatibilityMetadata
+ } from "./annotations/adapters";
+ import { mergeAnnotationDocuments } from "./annotations/merge";
++import { migrateAnnotationDocumentV1 } from "./annotations/migrate";
+ import type {
+   AiThreadEnrichment,
+   AnnotationBookDocument,
+@@ -33,6 +34,7 @@ export interface LocalAnnotationDocumentData {
+   local?: { localPath?: string };
+   document: AnnotationBookDocument;
+   compatibility: Record<string, AnnotationCompatibilitySidecar>;
++  localPresentation?: Record<string, unknown>;
+ }
+ 
+ export type LocalBookAnnotationData = LocalAnnotationDocumentData | BookVocabularyData;
+@@ -56,7 +58,7 @@ export function createLocalBookAnnotationData(
+     bookId: book.id,
+     ...(book.localPath ? { local: { localPath: book.localPath } } : {}),
+     document: {
+-      schemaVersion: 1,
++      schemaVersion: 2,
+       book: { fingerprintAlgorithm: "md5", fingerprint },
+       annotations: ownedEntries
+         .map(vocabularyEntryToSharedAnnotation)
+@@ -86,7 +88,11 @@ export function parseLocalBookAnnotationData(
+       ? promoteLegacyData(legacy, bookWithFingerprint(book, expectedBookId, fingerprint))
+       : legacy;
+   }
+-  const data = raw as Partial<LocalAnnotationDocumentData>;
++  const data = raw as Partial<LocalAnnotationDocumentData> & { document?: Record<string, unknown> };
++  const migration = (data.document as Record<string, unknown> | undefined)?.schemaVersion === 1
++    ? migrateAnnotationDocumentV1(data.document!)
++    : undefined;
++  if (migration) data.document = migration.document;
+   if (
+     data.bookId !== expectedBookId
+     || !isAnnotationDocument(data.document)
+@@ -106,7 +112,9 @@ export function parseLocalBookAnnotationData(
+       book: { fingerprintAlgorithm: "md5", fingerprint },
+       annotations: data.document.annotations.map(cloneAnnotation)
+     },
+-    compatibility: cloneCompatibility(data.compatibility)
++    compatibility: cloneCompatibility(data.compatibility),
++    ...(migration && Object.keys(migration.localPresentation).length
++      ? { localPresentation: migration.localPresentation } : {})
+   };
+ }
+ 
+@@ -329,11 +337,11 @@ function patchSharedAnnotation(
+   };
+   const fingerprint = "00000000000000000000000000000000";
+   return mergeAnnotationDocuments({
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint },
+     annotations: [base]
+   }, {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint },
+     annotations: [patch]
+   }).annotations[0];
+@@ -498,7 +506,7 @@ function cloneCompatibility(
+ function isAnnotationDocument(value: unknown): value is AnnotationBookDocument {
+   if (!value || typeof value !== "object") return false;
+   const document = value as Partial<AnnotationBookDocument>;
+-  return document.schemaVersion === 1
++  return document.schemaVersion === 2
+     && document.book?.fingerprintAlgorithm === "md5"
+     && typeof document.book.fingerprint === "string"
+     && Array.isArray(document.annotations);
+diff --git a/src/webdav-annotation-transport.ts b/src/webdav-annotation-transport.ts
+index 71b9e17..1b99374 100644
+--- a/src/webdav-annotation-transport.ts
++++ b/src/webdav-annotation-transport.ts
+@@ -1,5 +1,6 @@
+ import { requestUrl } from "obsidian";
+ import type { AnnotationBookDocument } from "./annotations/types";
++import { migrateAnnotationDocumentV1 } from "./annotations/migrate";
+ import { normalizeMd5 } from "./book-registry";
+ 
+ export interface WebDavAnnotationSettings {
+@@ -232,8 +233,10 @@ function normalizeAnnotationDocument(
+   if (!value || typeof value !== "object" || Array.isArray(value)) {
+     throw malformedDocument("document must be an object");
+   }
+-  const document = value as Partial<AnnotationBookDocument>;
+-  if (document.schemaVersion !== 1) {
++  const raw = value as Record<string, unknown>;
++  const normalized = raw.schemaVersion === 1 ? migrateAnnotationDocumentV1(raw).document : value;
++  const document = normalized as Partial<AnnotationBookDocument>;
++  if (document.schemaVersion !== 2) {
+     throw malformedDocument("unsupported schemaVersion");
+   }
+   if (!document.book || document.book.fingerprintAlgorithm !== "md5") {
+@@ -263,7 +266,8 @@ function normalizeAnnotationDocument(
+     throw malformedDocument("annotations must be an array");
+   }
+   return {
+-    schemaVersion: 1,
++    ...document,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint },
+     annotations: document.annotations
+   };
+diff --git a/tests/annotation-sync.test.ts b/tests/annotation-sync.test.ts
+index 3f77032..c12b562 100644
+--- a/tests/annotation-sync.test.ts
++++ b/tests/annotation-sync.test.ts
+@@ -44,6 +44,7 @@ function annotation(
+ ): SharedAnnotation {
+   return {
+     id,
++    motivation: "selection",
+     createdAt: CREATED,
+     updatedAt: UPDATED,
+     target: {
+@@ -57,7 +58,7 @@ function annotation(
+ 
+ function document(annotations: SharedAnnotation[]): AnnotationBookDocument {
+   return {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint: FINGERPRINT },
+     annotations
+   };
+diff --git a/tests/annotations.test.ts b/tests/annotations.test.ts
+index ce46120..7c807a7 100644
+--- a/tests/annotations.test.ts
++++ b/tests/annotations.test.ts
+@@ -72,6 +72,7 @@ function vocabularyEntry(overrides: Partial<VocabularyEntry> = {}): VocabularyEn
+ function annotation(overrides: Partial<SharedAnnotation> = {}): SharedAnnotation {
+   return {
+     id: "annotation-1",
++    motivation: "selection",
+     createdAt: CREATED,
+     updatedAt: CREATED,
+     target: { selectedText: "word", selectors: [] },
+@@ -82,8 +83,8 @@ function annotation(overrides: Partial<SharedAnnotation> = {}): SharedAnnotation
+ 
+ function document(value: SharedAnnotation): AnnotationBookDocument {
+   return {
+-    schemaVersion: 1,
+-    book: { fingerprintAlgorithm: "md5", fingerprint: "abc123" },
++    schemaVersion: 2,
++    book: { fingerprintAlgorithm: "md5", fingerprint: "0123456789abcdef0123456789abcdef" },
+     annotations: [value]
+   };
+ }
+@@ -388,7 +389,7 @@ describe("annotation document merge", () => {
+     expect(mergedThreadAgain.messages[0].deletedAt).toBe(UPDATED);
+   });
+ 
+-  it("merges presentation independently from annotation payload updates", () => {
++  it("discards legacy presentation from merged v2 bytes", () => {
+     const local = annotation({
+       updatedAt: "2026-08-23T10:00:00.000Z",
+       target: { selectedText: "new target", selectors: [] },
+@@ -399,11 +400,7 @@ describe("annotation document merge", () => {
+     });
+     const merged = mergeAnnotationDocuments(document(local), document(remote)).annotations[0];
+     expect(merged.target.selectedText).toBe("new target");
+-    expect(merged.presentation).toEqual({
+-      type: "underline",
+-      color: "blue",
+-      updatedAt: UPDATED
+-    });
++    expect(merged.presentation).toBeUndefined();
+   });
+ 
+   it("canonicalizes equivalent MD5 fingerprints to lowercase", () => {
+@@ -432,7 +429,7 @@ describe("annotation document merge", () => {
+     )).toThrow("AI message same");
+ 
+     const otherBook = document(annotation());
+-    otherBook.book = { fingerprintAlgorithm: "md5", fingerprint: "different" };
++    otherBook.book = { fingerprintAlgorithm: "md5", fingerprint: "fedcba9876543210fedcba9876543210" };
+     expect(() => mergeAnnotationDocuments(document(annotation()), otherBook))
+       .toThrow("book document");
+   });
+diff --git a/tests/automatic-sync.test.ts b/tests/automatic-sync.test.ts
+index 269bb53..8750c0d 100644
+--- a/tests/automatic-sync.test.ts
++++ b/tests/automatic-sync.test.ts
+@@ -11,6 +11,7 @@ const FINGERPRINT = "0123456789abcdef0123456789abcdef";
+ function annotation(id: string, deletedAt?: string): SharedAnnotation {
+   return {
+     id,
++    motivation: "selection",
+     createdAt: "2026-08-27T10:00:00.000Z",
+     updatedAt: deletedAt ?? "2026-08-27T10:00:00.000Z",
+     ...(deletedAt ? { deletedAt } : {}),
+@@ -21,7 +22,7 @@ function annotation(id: string, deletedAt?: string): SharedAnnotation {
+ 
+ function document(ids: string[] = []): AnnotationBookDocument {
+   return {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint: FINGERPRINT },
+     annotations: ids.map((id) => annotation(id))
+   };
+diff --git a/tests/local-annotation-storage.test.ts b/tests/local-annotation-storage.test.ts
+index 5bf72be..676cedc 100644
+--- a/tests/local-annotation-storage.test.ts
++++ b/tests/local-annotation-storage.test.ts
+@@ -73,7 +73,7 @@ describe("local annotation document storage", () => {
+       bookId: "book-1",
+       local: { localPath: "Books/One.epub" },
+       document: {
+-        schemaVersion: 1,
++        schemaVersion: 2,
+         book: { fingerprintAlgorithm: "md5", fingerprint: FINGERPRINT }
+       },
+       compatibility: {
+@@ -215,7 +215,7 @@ describe("local annotation document storage", () => {
+     expect(projectLocalBookAnnotations(reloaded, book())).toEqual([]);
+   });
+ 
+-  it("preserves presentation and unprojected shared state during a compatibility edit", () => {
++  it("discards legacy presentation and preserves unprojected shared state during a compatibility edit", () => {
+     const initial = createLocalBookAnnotationData(book(), [entry()]);
+     if (initial.version !== 3) throw new Error("expected document data");
+     const remoteMaterial: MaterialAnnotationEnrichment = {
+@@ -252,7 +252,7 @@ describe("local annotation document storage", () => {
+     if (edited.version !== 3) throw new Error("expected document data");
+     const annotation = edited.document.annotations[0];
+     expect(annotation.target.selectedText).toBe("edited target");
+-    expect(annotation.presentation).toEqual({ color: "violet", updatedAt: CREATED });
++    expect(annotation.presentation).toBeUndefined();
+     expect(annotation.enrichments).toContainEqual(remoteMaterial);
+     expect(annotation.enrichments).toContainEqual(remoteThread);
+   });
+diff --git a/tests/webdav-annotation-transport.test.ts b/tests/webdav-annotation-transport.test.ts
+index d43fd15..64bfa66 100644
+--- a/tests/webdav-annotation-transport.test.ts
++++ b/tests/webdav-annotation-transport.test.ts
+@@ -18,10 +18,11 @@ const FINGERPRINT = "0123456789abcdef0123456789abcdef";
+ 
+ function document(fingerprint = FINGERPRINT): AnnotationBookDocument {
+   return {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     book: { fingerprintAlgorithm: "md5", fingerprint },
+     annotations: [{
+       id: "annotation-1",
++      motivation: "selection",
+       createdAt: "2026-08-25T10:00:00.000Z",
+       updatedAt: "2026-08-25T10:00:00.000Z",
+       target: {
+@@ -72,7 +73,7 @@ describe("WebDAV annotation document encoding", () => {
+ 
+   it.each([
+     ["malformed JSON", "{"],
+-    ["unsupported schema", JSON.stringify({ ...document(), schemaVersion: 2 })],
++    ["unsupported schema", JSON.stringify({ ...document(), schemaVersion: 3 })],
+     ["wrong algorithm", JSON.stringify({
+       ...document(),
+       book: { fingerprintAlgorithm: "sha256", fingerprint: FINGERPRINT }
+@@ -82,7 +83,7 @@ describe("WebDAV annotation document encoding", () => {
+       book: { fingerprintAlgorithm: "md5", fingerprint: "not-md5" }
+     })],
+     ["missing annotations", JSON.stringify({
+-      schemaVersion: 1,
++      schemaVersion: 2,
+       book: { fingerprintAlgorithm: "md5", fingerprint: FINGERPRINT }
+     })]
+   ])("rejects %s", (_name, value) => {
+-- 
+2.43.0
+

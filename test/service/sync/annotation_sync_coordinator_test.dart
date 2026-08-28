@@ -66,12 +66,14 @@ class MemoryWebDav implements AnnotationWebDavTransport {
   Object? lockedPutFailure;
   Object? unlockFailure;
   bool conditionalCreateUnsupported = false;
+  bool materializeLockPlaceholder = false;
   bool isLocked = false;
   int locks = 0;
   int unlocks = 0;
   int lockedPuts = 0;
   Future<void> Function()? onGet;
   Future<void> Function()? onPut;
+  Future<void> Function()? onLock;
 
   void seed(Map<String, dynamic> value, {String tag = '"v1"'}) {
     body = bytes(value);
@@ -128,8 +130,15 @@ class MemoryWebDav implements AnnotationWebDavTransport {
     locks++;
     if (lockFailure case final failure?) throw failure;
     if (isLocked) throw const WebDavLocked();
+    await onLock?.call();
+    final created = body == null;
     isLocked = true;
-    return const WebDavLock('<opaquelocktoken:test>', Duration(seconds: 45));
+    if (created && materializeLockPlaceholder) {
+      body = Uint8List(0);
+      etag = '"lock-null"';
+    }
+    return WebDavLock('<opaquelocktoken:test>', const Duration(seconds: 45),
+        created: created);
   }
 
   @override
@@ -184,7 +193,8 @@ class RaceWebDavServer {
     }
     if (client == 'Anx') await anxMayProceed.future;
     return WebDavLock('<opaquelocktoken:${client.toLowerCase()}>',
-        const Duration(seconds: 45));
+        const Duration(seconds: 45),
+        created: body == null);
   }
 
   WebDavWriteResult writeLocked(String client, List<int> value) {
@@ -524,6 +534,7 @@ void main() {
       () async {
     await putLocal([entity('A')]);
     remote.conditionalCreateUnsupported = true;
+    remote.materializeLockPlaceholder = true;
 
     await coordinator.syncBook(fingerprint);
 
@@ -533,6 +544,25 @@ void main() {
     expect(remote.unlocks, 1);
     expect(remote.decoded!['annotations'], hasLength(1));
     expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('LOCK 200 reads, decodes, and merges a representation won in the race',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.onLock = () async {
+      remote.seed(document([entity('B')]));
+    };
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.locks, 1);
+    expect(remote.gets, 3,
+        reason: 'the 200 LOCK path must GET while holding the lock');
+    expect(remote.lockedPuts, 1);
+    expect(remote.unlocks, 1);
+    expect((remote.decoded!['annotations'] as List).map((item) => item['id']),
+        ['A', 'B']);
   });
 
   test('LOCK recheck merges a representation created before lock acquisition',

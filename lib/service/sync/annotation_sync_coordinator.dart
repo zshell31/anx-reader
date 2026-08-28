@@ -377,7 +377,11 @@ class AnnotationSyncCoordinator {
     Object? primaryFailure;
     var putSucceeded = false;
     try {
-      final remote = await transport.get(path);
+      final remote = lock.created ? null : await transport.get(path);
+      if (!lock.created && remote == null) {
+        throw const WebDavTransportException(
+            'LOCK returned 200 but the existing representation is unavailable');
+      }
       final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
       final merged = await _mergeRemoteSafely(id, remoteDocument,
           strongEtag: remote?.etag);

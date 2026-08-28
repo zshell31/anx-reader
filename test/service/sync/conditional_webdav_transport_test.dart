@@ -144,6 +144,20 @@ void main() {
       expect(utf8.decode(fake.calls.single.$4!), contains('<D:exclusive/>'));
       expect(lock.token, '<opaquelocktoken:created>');
       expect(lock.timeout, const Duration(seconds: 37));
+      expect(lock.created, isTrue);
+    });
+
+    test('LOCK 200 classifies the target as an existing representation',
+        () async {
+      final fake = FakeExecutor([
+        response(200,
+            lockToken: '<opaquelocktoken:existing>', timeout: 'Second-45')
+      ]);
+
+      final lock = await transport(fake, remoteRoot: '').lock(['book.json']);
+
+      expect(lock.created, isFalse);
+      expect(lock.token, '<opaquelocktoken:existing>');
     });
 
     test('validates Lock-Token syntax', () async {
@@ -175,8 +189,9 @@ void main() {
 
     test('locked PUT uses only the WebDAV If lock-token condition', () async {
       final fake = FakeExecutor([response(201, etag: '"v1"')]);
-      final lock =
-          const WebDavLock('<opaquelocktoken:write>', Duration(seconds: 45));
+      final lock = const WebDavLock(
+          '<opaquelocktoken:write>', Duration(seconds: 45),
+          created: true);
 
       final result = await transport(fake, remoteRoot: '')
           .putLocked(['book.json'], utf8.encode('{}'), lock);
@@ -189,8 +204,9 @@ void main() {
 
     test('UNLOCK sends the validated token and reports cleanup failure',
         () async {
-      final lock =
-          const WebDavLock('<opaquelocktoken:cleanup>', Duration(seconds: 45));
+      final lock = const WebDavLock(
+          '<opaquelocktoken:cleanup>', Duration(seconds: 45),
+          created: true);
       final success = FakeExecutor([response(204)]);
       await transport(success, remoteRoot: '').unlock(['book.json'], lock);
       expect(success.calls.single.$1, 'UNLOCK');
@@ -210,7 +226,8 @@ void main() {
               ['book.json'],
               [],
               const WebDavLock(
-                  '<opaquelocktoken:failed>', Duration(seconds: 45))),
+                  '<opaquelocktoken:failed>', Duration(seconds: 45),
+                  created: true)),
           throwsA(isA<WebDavLockPutFailed>()));
       expect(fake.calls.map((call) => call.$1), isNot(contains('DELETE')));
     });

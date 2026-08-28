@@ -56,7 +56,8 @@ class WebDavWriteResult {
 class WebDavLock {
   final String token;
   final Duration? timeout;
-  const WebDavLock(this.token, this.timeout);
+  final bool created;
+  const WebDavLock(this.token, this.timeout, {required this.created});
 }
 
 abstract interface class AnnotationWebDavTransport {
@@ -181,7 +182,8 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
           status: response.statusCode);
     }
     final token = _lockToken(response.headers.value('lock-token'));
-    return WebDavLock(token, _lockTimeout(response.headers.value('timeout')));
+    return WebDavLock(token, _lockTimeout(response.headers.value('timeout')),
+        created: response.statusCode == 201);
   }
 
   @override

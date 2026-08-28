@@ -1,6 +1,7 @@
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/providers/sync.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/utils/webdav/test_webdav.dart';
 import 'package:anx_reader/widgets/settings/settings_tile.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ AbstractSettingsTile webdavSwitch(
           chooseDirection(ref);
         }
       }
+      await annotationSyncRuntime.reconfigure();
     },
     title: Text(L10n.of(context).settingsSyncEnableWebdav),
   );

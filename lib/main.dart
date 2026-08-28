@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:anx_reader/utils/platform_utils.dart';
@@ -13,6 +14,7 @@ import 'package:anx_reader/page/migration_page.dart';
 import 'package:anx_reader/service/book_player/book_player_server.dart';
 import 'package:anx_reader/service/network/http_proxy_overrides.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
@@ -62,6 +64,7 @@ Future<void> main() async {
     AnxError.init();
     await DBHelper().initDB();
     await _maintainAnnotationProjection();
+    unawaited(annotationSyncRuntime.start());
   }
 
   Server().start();
@@ -135,6 +138,7 @@ class _MyAppState extends ConsumerState<MyApp>
 
   @override
   Future<void> onWindowClose() async {
+    await annotationSyncRuntime.close();
     await Server().stop();
     await webViewEnvironment?.dispose();
     webViewEnvironment = null;
@@ -183,12 +187,14 @@ class _MyAppState extends ConsumerState<MyApp>
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
+      annotationSyncRuntime.bestEffortFlush();
       if (Prefs().webdavStatus) {
         ref
             .read(syncProvider.notifier)
             .syncData(SyncDirection.both, ref, trigger: SyncTrigger.auto);
       }
     } else if (state == AppLifecycleState.resumed) {
+      unawaited(annotationSyncRuntime.onResume());
       if (AnxPlatform.isIOS) {
         Server().start();
       }
@@ -290,6 +296,8 @@ class _MigrationWrapperState extends State<_MigrationWrapper> {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
+    await _maintainAnnotationProjection();
+    unawaited(annotationSyncRuntime.start());
 
     if (mounted) {
       setState(() {

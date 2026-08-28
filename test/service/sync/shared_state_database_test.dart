@@ -144,6 +144,37 @@ void main() {
           'original');
       expect((await store.pendingOutbox()).single.localRevision, revision);
     });
+
+    test('remote merge preserves revision and existing dirty work', () async {
+      final revision = await store.putAnnotationDocument(annotationDocument());
+      final changed = await store.applyRemoteMerge(
+        'annotations',
+        fingerprint,
+        revision,
+        utf8.encode('{"remote":"merged"}'),
+        strongEtag: '"v1"',
+      );
+
+      expect(changed, isTrue);
+      final snapshot = await store.documentSnapshot('annotations', fingerprint);
+      expect(snapshot!.localRevision, revision);
+      expect(snapshot.dirty, isTrue);
+      expect((await store.pendingOutbox()).single.localRevision, revision);
+    });
+
+    test('stale remote compare-and-set cannot overwrite newer mutation',
+        () async {
+      final revision = await store.putAnnotationDocument(annotationDocument());
+      final next = await store.putAnnotationDocument(annotationDocument());
+
+      expect(
+          await store.applyRemoteMerge('annotations', fingerprint, revision,
+              utf8.encode('{"stale":true}')),
+          isFalse);
+      final snapshot = await store.documentSnapshot('annotations', fingerprint);
+      expect(snapshot!.localRevision, next);
+      expect(utf8.decode(snapshot.canonicalState), isNot(contains('stale')));
+    });
   });
 
   group('physical restart persistence', () {

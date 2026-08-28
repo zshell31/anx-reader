@@ -64,28 +64,53 @@ class AnnotationProjectionReconciler {
     for (final document in await sharedState.annotationDocuments()) {
       final book = document['book'] as Map<String, dynamic>;
       final fingerprint = canonicalMd5Fingerprint(book['fingerprint']);
-      final localBooks = await native.findBooksByFingerprint(fingerprint);
-      final annotations =
-          (document['annotations'] as List).cast<Map<String, dynamic>>();
-      for (final annotation in annotations) {
-        try {
-          await _reconcileOne(annotation, fingerprint, localBooks, result);
-        } catch (error) {
-          result.errors++;
-          if (await sharedState.putAnnotationProjection(
-            annotationId: annotation['id'] as String,
-            bookFingerprint: fingerprint,
-            nativeNoteId: null,
-            status: AnnotationProjectionStatus.error,
-            canonicalHash: _hash(annotation),
-            lastError: error.toString(),
-          )) {
-            result.metadataWrites++;
-          }
+      _addResult(result, await reconcileBook(fingerprint));
+    }
+    return result;
+  }
+
+  /// Reconciles one book after a remote merge without scanning other books.
+  Future<AnnotationReconciliationResult> reconcileBook(
+      String fingerprint) async {
+    final result = AnnotationReconciliationResult();
+    final canonicalFingerprint = canonicalMd5Fingerprint(fingerprint);
+    final document = await sharedState.annotationDocument(canonicalFingerprint);
+    if (document == null) return result;
+    final localBooks =
+        await native.findBooksByFingerprint(canonicalFingerprint);
+    final annotations =
+        (document['annotations'] as List).cast<Map<String, dynamic>>();
+    for (final annotation in annotations) {
+      try {
+        await _reconcileOne(
+            annotation, canonicalFingerprint, localBooks, result);
+      } catch (error) {
+        result.errors++;
+        if (await sharedState.putAnnotationProjection(
+          annotationId: annotation['id'] as String,
+          bookFingerprint: canonicalFingerprint,
+          nativeNoteId: null,
+          status: AnnotationProjectionStatus.error,
+          canonicalHash: _hash(annotation),
+          lastError: error.toString(),
+        )) {
+          result.metadataWrites++;
         }
       }
     }
     return result;
+  }
+
+  void _addResult(AnnotationReconciliationResult target,
+      AnnotationReconciliationResult value) {
+    target.inserted += value.inserted;
+    target.updated += value.updated;
+    target.deleted += value.deleted;
+    target.unchanged += value.unchanged;
+    target.unsupported += value.unsupported;
+    target.unbound += value.unbound;
+    target.errors += value.errors;
+    target.metadataWrites += value.metadataWrites;
   }
 
   /// Reconciles one repository mutation without scanning unrelated books.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,8 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
+import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/translate/translation_cache_database.dart';
 import 'package:anx_reader/utils/platform_utils.dart';
 import 'package:anx_reader/utils/save_file_to_download.dart';
@@ -407,6 +410,9 @@ void showWebdavDialog(BuildContext context) {
       TextEditingController(text: webdavInfo['username']);
   final webdavPasswordController =
       TextEditingController(text: webdavInfo['password']);
+  final annotationRootController = TextEditingController(
+      text: webdavInfo[annotationRemoteRootConfigKey] ??
+          defaultAnnotationRemoteRoot);
   Widget buildTextField(String labelText, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -436,6 +442,26 @@ void showWebdavDialog(BuildContext context) {
               webdavUsernameController),
           buildTextField(L10n.of(context).settingsSyncWebdavPassword,
               webdavPasswordController),
+          buildTextField('Shared annotation folder', annotationRootController),
+          StreamBuilder<void>(
+            stream: annotationSyncRuntime.statusChanges,
+            builder: (context, _) => FutureBuilder(
+              future: annotationSyncRuntime.status,
+              builder: (context, snapshot) {
+                final status = snapshot.data;
+                final label = switch (status) {
+                  AnnotationSyncStatus.syncing => 'syncing',
+                  AnnotationSyncStatus.pendingOffline => 'pending/offline',
+                  AnnotationSyncStatus.error => 'error',
+                  _ => 'synced',
+                };
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text('Annotations: $label'),
+                );
+              },
+            ),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -457,8 +483,13 @@ void showWebdavDialog(BuildContext context) {
                   webdavInfo['url'] = webdavUrlController.text.trim();
                   webdavInfo['username'] = webdavUsernameController.text;
                   webdavInfo['password'] = webdavPasswordController.text;
+                  webdavInfo[annotationRemoteRootConfigKey] =
+                      annotationRootController.text.trim().isEmpty
+                          ? defaultAnnotationRemoteRoot
+                          : annotationRootController.text.trim();
                   Prefs().setSyncInfo(SyncProtocol.webdav, webdavInfo);
                   SyncClientFactory.initializeCurrentClient();
+                  unawaited(annotationSyncRuntime.reconfigure());
                   Navigator.pop(context);
                 },
                 child: Text(L10n.of(context).commonSave),

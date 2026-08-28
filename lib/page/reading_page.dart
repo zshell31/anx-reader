@@ -16,6 +16,10 @@ import 'package:anx_reader/models/read_theme.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
 import 'package:anx_reader/providers/sync.dart';
+import 'package:anx_reader/providers/book_notes.dart';
+import 'package:anx_reader/providers/bookmark.dart';
+import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/ai/index.dart';
 import 'package:anx_reader/service/ai/prompt_generate.dart';
 import 'package:anx_reader/utils/env_var.dart';
@@ -41,6 +45,7 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:path/path.dart' as p;
 
 class ReadingPage extends ConsumerStatefulWidget {
   const ReadingPage({
@@ -83,6 +88,8 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   late double _aiChatHeight;
   bool _isResizingAiChat = false;
   bool bookmarkExists = false;
+  String? _annotationFingerprint;
+  late final void Function() _annotationRefresh;
 
   late final FocusNode _readerFocusNode;
   // late final VolumeKeyBoard _volumeKeyBoard;
@@ -90,6 +97,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
 
   @override
   void initState() {
+    _annotationRefresh = _refreshSyncedAnnotations;
     _readerFocusNode = FocusNode(debugLabel: 'reading_page_focus');
 
     // Initialize AI panel sizes from persistent storage
@@ -111,6 +119,15 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     setAwakeTimer(Prefs().awakeTime);
 
     _book = widget.book;
+    if (p.extension(_book.filePath).toLowerCase() == '.epub') {
+      try {
+        _annotationFingerprint = canonicalMd5Fingerprint(_book.md5);
+        unawaited(annotationSyncRuntime.openBook(
+            _annotationFingerprint!, _annotationRefresh));
+      } on AnnotationProtocolException {
+        _annotationFingerprint = null;
+      }
+    }
     heroTag = widget.heroTag ?? 'preventHeroWhenStart';
     // _volumeKeyBoard = VolumeKeyBoard.instance;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,6 +151,11 @@ class ReadingPageState extends ConsumerState<ReadingPage>
 
   @override
   void dispose() {
+    final annotationFingerprint = _annotationFingerprint;
+    if (annotationFingerprint != null) {
+      annotationSyncRuntime.closeBook(
+          annotationFingerprint, _annotationRefresh);
+    }
     Sync().syncData(SyncDirection.upload, ref, trigger: SyncTrigger.auto);
     _readTimeWatch.stop();
     _awakeTimer?.cancel();
@@ -154,6 +176,13 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     // }
     _readerFocusNode.dispose();
     super.dispose();
+  }
+
+  void _refreshSyncedAnnotations() {
+    if (!mounted) return;
+    epubPlayerKey.currentState?.refreshAnnotations();
+    ref.invalidate(bookmarkProvider(_book.id));
+    ref.invalidate(bookNotesControllerProvider(_book));
   }
 
   void _requestReaderFocus() {

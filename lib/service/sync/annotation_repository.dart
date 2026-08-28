@@ -4,6 +4,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/utils/log/common.dart';
@@ -88,6 +89,7 @@ class AnnotationRepository {
   final NativeAnnotationProjectionStore native;
   final Uuid uuid;
   final DateTime Function() now;
+  final void Function(String fingerprint)? onCanonicalMutation;
   late final AnnotationProjectionReconciler _reconciler;
   Future<void> _serial = Future<void>.value();
 
@@ -96,6 +98,7 @@ class AnnotationRepository {
     NativeAnnotationProjectionStore? native,
     Uuid? uuid,
     DateTime Function()? now,
+    this.onCanonicalMutation,
     AnnotationProjectionReconciler? reconciler,
     NativeAnnotationDefaults Function()? projectionDefaults,
   })  : native = native ?? DaoNativeAnnotationProjectionStore(),
@@ -149,7 +152,7 @@ class AnnotationRepository {
           createTime: DateTime.parse(timestamp),
           updateTime: DateTime.parse(timestamp),
         );
-        await sharedState.putAnnotationDocument(document);
+        await _commit(fingerprint, document);
         return (await _project(fingerprint, annotationId,
             localPresentation: presentation))!;
       });
@@ -186,7 +189,7 @@ class AnnotationRepository {
           createTime: DateTime.parse(timestamp),
           updateTime: DateTime.parse(timestamp),
         );
-        await sharedState.putAnnotationDocument(document);
+        await _commit(fingerprint, document);
         return (await _project(fingerprint, annotationId,
             localPresentation: presentation))!;
       });
@@ -297,7 +300,7 @@ class AnnotationRepository {
       }
     }
     annotation['updatedAt'] = timestamp;
-    await sharedState.putAnnotationDocument(binding.document);
+    await _commit(binding.fingerprint, binding.document);
     return (await _project(binding.fingerprint, binding.annotationId,
         localPresentation: localPresentation))!;
   }
@@ -336,7 +339,7 @@ class AnnotationRepository {
       final timestamp = _nextTimestamp(annotation);
       annotation['updatedAt'] = timestamp;
       annotation['deletedAt'] = timestamp;
-      await sharedState.putAnnotationDocument(binding.document);
+      await _commit(binding.fingerprint, binding.document);
     }
     await _project(binding.fingerprint, binding.annotationId);
   }
@@ -374,6 +377,12 @@ class AnnotationRepository {
         },
         'annotations': <Object>[],
       };
+
+  Future<void> _commit(
+      String fingerprint, Map<String, dynamic> document) async {
+    await sharedState.putAnnotationDocument(document);
+    onCanonicalMutation?.call(fingerprint);
+  }
 
   Future<BookNote?> _project(String fingerprint, String annotationId,
       {BookNote? localPresentation}) async {
@@ -458,4 +467,7 @@ class _CanonicalBinding {
       this.fingerprint, this.annotationId, this.document, this.annotation);
 }
 
-final annotationRepository = AnnotationRepository(SharedStateDatabase());
+final annotationRepository = AnnotationRepository(
+  SharedStateDatabase(),
+  onCanonicalMutation: annotationSyncRuntime.notifyLocalMutation,
+);

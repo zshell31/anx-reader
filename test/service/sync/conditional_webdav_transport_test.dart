@@ -122,6 +122,14 @@ void main() {
   });
 
   group('paths and collections', () {
+    test('matches Lingua annotation root and lowercase MD5 convention', () {
+      const upper = '0123456789ABCDEF0123456789ABCDEF';
+      final uri = transport(FakeExecutor([]), remoteRoot: 'Lingua Reader')
+          .objectUri(annotationDocumentRemotePath(upper));
+      expect(uri.toString(),
+          'https://dav.test/base/Lingua%20Reader/annotations/0123456789abcdef0123456789abcdef.json');
+    });
+
     test('validates object path segments before requests', () async {
       for (final path in <List<String>>[
         [],

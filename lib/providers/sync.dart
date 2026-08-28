@@ -13,6 +13,7 @@ import 'package:anx_reader/providers/tb_groups.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/database_sync_manager.dart';
 import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/utils/get_path/databases_path.dart';
@@ -255,6 +256,11 @@ class Sync extends _$Sync {
     if (!(await shouldSync())) {
       return;
     }
+
+    // Annotation convergence is automatic and directionless. Manual legacy
+    // sync also triggers it, but it never participates in the database
+    // upload/download choice below.
+    await annotationSyncRuntime.syncNow();
 
     // Check if already syncing - MOVED BEFORE determineSyncDirection
     if (state.isSyncing) {

@@ -161,6 +161,32 @@ void main() {
         ),
       );
 
+  test('canonical mutation is dirty and scheduler-notified before projection',
+      () async {
+    var notifications = 0;
+    repository = AnnotationRepository(
+      shared,
+      native: native,
+      now: () => clock,
+      onCanonicalMutation: (value) {
+        expect(value, fingerprint);
+        shared.events.add('scheduled');
+        notifications++;
+      },
+      projectionDefaults: () => const NativeAnnotationDefaults(
+        selectionType: 'highlight',
+        color: 'default',
+      ),
+    );
+
+    await createSelection();
+
+    expect(notifications, 1);
+    expect(shared.events, ['canonical', 'scheduled']);
+    expect((await shared.pendingOutbox()).single.documentId, fingerprint);
+    expect(native.events, ['insert']);
+  });
+
   Map<String, dynamic> annotationOf(
           Map<String, dynamic> document, String annotationId) =>
       (document['annotations'] as List)

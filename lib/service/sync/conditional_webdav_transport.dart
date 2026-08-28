@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:dio/dio.dart';
 
 class WebDavTransportException implements Exception {
@@ -8,7 +9,8 @@ class WebDavTransportException implements Exception {
   final int? status;
   const WebDavTransportException(this.message, {this.status});
   @override
-  String toString() => 'WebDavTransportException: $message';
+  String toString() => 'WebDavTransportException'
+      '${status == null ? '' : '(HTTP $status)'}: $message';
 }
 
 class WebDavPreconditionFailed extends WebDavTransportException {
@@ -26,6 +28,18 @@ class WebDavWriteResult {
   final String? etag;
   const WebDavWriteResult(this.etag);
 }
+
+abstract interface class AnnotationWebDavTransport {
+  Future<WebDavObject?> get(List<String> path);
+  Future<WebDavWriteResult> create(List<String> path, List<int> body);
+  Future<WebDavWriteResult> replace(
+      List<String> path, List<int> body, String strongEtag);
+}
+
+List<String> annotationDocumentRemotePath(String fingerprint) => [
+      'annotations',
+      '${canonicalMd5Fingerprint(fingerprint)}.json',
+    ];
 
 abstract interface class WebDavRequestExecutor {
   Future<Response<List<int>>> execute(String method, Uri uri,
@@ -47,7 +61,7 @@ class DioWebDavRequestExecutor implements WebDavRequestExecutor {
               validateStatus: (_) => true));
 }
 
-class ConditionalWebDavTransport {
+class ConditionalWebDavTransport implements AnnotationWebDavTransport {
   final Uri baseUri;
   final String remoteRoot;
   final WebDavRequestExecutor executor;
@@ -88,6 +102,7 @@ class ConditionalWebDavTransport {
     ]);
   }
 
+  @override
   Future<WebDavObject?> get(List<String> path) async {
     final response = await _execute('GET', objectUri(path), headers: _headers);
     if (response.statusCode == 404) return null;
@@ -98,8 +113,10 @@ class ConditionalWebDavTransport {
     return WebDavObject(Uint8List.fromList(response.data!), etag);
   }
 
+  @override
   Future<WebDavWriteResult> create(List<String> path, List<int> body) =>
       _put(path, body, {'If-None-Match': '*'});
+  @override
   Future<WebDavWriteResult> replace(
           List<String> path, List<int> body, String strongEtag) =>
       _put(path, body, {'If-Match': _strongEtag(strongEtag)});

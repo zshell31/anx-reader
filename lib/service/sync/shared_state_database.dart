@@ -106,6 +106,26 @@ class SharedOutboxEntry {
       this.attempts, this.lastError);
 }
 
+/// A canonical document snapshot used for compare-and-set remote merges.
+///
+/// [localRevision] advances only for local user mutations. Remote
+/// reconciliation may change [canonicalState] while preserving that revision.
+class SharedDocumentSnapshot {
+  final String domain;
+  final String documentId;
+  final Uint8List canonicalState;
+  final int localRevision;
+  final bool dirty;
+
+  const SharedDocumentSnapshot({
+    required this.domain,
+    required this.documentId,
+    required this.canonicalState,
+    required this.localRevision,
+    required this.dirty,
+  });
+}
+
 /// An immutable local revision to synchronize after its claim transaction has
 /// completed. Network I/O must happen after this is returned.
 class SharedSyncWork {
@@ -290,6 +310,148 @@ class SharedStateDatabase {
     return rows.isEmpty
         ? null
         : Uint8List.fromList(rows.single['canonical_state'] as List<int>);
+  }
+
+  Future<SharedDocumentSnapshot?> documentSnapshot(
+      String domain, String documentId) async {
+    final rows = await (await database).rawQuery('''SELECT
+        d.canonical_state, d.local_revision,
+        CASE WHEN o.document_id IS NULL THEN 0 ELSE 1 END AS dirty
+      FROM shared_documents d
+      LEFT JOIN sync_outbox o
+        ON o.domain = d.domain AND o.document_id = d.document_id
+      WHERE d.domain = ? AND d.document_id = ?
+      LIMIT 1''', [domain, documentId]);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return SharedDocumentSnapshot(
+      domain: domain,
+      documentId: documentId,
+      canonicalState: Uint8List.fromList(row['canonical_state'] as List<int>),
+      localRevision: row['local_revision'] as int,
+      dirty: (row['dirty'] as int) == 1,
+    );
+  }
+
+  Future<SharedOutboxEntry?> outboxEntry(
+      String domain, String documentId) async {
+    final rows = await (await database).query('sync_outbox',
+        where: 'domain = ? AND document_id = ?',
+        whereArgs: [domain, documentId],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return SharedOutboxEntry(
+      row['domain'] as String,
+      row['document_id'] as String,
+      row['local_revision'] as int,
+      row['attempts'] as int,
+      row['last_error'] as String?,
+    );
+  }
+
+  /// Applies network-derived canonical bytes without manufacturing local work.
+  ///
+  /// The update is compare-and-set against [expectedLocalRevision], so a merge
+  /// computed from an older snapshot can never overwrite a concurrent local
+  /// mutation. Existing dirty state is preserved. A document first discovered
+  /// remotely starts at revision zero and is clean.
+  Future<bool> applyRemoteMerge(
+    String domain,
+    String documentId,
+    int? expectedLocalRevision,
+    List<int> canonicalState, {
+    String? strongEtag,
+  }) async {
+    if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
+      throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
+    }
+    final now = canonicalWireTimestamp(DateTime.now());
+    return (await database).transaction((txn) async {
+      final current = await txn.query('shared_documents',
+          columns: ['local_revision'],
+          where: 'domain = ? AND document_id = ?',
+          whereArgs: [domain, documentId],
+          limit: 1);
+      if (current.isEmpty) {
+        if (expectedLocalRevision != null) return false;
+        await txn.insert('shared_documents', {
+          'domain': domain,
+          'document_id': documentId,
+          'canonical_state': Uint8List.fromList(canonicalState),
+          'local_revision': 0,
+          'updated_at': now,
+        });
+        await txn.insert('sync_metadata', {
+          'domain': domain,
+          'document_id': documentId,
+          'strong_etag': strongEtag,
+          'last_synced_at': now,
+          'status': 'synced',
+        });
+        return true;
+      }
+      final revision = current.single['local_revision'] as int;
+      if (revision != expectedLocalRevision) return false;
+      await txn.update(
+        'shared_documents',
+        {
+          'canonical_state': Uint8List.fromList(canonicalState),
+          'updated_at': now,
+        },
+        where: 'domain = ? AND document_id = ? AND local_revision = ?',
+        whereArgs: [domain, documentId, revision],
+      );
+      final dirtyRows = await txn.rawQuery('''SELECT COUNT(*) AS count
+        FROM sync_outbox WHERE domain = ? AND document_id = ?''',
+          [domain, documentId]);
+      final dirty = (dirtyRows.single['count'] as int) > 0;
+      await txn.rawInsert('''INSERT INTO sync_metadata
+          (domain, document_id, strong_etag, last_synced_at, status)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          strong_etag = COALESCE(excluded.strong_etag, strong_etag),
+          last_synced_at = CASE
+            WHEN excluded.strong_etag IS NOT NULL THEN excluded.last_synced_at
+            ELSE last_synced_at END,
+          status = CASE WHEN ? THEN status ELSE 'synced' END''', [
+        domain,
+        documentId,
+        strongEtag,
+        now,
+        dirty ? 'pending' : 'synced',
+        dirty ? 1 : 0
+      ]);
+      return true;
+    });
+  }
+
+  /// Records a successful clean pull/write only if no local mutation raced it.
+  Future<bool> markRemoteConverged(
+      String domain, String documentId, int expectedLocalRevision,
+      {String? strongEtag}) async {
+    if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
+      throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
+    }
+    final now = canonicalWireTimestamp(DateTime.now());
+    return (await database).transaction((txn) async {
+      final current = await txn.rawQuery('''SELECT d.local_revision
+        FROM shared_documents d
+        WHERE d.domain = ? AND d.document_id = ?
+          AND d.local_revision = ?
+          AND NOT EXISTS (SELECT 1 FROM sync_outbox o
+            WHERE o.domain = d.domain AND o.document_id = d.document_id)
+        LIMIT 1''', [domain, documentId, expectedLocalRevision]);
+      if (current.isEmpty) return false;
+      await txn.rawInsert('''INSERT INTO sync_metadata
+          (domain, document_id, strong_etag, last_synced_at, status)
+        VALUES (?, ?, ?, ?, 'synced')
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          strong_etag = COALESCE(excluded.strong_etag, strong_etag),
+          last_synced_at = excluded.last_synced_at,
+          status = 'synced' ''', [domain, documentId, strongEtag, now]);
+      return true;
+    });
   }
 
   Future<Map<String, dynamic>?> annotationDocument(String fingerprint) async {

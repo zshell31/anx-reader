@@ -610,6 +610,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     ''');
   }
 
+  /// Re-reads the native projection after canonical remote reconciliation and
+  /// replaces Foliate's rendered annotation set in place.
+  Future<void> refreshAnnotations() => renderAnnotations(webViewController);
+
   void getThemeColor() {
     if (Prefs().autoAdjustReadingTheme) {
       List<ReadTheme> themes = widget.initialThemes;

@@ -156,6 +156,10 @@ class FakeNativeStore implements NativeAnnotationProjectionStore {
   }
 
   @override
+  Future<BookNote> readProjection(int nativeNoteId) async =>
+      notes.singleWhere((value) => value.id == nativeNoteId);
+
+  @override
   Future<int> insertProjection(BookNote value) async {
     value.id = nextNativeId++;
     notes.add(value);

@@ -2,15 +2,13 @@ import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
 import 'package:anx_reader/widgets/context_menu/reader_note_menu.dart';
 import 'package:anx_reader/widgets/context_menu/translation_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
-
-import 'package:anx_reader/dao/book_note.dart';
-import 'package:anx_reader/models/book_note.dart';
 
 Future<void> showContextMenu(
     BuildContext context,
@@ -33,23 +31,24 @@ Future<void> showContextMenu(
     final String type = Prefs().annotationType;
     final String color = Prefs().annotationColor;
 
-    final BookNote bookNote = BookNote(
-      bookId: playerKey.book.id,
-      content: annoContent,
-      cfi: annoCfi,
-      chapter: playerKey.chapterTitle,
-      type: type,
-      color: color,
-      createTime: DateTime.now(),
-      updateTime: DateTime.now(),
+    final bookNote = await annotationRepository.createSelectionAnnotation(
+      AnnotationCreation(
+        book: playerKey.book,
+        selectedText: annoContent,
+        epubCfi: annoCfi,
+        chapter: playerKey.chapterTitle,
+        context: contextText,
+        type: type,
+        color: color,
+      ),
     );
-
-    final id = await bookNoteDao.save(bookNote);
-    bookNote.setId(id);
+    final id = bookNote.id!;
     playerKey.addAnnotation(bookNote);
     annoId = id;
     isNewNote = true;
   }
+
+  if (!context.mounted) return;
 
   final renderBox =
       epubPlayerKey.currentContext?.findRenderObject() as RenderBox?;
@@ -510,6 +509,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 ExcerptMenu(
                                   annoCfi: widget.annoCfi,
                                   annoContent: widget.annoContent,
+                                  contextText: widget.contextText,
                                   id: widget.annoId,
                                   onClose: widget.onClose,
                                   footnote: widget.footnote,

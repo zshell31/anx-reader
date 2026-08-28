@@ -88,12 +88,59 @@ class AnnotationProjectionReconciler {
     return result;
   }
 
+  /// Reconciles one repository mutation without scanning unrelated books.
+  ///
+  /// [localPresentation] is only a projection hint. It can carry the local
+  /// highlight/underline and color chosen while creating or editing a native
+  /// row, but none of those values are written to canonical shared state.
+  Future<AnnotationReconciliationResult> reconcileAnnotation(
+    String fingerprint,
+    String annotationId, {
+    BookNote? localPresentation,
+  }) async {
+    final result = AnnotationReconciliationResult();
+    final canonicalFingerprint = canonicalMd5Fingerprint(fingerprint);
+    final document = await sharedState.annotationDocument(canonicalFingerprint);
+    if (document == null) {
+      throw StateError(
+          'No canonical annotation document for $canonicalFingerprint');
+    }
+    final annotations =
+        (document['annotations'] as List).cast<Map<String, dynamic>>();
+    final matches =
+        annotations.where((value) => value['id'] == annotationId).toList();
+    if (matches.length != 1) {
+      throw StateError('Canonical annotation $annotationId was not found');
+    }
+    final localBooks =
+        await native.findBooksByFingerprint(canonicalFingerprint);
+    try {
+      await _reconcileOne(
+          matches.single, canonicalFingerprint, localBooks, result,
+          localPresentation: localPresentation);
+    } catch (error) {
+      result.errors++;
+      if (await sharedState.putAnnotationProjection(
+        annotationId: annotationId,
+        bookFingerprint: canonicalFingerprint,
+        nativeNoteId: null,
+        status: AnnotationProjectionStatus.error,
+        canonicalHash: _hash(matches.single),
+        lastError: error.toString(),
+      )) {
+        result.metadataWrites++;
+      }
+    }
+    return result;
+  }
+
   Future<void> _reconcileOne(
     Map<String, dynamic> annotation,
     String fingerprint,
     List<Book> localBooks,
-    AnnotationReconciliationResult result,
-  ) async {
+    AnnotationReconciliationResult result, {
+    BookNote? localPresentation,
+  }) async {
     final annotationId = annotation['id'] as String;
     final existing = await native.findBySharedAnnotationId(annotationId);
 
@@ -161,8 +208,8 @@ class AnnotationProjectionReconciler {
       return;
     }
 
-    final desired = _desiredNote(
-        annotationId, annotation, projection, localBook.id, existing);
+    final desired = _desiredNote(annotationId, annotation, projection,
+        localBook.id, existing, localPresentation);
     int nativeNoteId;
     if (existing == null) {
       nativeNoteId = await native.insertProjection(desired);
@@ -216,7 +263,7 @@ class AnnotationProjectionReconciler {
     if (selectedText is! String || (chapter != null && chapter is! String)) {
       return null;
     }
-    final personalNote = _activePersonalNote(annotation);
+    final personalNote = _projectedPersonalNote(annotation);
     final material = {
       'motivation': annotation['motivation'],
       'selectedText': selectedText,
@@ -236,26 +283,26 @@ class AnnotationProjectionReconciler {
     );
   }
 
-  _PersonalNote? _activePersonalNote(Map<String, dynamic> annotation) {
+  _PersonalNote? _projectedPersonalNote(Map<String, dynamic> annotation) {
     final enrichments = annotation['enrichments'] as List;
-    final active = enrichments
+    final personalNotes = enrichments
         .cast<Map<String, dynamic>>()
-        .where((item) =>
-            item['kind'] == 'personal-note' &&
-            !item.containsKey('deletedAt') &&
-            item['content'] is String)
+        .where((item) => item['kind'] == 'personal-note')
         .toList();
-    if (active.isEmpty) return null;
-    // The visible projection uses the same deterministic winner convention as
-    // protocol entities: latest updatedAt, then canonical JSON ordinal order.
-    active.sort((left, right) {
+    if (personalNotes.isEmpty) return null;
+    // Tombstones participate in winner selection. Otherwise an older active
+    // enrichment could resurrect a note that the user explicitly cleared.
+    personalNotes.sort((left, right) {
       final time =
           (left['updatedAt'] as String).compareTo(right['updatedAt'] as String);
       return time != 0
           ? time
           : canonicalJson(left).compareTo(canonicalJson(right));
     });
-    final winner = active.last;
+    final winner = personalNotes.last;
+    if (winner.containsKey('deletedAt') || winner['content'] is! String) {
+      return null;
+    }
     return _PersonalNote(
         winner['content'] as String, winner['updatedAt'] as String);
   }
@@ -276,12 +323,15 @@ class AnnotationProjectionReconciler {
     _RepresentableProjection projection,
     int bookId,
     BookNote? existing,
+    BookNote? localPresentation,
   ) {
     final localDefaults = defaults();
     final motivation = annotation['motivation'] as String;
-    final selectionType = existing != null &&
-            (existing.type == 'highlight' || existing.type == 'underline')
-        ? existing.type
+    final presentation = localPresentation ?? existing;
+    final selectionType = presentation != null &&
+            (presentation.type == 'highlight' ||
+                presentation.type == 'underline')
+        ? presentation.type
         : (localDefaults.selectionType == 'underline'
             ? 'underline'
             : 'highlight');
@@ -291,8 +341,8 @@ class AnnotationProjectionReconciler {
       cfi: projection.cfi,
       chapter: projection.chapter,
       type: motivation == 'bookmark' ? 'bookmark' : selectionType,
-      color: existing?.color.isNotEmpty == true
-          ? existing!.color
+      color: presentation?.color.isNotEmpty == true
+          ? presentation!.color
           : localDefaults.color,
       readerNote: projection.readerNote,
       sharedAnnotationId: annotationId,

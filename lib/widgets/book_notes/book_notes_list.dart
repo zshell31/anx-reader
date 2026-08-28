@@ -400,11 +400,8 @@ class BookNotesList extends ConsumerWidget {
     String currentType = bookNote.type;
     String currentColor = bookNote.color;
     String? currentNote = bookNote.readerNote;
-    String currentContent = bookNote.content;
-    bool isEditingContent = false;
 
     final noteController = TextEditingController(text: currentNote);
-    final contentController = TextEditingController(text: currentContent);
 
     showDialog(
       context: context,
@@ -419,29 +416,12 @@ class BookNotesList extends ConsumerWidget {
                   children: [
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 16),
-                      child: isEditingContent
-                          ? TextField(
-                              controller: contentController,
-                              decoration: InputDecoration(
-                                border: const OutlineInputBorder(),
-                                hintText:
-                                    L10n.of(context).contextMenuAddNoteTips,
-                              ),
-                              maxLines: 3,
-                            )
-                          : GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  isEditingContent = true;
-                                });
-                              },
-                              child: Text(
-                                bookNote.content,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
+                      // The excerpt is selected source text, not commentary.
+                      // Editing it alone would invalidate its CFI/context.
+                      child: Text(
+                        bookNote.content,
+                        style: const TextStyle(fontSize: 16),
+                      ),
                     ),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -509,7 +489,7 @@ class BookNotesList extends ConsumerWidget {
                     final updatedNote = BookNote(
                       id: bookNote.id,
                       bookId: bookNote.bookId,
-                      content: contentController.text.trim(),
+                      content: bookNote.content,
                       cfi: bookNote.cfi,
                       chapter: bookNote.chapter,
                       type: currentType,

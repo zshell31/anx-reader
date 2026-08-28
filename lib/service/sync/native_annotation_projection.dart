@@ -3,10 +3,11 @@ import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 
-/// The deliberately narrow native boundary needed by M4C.
+/// The deliberately narrow BookNote projection boundary.
 ///
-/// Canonical mutation belongs to the later M4D repository. This interface only
-/// exposes legacy discovery and rebuildable BookNote projection operations.
+/// Canonical mutation belongs to AnnotationRepository. Implementations here
+/// expose legacy discovery plus rebuildable projection reads/writes; calling
+/// them does not imply a semantic shared-state mutation.
 abstract interface class NativeAnnotationProjectionStore {
   Future<List<BookNote>> enumerateLegacyUnboundNotes();
 
@@ -17,6 +18,8 @@ abstract interface class NativeAnnotationProjectionStore {
   Future<void> bindSharedAnnotation(int nativeNoteId, String annotationId);
 
   Future<BookNote?> findBySharedAnnotationId(String annotationId);
+
+  Future<BookNote> readProjection(int nativeNoteId);
 
   Future<int> insertProjection(BookNote note);
 
@@ -58,6 +61,10 @@ class DaoNativeAnnotationProjectionStore
   @override
   Future<BookNote?> findBySharedAnnotationId(String annotationId) =>
       notes.selectBySharedAnnotationId(annotationId);
+
+  @override
+  Future<BookNote> readProjection(int nativeNoteId) =>
+      notes.selectBookNoteById(nativeNoteId);
 
   @override
   Future<int> insertProjection(BookNote note) =>

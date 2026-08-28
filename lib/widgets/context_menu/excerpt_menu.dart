@@ -8,6 +8,7 @@ import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/service/translate/google_translate_app.dart';
 import 'package:anx_reader/utils/env_var.dart';
@@ -23,6 +24,7 @@ import 'package:url_launcher/url_launcher.dart';
 class ExcerptMenu extends StatefulWidget {
   final String annoCfi;
   final String annoContent;
+  final String? contextText;
   final int? id;
   final Function() onClose;
   final bool footnote;
@@ -38,6 +40,7 @@ class ExcerptMenu extends StatefulWidget {
     super.key,
     required this.annoCfi,
     required this.annoContent,
+    this.contextText,
     this.id,
     required this.onClose,
     required this.footnote,
@@ -109,34 +112,30 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     }
   }
 
-  Future<BookNote> _persistNote(
-      {String? color, String? type, String? content}) async {
+  Future<BookNote> _persistNote({String? color, String? type}) async {
     final existingNote = await _fetchLatestNote() ?? _currentNote;
-    final now = DateTime.now();
-
-    final resolvedContent = (content ?? widget.annoContent).trim().isNotEmpty
-        ? (content ?? widget.annoContent)
-        : (existingNote?.content ?? widget.annoContent);
     final resolvedType = type ?? existingNote?.type ?? annoType;
     final resolvedColor = color ?? existingNote?.color ?? annoColor;
 
-    final BookNote bookNote = BookNote(
-      id: existingNote?.id ?? widget.id,
-      bookId:
-          existingNote?.bookId ?? epubPlayerKey.currentState!.widget.book.id,
-      content: resolvedContent,
-      cfi: existingNote?.cfi ?? widget.annoCfi,
-      chapter:
-          existingNote?.chapter ?? epubPlayerKey.currentState!.chapterTitle,
-      type: resolvedType,
-      color: resolvedColor,
-      readerNote: existingNote?.readerNote,
-      createTime: existingNote?.createTime ?? now,
-      updateTime: now,
-    );
-
-    final id = await bookNoteDao.save(bookNote);
-    bookNote.setId(id);
+    final BookNote bookNote;
+    if (existingNote != null) {
+      bookNote = await annotationRepository.updatePresentation(
+          existingNote.id!, resolvedType, resolvedColor);
+    } else {
+      final player = epubPlayerKey.currentState!;
+      bookNote = await annotationRepository.createSelectionAnnotation(
+        AnnotationCreation(
+          book: player.book,
+          selectedText: widget.annoContent,
+          epubCfi: widget.annoCfi,
+          chapter: player.chapterTitle,
+          context: widget.contextText,
+          type: resolvedType,
+          color: resolvedColor,
+        ),
+      );
+    }
+    final id = bookNote.id!;
     widget.onNoteCreated(id);
 
     if (mounted) {
@@ -165,10 +164,11 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         : const Icon(Icons.delete);
   }
 
-  void deleteHandler() {
+  Future<void> deleteHandler() async {
     if (deleteConfirm) {
-      if (widget.id != null) {
-        bookNoteDao.deleteBookNoteById(widget.id!);
+      final current = await _fetchLatestNote() ?? _currentNote;
+      if (current != null) {
+        await annotationRepository.tombstoneAnnotation(current);
         epubPlayerKey.currentState!.removeAnnotation(widget.annoCfi);
       }
       widget.onClose();

@@ -1,6 +1,7 @@
 import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book_note.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -102,11 +103,12 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
     _setShowNoteDialog(true);
   }
 
-  void saveNote() {
+  Future<void> saveNote() async {
     textFieldController.text = textFieldController.text.trim();
-    if (note != null) {
-      note!.readerNote = textFieldController.text;
-      bookNoteDao.updateBookNoteById(note!);
+    final nativeId = note?.id;
+    if (nativeId != null) {
+      note = await annotationRepository.setPersonalNote(
+          nativeId, textFieldController.text);
     }
     _notifySizeChange();
   }
@@ -144,8 +146,8 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
                               ? double.maxFinite.toInt()
                               : 5,
                           minLines: 1,
-                          onSubmitted: (String value) {
-                            saveNote();
+                          onSubmitted: (String value) async {
+                            await saveNote();
                           },
                           onChanged: (String value) {
                             setState(() {
@@ -159,8 +161,9 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
                     if (showSaveButton)
                       IconButton(
                         icon: const Icon(EvaIcons.checkmark_circle_2_outline),
-                        onPressed: () {
-                          saveNote();
+                        onPressed: () async {
+                          await saveNote();
+                          if (!context.mounted) return;
                           // remove focus
                           FocusScope.of(context).unfocus();
                           setState(() {

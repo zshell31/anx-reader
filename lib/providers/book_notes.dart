@@ -5,6 +5,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
 import 'package:anx_reader/providers/bookmark.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -217,7 +218,7 @@ class BookNotesController extends _$BookNotesController {
   Future<void> updateNote(BookNote note) async {
     final current = state.valueOrNull;
     if (current == null) return;
-    await bookNoteDao.updateBookNoteById(note);
+    await annotationRepository.updateNativeAnnotation(note);
     // await Sync().syncData(
     //   SyncDirection.upload,
     //   null,
@@ -230,11 +231,8 @@ class BookNotesController extends _$BookNotesController {
     if (notesToDelete.isEmpty) {
       return;
     }
-    for (final note in notesToDelete) {
-      if (note.id != null) {
-        await bookNoteDao.deleteBookNoteById(note.id!);
-      }
-    }
+    await annotationRepository
+        .tombstoneAnnotations(notesToDelete.where((note) => note.id != null));
 
     // await Sync().syncData(
     //   SyncDirection.upload,

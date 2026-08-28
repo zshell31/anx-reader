@@ -17,6 +17,8 @@ class BookNoteDao extends BaseDao {
   static String get _typeFilter =>
       "type IN ('${annotationTypes.join("', '")}')";
 
+  /// Legacy/native storage primitive. Semantic annotation UI must use
+  /// AnnotationRepository; this method does not write canonical shared state.
   Future<int> save(BookNote bookNote) async {
     if (bookNote.id != null) {
       await updateBookNoteById(bookNote);
@@ -86,6 +88,7 @@ class BookNoteDao extends BaseDao {
         orderBy: 'book_id, id',
       );
 
+  /// Projection/presentation storage primitive, not a semantic mutation API.
   Future<void> updateBookNoteById(BookNote bookNote) async {
     await update(
       table,
@@ -132,6 +135,8 @@ class BookNoteDao extends BaseDao {
     return result ?? const {'numberOfNotes': 0, 'numberOfBooks': 0};
   }
 
+  /// Projection deletion primitive. User deletion must tombstone canonically
+  /// through AnnotationRepository before calling this indirectly.
   Future<void> deleteBookNoteById(int id) async {
     await delete(
       table,

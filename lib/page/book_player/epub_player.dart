@@ -835,7 +835,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         String content = detail['content'];
 
         if (remove) {
-          ref.read(bookmarkProvider(widget.book.id).notifier).removeBookmark(
+          await ref
+              .read(bookmarkProvider(widget.book.id).notifier)
+              .removeBookmark(
                 cfi: cfi,
               );
           bookmarkCfi = '';

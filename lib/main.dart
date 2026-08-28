@@ -12,6 +12,9 @@ import 'package:anx_reader/page/home_page.dart';
 import 'package:anx_reader/page/migration_page.dart';
 import 'package:anx_reader/service/book_player/book_player_server.dart';
 import 'package:anx_reader/service/network/http_proxy_overrides.dart';
+import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
+import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
+import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/get_path/macos_migration.dart';
 import 'package:anx_reader/utils/color_scheme.dart';
@@ -58,6 +61,7 @@ Future<void> main() async {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
+    await _maintainAnnotationProjection();
   }
 
   Server().start();
@@ -83,6 +87,26 @@ Future<void> main() async {
       child: MyApp(),
     ),
   );
+}
+
+Future<void> _maintainAnnotationProjection() async {
+  final sharedState = SharedStateDatabase();
+  try {
+    final bootstrap = await LegacyAnnotationBootstrap(sharedState).run();
+    final reconciliation =
+        await AnnotationProjectionReconciler(sharedState).run();
+    AnxLog.info('Annotation projection: imported ${bootstrap.imported}, '
+        'recognized ${bootstrap.alreadyImported}, '
+        'unsupported ${bootstrap.unsupported}; '
+        'native writes ${reconciliation.nativeWrites}');
+  } catch (error, stackTrace) {
+    // Shared state must fail closed: native notes remain usable and bootstrap
+    // can retry on the next launch without inventing canonical state.
+    AnxLog.warning(
+        'Annotation projection maintenance failed: $error\n$stackTrace');
+  } finally {
+    await sharedState.close();
+  }
 }
 
 class MyApp extends ConsumerStatefulWidget {

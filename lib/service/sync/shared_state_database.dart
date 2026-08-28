@@ -142,6 +142,40 @@ class SharedSyncMetadata {
       required this.status});
 }
 
+class LegacyImportReceipt {
+  final String source;
+  final String sourceKey;
+  final String? sharedId;
+  final String status;
+  final String? detail;
+
+  const LegacyImportReceipt({
+    required this.source,
+    required this.sourceKey,
+    required this.sharedId,
+    required this.status,
+    required this.detail,
+  });
+}
+
+class AnnotationProjectionMetadata {
+  final String annotationId;
+  final String bookFingerprint;
+  final int? nativeNoteId;
+  final String status;
+  final String? canonicalHash;
+  final String? lastError;
+
+  const AnnotationProjectionMetadata({
+    required this.annotationId,
+    required this.bookFingerprint,
+    required this.nativeNoteId,
+    required this.status,
+    required this.canonicalHash,
+    required this.lastError,
+  });
+}
+
 class SharedStateDatabase {
   final String? path;
   final DatabaseFactory? factory;
@@ -264,6 +298,18 @@ class SharedStateDatabase {
     return bytes == null
         ? null
         : decodeAnnotationDocument(jsonDecode(utf8.decode(bytes)));
+  }
+
+  Future<List<Map<String, dynamic>>> annotationDocuments() async {
+    final rows = await (await database).query('shared_documents',
+        columns: ['canonical_state'],
+        where: 'domain = ?',
+        whereArgs: ['annotations'],
+        orderBy: 'document_id');
+    return rows
+        .map((row) => decodeAnnotationDocument(jsonDecode(utf8
+            .decode(Uint8List.fromList(row['canonical_state'] as List<int>)))))
+        .toList(growable: false);
   }
 
   Future<List<SharedOutboxEntry>> pendingOutbox() async {
@@ -395,12 +441,24 @@ class SharedStateDatabase {
   }
 
   Future<String?> importedSharedId(String source, String sourceKey) async {
+    return (await importReceipt(source, sourceKey))?.sharedId;
+  }
+
+  Future<LegacyImportReceipt?> importReceipt(
+      String source, String sourceKey) async {
     final rows = await (await database).query('legacy_import_receipts',
-        columns: ['shared_id'],
         where: 'source = ? AND source_key = ?',
         whereArgs: [source, sourceKey],
         limit: 1);
-    return rows.isEmpty ? null : rows.single['shared_id'] as String?;
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return LegacyImportReceipt(
+      source: row['source'] as String,
+      sourceKey: row['source_key'] as String,
+      sharedId: row['shared_id'] as String?,
+      status: row['status'] as String,
+      detail: row['detail'] as String?,
+    );
   }
 
   Future<void> recordImport(
@@ -420,6 +478,57 @@ class SharedStateDatabase {
           'imported_at': canonicalWireTimestamp(DateTime.now()),
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<AnnotationProjectionMetadata?> annotationProjection(
+      String annotationId) async {
+    final rows = await (await database).query('annotation_projections',
+        where: 'annotation_id = ?', whereArgs: [annotationId], limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return AnnotationProjectionMetadata(
+      annotationId: row['annotation_id'] as String,
+      bookFingerprint: row['book_fingerprint'] as String,
+      nativeNoteId: row['native_note_id'] as int?,
+      status: row['status'] as String,
+      canonicalHash: row['canonical_hash'] as String?,
+      lastError: row['last_error'] as String?,
+    );
+  }
+
+  /// Stores local materialization metadata only when it actually changed.
+  /// The native note id is a cache; callers must recover identity through the
+  /// canonical annotation id / `shared_annotation_id` binding.
+  Future<bool> putAnnotationProjection({
+    required String annotationId,
+    required String bookFingerprint,
+    required int? nativeNoteId,
+    required String status,
+    String? canonicalHash,
+    String? lastError,
+  }) async {
+    final previous = await annotationProjection(annotationId);
+    if (previous != null &&
+        previous.bookFingerprint == bookFingerprint &&
+        previous.nativeNoteId == nativeNoteId &&
+        previous.status == status &&
+        previous.canonicalHash == canonicalHash &&
+        previous.lastError == lastError) {
+      return false;
+    }
+    await (await database).insert(
+      'annotation_projections',
+      {
+        'annotation_id': annotationId,
+        'book_fingerprint': bookFingerprint,
+        'native_note_id': nativeNoteId,
+        'status': status,
+        'canonical_hash': canonicalHash,
+        'last_error': lastError,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return true;
   }
 
   Future<void> close() async {

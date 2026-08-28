@@ -76,6 +76,16 @@ class BookDao extends BaseDao {
     );
   }
 
+  Future<List<Book>> selectBooksByFingerprint(String fingerprint) {
+    return queryList(
+      table,
+      mapper: Book.fromDb,
+      where: 'is_deleted = 0 AND LOWER(file_md5) = ?',
+      whereArgs: [fingerprint.toLowerCase()],
+      orderBy: 'id',
+    );
+  }
+
   Future<List<Book>> searchBooks(String keyword) async {
     final query = keyword.trim();
     if (query.isEmpty) {

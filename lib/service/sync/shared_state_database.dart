@@ -1,135 +1,269 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+/// Durable lifecycle of the current local document revision.
+///
+/// [synced] has no dirty revision, [pending] is retryable dirty work,
+/// [syncing] is a process-local claim, and [error] is dirty work whose latest
+/// attempt failed. On open, [syncing] is recovered to [pending].
 enum SharedSyncStatus { synced, pending, syncing, error }
+
+typedef SharedStateMigration = Future<void> Function(DatabaseExecutor db);
+
+/// Versioning policy for the physically independent shared-state database.
+///
+/// Migration keys are destination versions. A future v1 -> v2 migration is
+/// registered under key 2. Missing steps fail instead of opening a partially
+/// understood schema.
+class SharedStateSchema {
+  final int version;
+  final Map<int, SharedStateMigration> migrations;
+
+  const SharedStateSchema({this.version = 1, this.migrations = const {}});
+
+  Future<void> create(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE shared_documents (
+      domain TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      canonical_state BLOB NOT NULL,
+      local_revision INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(domain, document_id)
+    )''');
+    await db.execute('''CREATE TABLE sync_outbox (
+      domain TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      local_revision INTEGER NOT NULL,
+      dirty_since TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      PRIMARY KEY(domain, document_id),
+      FOREIGN KEY(domain, document_id)
+        REFERENCES shared_documents(domain, document_id) ON DELETE CASCADE
+    )''');
+    await db.execute('''CREATE TABLE sync_metadata (
+      domain TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      strong_etag TEXT,
+      remote_revision INTEGER NOT NULL DEFAULT 0,
+      last_synced_at TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('synced', 'pending', 'syncing', 'error')),
+      PRIMARY KEY(domain, document_id),
+      FOREIGN KEY(domain, document_id)
+        REFERENCES shared_documents(domain, document_id) ON DELETE CASCADE
+    )''');
+    await db.execute('''CREATE TABLE legacy_import_receipts (
+      source TEXT NOT NULL,
+      source_key TEXT NOT NULL,
+      shared_id TEXT,
+      status TEXT NOT NULL,
+      detail TEXT,
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY(source, source_key)
+    )''');
+    await db.execute('''CREATE TABLE annotation_projections (
+      annotation_id TEXT PRIMARY KEY,
+      book_fingerprint TEXT NOT NULL,
+      native_note_id INTEGER,
+      status TEXT NOT NULL,
+      canonical_hash TEXT,
+      last_error TEXT
+    )''');
+  }
+
+  Future<void> upgrade(
+      DatabaseExecutor db, int oldVersion, int newVersion) async {
+    for (var destination = oldVersion + 1;
+        destination <= newVersion;
+        destination++) {
+      final migration = migrations[destination];
+      if (migration == null) {
+        throw UnsupportedError(
+            'No shared-state migration to schema v$destination');
+      }
+      await migration(db);
+    }
+  }
+
+  Future<void> downgrade(Database db, int oldVersion, int newVersion) async =>
+      throw UnsupportedError(
+          'Shared-state schema v$oldVersion is newer than supported v$newVersion');
+}
 
 class SharedOutboxEntry {
   final String domain;
   final String documentId;
+  final int localRevision;
   final int attempts;
   final String? lastError;
-  const SharedOutboxEntry(
-      this.domain, this.documentId, this.attempts, this.lastError);
+
+  const SharedOutboxEntry(this.domain, this.documentId, this.localRevision,
+      this.attempts, this.lastError);
+}
+
+/// An immutable local revision to synchronize after its claim transaction has
+/// completed. Network I/O must happen after this is returned.
+class SharedSyncWork {
+  final String domain;
+  final String documentId;
+  final int localRevision;
+  final Uint8List canonicalState;
+  final int attempts;
+  final String? strongEtag;
+
+  const SharedSyncWork(
+      {required this.domain,
+      required this.documentId,
+      required this.localRevision,
+      required this.canonicalState,
+      required this.attempts,
+      required this.strongEtag});
+}
+
+class SharedSyncMetadata {
+  final String domain;
+  final String documentId;
+  final String? strongEtag;
+  final int remoteRevision;
+  final String? lastSyncedAt;
+  final SharedSyncStatus status;
+
+  const SharedSyncMetadata(
+      {required this.domain,
+      required this.documentId,
+      required this.strongEtag,
+      required this.remoteRevision,
+      required this.lastSyncedAt,
+      required this.status});
 }
 
 class SharedStateDatabase {
   final String? path;
   final DatabaseFactory? factory;
+  final SharedStateSchema schema;
   Database? _database;
 
-  SharedStateDatabase({this.path, this.factory});
+  SharedStateDatabase(
+      {this.path, this.factory, this.schema = const SharedStateSchema()});
 
   Future<Database> get database async => _database ??= await _open();
 
   Future<Database> _open() async {
-    final resolvedPath = path ?? p.join(await getDatabasesPath(), 'shared_state.db');
+    final resolvedPath =
+        path ?? p.join(await getDatabasesPath(), 'shared_state.db');
     return (factory ?? databaseFactory).openDatabase(
       resolvedPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: schema.version,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
           await db.execute('PRAGMA journal_mode = WAL');
         },
-        onCreate: (db, _) async {
-          await db.execute('''CREATE TABLE shared_documents (
-            domain TEXT NOT NULL,
-            document_id TEXT NOT NULL,
-            canonical_json TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY(domain, document_id)
-          )''');
-          await db.execute('''CREATE TABLE sync_outbox (
-            domain TEXT NOT NULL,
-            document_id TEXT NOT NULL,
-            dirty_since TEXT NOT NULL,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT,
-            PRIMARY KEY(domain, document_id),
-            FOREIGN KEY(domain, document_id) REFERENCES shared_documents(domain, document_id)
-              ON DELETE CASCADE
-          )''');
-          await db.execute('''CREATE TABLE sync_metadata (
-            domain TEXT NOT NULL,
-            document_id TEXT NOT NULL,
-            strong_etag TEXT,
-            last_synced_at TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            PRIMARY KEY(domain, document_id)
-          )''');
-          await db.execute('''CREATE TABLE legacy_import_receipts (
-            source TEXT NOT NULL,
-            source_key TEXT NOT NULL,
-            shared_id TEXT,
-            status TEXT NOT NULL,
-            detail TEXT,
-            imported_at TEXT NOT NULL,
-            PRIMARY KEY(source, source_key)
-          )''');
-          await db.execute('''CREATE TABLE annotation_projections (
-            annotation_id TEXT PRIMARY KEY,
-            book_fingerprint TEXT NOT NULL,
-            native_note_id INTEGER,
-            status TEXT NOT NULL,
-            canonical_hash TEXT,
-            last_error TEXT
-          )''');
-        },
+        onCreate: (db, _) => schema.create(db),
+        onUpgrade: schema.upgrade,
+        onDowngrade: schema.downgrade,
+        onOpen: _recoverInterruptedSyncs,
       ),
     );
   }
 
-  Future<void> putAnnotationDocument(Map<String, dynamic> input,
-      {bool dirty = true}) async {
-    final document = decodeAnnotationDocument(input);
-    final book = document['book'] as Map<String, dynamic>;
-    final id = canonicalMd5Fingerprint(book['fingerprint']);
+  Future<void> _recoverInterruptedSyncs(Database db) async {
+    // A process-local in-flight claim cannot survive process death. Dirty work
+    // becomes retryable; an impossible in-flight row without an outbox is
+    // normalized to converged.
+    await db.rawUpdate('''UPDATE sync_metadata
+      SET status = CASE
+        WHEN EXISTS (
+          SELECT 1 FROM sync_outbox o
+          WHERE o.domain = sync_metadata.domain
+            AND o.document_id = sync_metadata.document_id
+        ) THEN 'pending'
+        ELSE 'synced'
+      END
+      WHERE status = 'syncing' ''');
+  }
+
+  Future<int> get schemaVersion async {
+    final rows = await (await database).rawQuery('PRAGMA user_version');
+    return rows.single['user_version'] as int;
+  }
+
+  /// Stores canonical bytes and advances the document revision in the same
+  /// transaction that makes that exact revision dirty.
+  Future<int> putCanonicalDocument(
+      String domain, String documentId, List<int> canonicalState) async {
+    if (domain.isEmpty || documentId.isEmpty) {
+      throw ArgumentError('domain and documentId must not be empty');
+    }
     final now = canonicalWireTimestamp(DateTime.now());
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn.insert(
-          'shared_documents',
-          {
-            'domain': 'annotations',
-            'document_id': id,
-            'canonical_json': canonicalJson(document),
-            'updated_at': now,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
-      if (dirty) {
-        await txn.insert(
-            'sync_outbox',
-            {
-              'domain': 'annotations',
-              'document_id': id,
-              'dirty_since': now,
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-        await txn.insert(
-            'sync_metadata',
-            {
-              'domain': 'annotations',
-              'document_id': id,
-              'status': SharedSyncStatus.pending.name,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
+    return (await database).transaction((txn) async {
+      final previous = await txn.query('shared_documents',
+          columns: ['local_revision'],
+          where: 'domain = ? AND document_id = ?',
+          whereArgs: [domain, documentId],
+          limit: 1);
+      final revision =
+          previous.isEmpty ? 1 : (previous.single['local_revision'] as int) + 1;
+      await txn.rawInsert('''INSERT INTO shared_documents
+          (domain, document_id, canonical_state, local_revision, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          canonical_state = excluded.canonical_state,
+          local_revision = excluded.local_revision,
+          updated_at = excluded.updated_at''', [
+        domain,
+        documentId,
+        Uint8List.fromList(canonicalState),
+        revision,
+        now
+      ]);
+      await txn.rawInsert('''INSERT INTO sync_outbox
+          (domain, document_id, local_revision, dirty_since, attempts, last_error)
+        VALUES (?, ?, ?, ?, 0, NULL)
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          local_revision = excluded.local_revision,
+          dirty_since = excluded.dirty_since,
+          attempts = 0,
+          last_error = NULL''', [domain, documentId, revision, now]);
+      await txn.rawInsert('''INSERT INTO sync_metadata
+          (domain, document_id, status)
+        VALUES (?, ?, 'pending')
+        ON CONFLICT(domain, document_id) DO UPDATE SET status = 'pending' ''',
+          [domain, documentId]);
+      return revision;
     });
   }
 
-  Future<Map<String, dynamic>?> annotationDocument(String fingerprint) async {
+  Future<int> putAnnotationDocument(Map<String, dynamic> input) async {
+    final document = decodeAnnotationDocument(input);
+    final book = document['book'] as Map<String, dynamic>;
+    final id = canonicalMd5Fingerprint(book['fingerprint']);
+    return putCanonicalDocument(
+        'annotations', id, utf8.encode(canonicalJson(document)));
+  }
+
+  Future<Uint8List?> canonicalDocument(String domain, String documentId) async {
     final rows = await (await database).query('shared_documents',
-        columns: ['canonical_json'],
+        columns: ['canonical_state'],
         where: 'domain = ? AND document_id = ?',
-        whereArgs: ['annotations', canonicalMd5Fingerprint(fingerprint)],
+        whereArgs: [domain, documentId],
         limit: 1);
     return rows.isEmpty
         ? null
-        : decodeAnnotationDocument(
-            jsonDecode(rows.single['canonical_json'] as String));
+        : Uint8List.fromList(rows.single['canonical_state'] as List<int>);
+  }
+
+  Future<Map<String, dynamic>?> annotationDocument(String fingerprint) async {
+    final bytes = await canonicalDocument(
+        'annotations', canonicalMd5Fingerprint(fingerprint));
+    return bytes == null
+        ? null
+        : decodeAnnotationDocument(jsonDecode(utf8.decode(bytes)));
   }
 
   Future<List<SharedOutboxEntry>> pendingOutbox() async {
@@ -139,35 +273,125 @@ class SharedStateDatabase {
         .map((row) => SharedOutboxEntry(
             row['domain'] as String,
             row['document_id'] as String,
+            row['local_revision'] as int,
             row['attempts'] as int,
             row['last_error'] as String?))
         .toList();
   }
 
-  Future<void> recordFailure(String domain, String id, Object error) async {
-    await (await database).rawUpdate('''UPDATE sync_outbox
-      SET attempts = attempts + 1, last_error = ? WHERE domain = ? AND document_id = ?''',
-        [error.toString(), domain, id]);
+  /// Atomically claims and snapshots one exact revision. The returned bytes can
+  /// be used over the network without retaining a SQLite transaction or lock.
+  Future<SharedSyncWork?> beginSync(
+      String domain, String id, int expectedRevision) async {
+    return (await database).transaction((txn) async {
+      final rows = await txn.rawQuery('''SELECT
+          d.canonical_state, o.attempts, m.strong_etag, m.status
+        FROM sync_outbox o
+        JOIN shared_documents d
+          ON d.domain = o.domain AND d.document_id = o.document_id
+          AND d.local_revision = o.local_revision
+        LEFT JOIN sync_metadata m
+          ON m.domain = o.domain AND m.document_id = o.document_id
+        WHERE o.domain = ? AND o.document_id = ? AND o.local_revision = ?
+        LIMIT 1''', [domain, id, expectedRevision]);
+      if (rows.isEmpty ||
+          rows.single['status'] == SharedSyncStatus.syncing.name) {
+        return null;
+      }
+      await txn.rawInsert('''INSERT INTO sync_metadata
+          (domain, document_id, status)
+        VALUES (?, ?, 'syncing')
+        ON CONFLICT(domain, document_id) DO UPDATE SET status = 'syncing' ''',
+          [domain, id]);
+      final row = rows.single;
+      return SharedSyncWork(
+          domain: domain,
+          documentId: id,
+          localRevision: expectedRevision,
+          canonicalState:
+              Uint8List.fromList(row['canonical_state'] as List<int>),
+          attempts: row['attempts'] as int,
+          strongEtag: row['strong_etag'] as String?);
+    });
   }
 
-  Future<void> markConverged(String domain, String id,
-      {String? strongEtag}) async {
-    final now = canonicalWireTimestamp(DateTime.now());
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn.delete('sync_outbox',
-          where: 'domain = ? AND document_id = ?', whereArgs: [domain, id]);
-      await txn.insert(
-          'sync_metadata',
-          {
-            'domain': domain,
-            'document_id': id,
-            'strong_etag': strongEtag,
-            'last_synced_at': now,
-            'status': SharedSyncStatus.synced.name,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+  /// Records a failure only if it belongs to the still-current dirty revision.
+  Future<bool> recordFailure(
+      String domain, String id, int expectedRevision, Object error) async {
+    return (await database).transaction((txn) async {
+      final changed = await txn.rawUpdate('''UPDATE sync_outbox
+        SET attempts = attempts + 1, last_error = ?
+        WHERE domain = ? AND document_id = ? AND local_revision = ?''',
+          [error.toString(), domain, id, expectedRevision]);
+      if (changed == 0) return false;
+      await txn.rawUpdate('''UPDATE sync_metadata SET status = 'error'
+        WHERE domain = ? AND document_id = ?''', [domain, id]);
+      return true;
     });
+  }
+
+  /// Completes only the expected revision. A newer local mutation keeps its
+  /// outbox row and status. Its next replace may still use the ETag produced by
+  /// this older successful upload, unless an even newer upload already won.
+  Future<bool> markConverged(String domain, String id, int expectedRevision,
+      {String? strongEtag}) async {
+    if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
+      throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
+    }
+    final now = canonicalWireTimestamp(DateTime.now());
+    return (await database).transaction((txn) async {
+      final deleted = await txn.delete('sync_outbox',
+          where: 'domain = ? AND document_id = ? AND local_revision = ?',
+          whereArgs: [domain, id, expectedRevision]);
+      if (deleted == 1) {
+        await txn.rawUpdate('''UPDATE sync_metadata SET
+            strong_etag = COALESCE(?, strong_etag),
+            remote_revision = CASE
+              WHEN ? >= remote_revision THEN ? ELSE remote_revision END,
+            last_synced_at = ?, status = 'synced'
+          WHERE domain = ? AND document_id = ?''',
+            [strongEtag, expectedRevision, expectedRevision, now, domain, id]);
+        return true;
+      }
+      // A completed older upload is useful as the precondition for the pending
+      // revision, but must never change that newer revision's status.
+      await txn.rawUpdate('''UPDATE sync_metadata SET
+          strong_etag = CASE
+            WHEN ? IS NOT NULL AND ? >= remote_revision THEN ?
+            ELSE strong_etag END,
+          remote_revision = CASE
+            WHEN ? >= remote_revision THEN ? ELSE remote_revision END,
+          last_synced_at = CASE
+            WHEN ? >= remote_revision THEN ? ELSE last_synced_at END
+        WHERE domain = ? AND document_id = ?''', [
+        strongEtag,
+        expectedRevision,
+        strongEtag,
+        expectedRevision,
+        expectedRevision,
+        expectedRevision,
+        now,
+        domain,
+        id
+      ]);
+      return false;
+    });
+  }
+
+  Future<SharedSyncMetadata?> syncMetadata(String domain, String id) async {
+    final rows = await (await database).query('sync_metadata',
+        where: 'domain = ? AND document_id = ?',
+        whereArgs: [domain, id],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return SharedSyncMetadata(
+        domain: domain,
+        documentId: id,
+        strongEtag: row['strong_etag'] as String?,
+        remoteRevision: row['remote_revision'] as int,
+        lastSyncedAt: row['last_synced_at'] as String?,
+        status: SharedSyncStatus.values.byName(row['status'] as String));
   }
 
   Future<String?> importedSharedId(String source, String sourceKey) async {

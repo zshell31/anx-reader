@@ -67,11 +67,19 @@ class ConditionalWebDavTransport {
       };
 
   Uri objectUri(List<String> segments) {
+    if (segments.isEmpty) {
+      throw const WebDavTransportException('WebDAV object path is empty');
+    }
     final all = [
       ...remoteRoot.split('/').where((x) => x.isNotEmpty),
       ...segments
     ];
-    if (all.any((x) => x == '.' || x == '..' || x.contains('/'))) {
+    if (all.any((x) =>
+        x.isEmpty ||
+        x == '.' ||
+        x == '..' ||
+        x.contains('/') ||
+        x.contains(r'\'))) {
       throw const WebDavTransportException('unsafe WebDAV path segment');
     }
     return baseUri.replace(pathSegments: [
@@ -81,8 +89,7 @@ class ConditionalWebDavTransport {
   }
 
   Future<WebDavObject?> get(List<String> path) async {
-    final response =
-        await executor.execute('GET', objectUri(path), headers: _headers);
+    final response = await _execute('GET', objectUri(path), headers: _headers);
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200 || response.data == null) {
       throw WebDavTransportException('GET failed', status: response.statusCode);
@@ -99,14 +106,13 @@ class ConditionalWebDavTransport {
 
   Future<WebDavWriteResult> _put(
       List<String> path, List<int> body, Map<String, String> condition) async {
+    final uri = objectUri(path);
     await _ensureCollections(path.sublist(0, path.length - 1));
-    final response = await executor.execute('PUT', objectUri(path),
-        body: body,
-        headers: {
-          ..._headers,
-          ...condition,
-          'Content-Type': 'application/json; charset=utf-8'
-        });
+    final response = await _execute('PUT', uri, body: body, headers: {
+      ..._headers,
+      ...condition,
+      'Content-Type': 'application/json; charset=utf-8'
+    });
     if (response.statusCode == 412) throw const WebDavPreconditionFailed();
     if (response.statusCode != 200 &&
         response.statusCode != 201 &&
@@ -119,13 +125,22 @@ class ConditionalWebDavTransport {
 
   Future<void> _ensureCollections(List<String> path) async {
     for (var index = 1; index <= path.length; index++) {
-      final response = await executor.execute(
+      final response = await _execute(
           'MKCOL', objectUri(path.take(index).toList()),
           headers: _headers);
       if (![200, 201, 204, 301, 405].contains(response.statusCode)) {
         throw WebDavTransportException('MKCOL failed',
             status: response.statusCode);
       }
+    }
+  }
+
+  Future<Response<List<int>>> _execute(String method, Uri uri,
+      {Map<String, String> headers = const {}, List<int>? body}) async {
+    try {
+      return await executor.execute(method, uri, headers: headers, body: body);
+    } catch (error) {
+      throw WebDavTransportException('$method request failed: $error');
     }
   }
 

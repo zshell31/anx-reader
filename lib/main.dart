@@ -63,7 +63,7 @@ Future<void> main() async {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
-    await _maintainAnnotationProjection();
+    await maintainAnnotationProjection();
     unawaited(annotationSyncRuntime.start());
   }
 
@@ -92,7 +92,7 @@ Future<void> main() async {
   );
 }
 
-Future<void> _maintainAnnotationProjection() async {
+Future<void> maintainAnnotationProjection() async {
   final sharedState = SharedStateDatabase();
   try {
     final bootstrap = await LegacyAnnotationBootstrap(sharedState).run();
@@ -296,7 +296,7 @@ class _MigrationWrapperState extends State<_MigrationWrapper> {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
-    await _maintainAnnotationProjection();
+    await maintainAnnotationProjection();
     unawaited(annotationSyncRuntime.start());
 
     if (mounted) {

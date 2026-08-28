@@ -50,4 +50,17 @@ void main() {
         contains(
             'refreshAnnotations() => renderAnnotations(webViewController)'));
   });
+
+  test('native database replacement immediately repairs from canonical state',
+      () {
+    final main = source('lib/main.dart');
+    final manager = source('lib/service/database_sync_manager.dart');
+    final provider = source('lib/providers/sync.dart');
+    final settings = source('lib/page/settings_page/sync.dart');
+
+    expect(main, contains('Future<void> maintainAnnotationProjection()'));
+    expect(manager, contains('await maintainAnnotationProjection()'));
+    expect(provider, contains('await maintainAnnotationProjection()'));
+    expect(settings, contains('await maintainAnnotationProjection()'));
+  });
 }

@@ -169,7 +169,8 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       final current = await _fetchLatestNote() ?? _currentNote;
       if (current != null) {
         await annotationRepository.tombstoneAnnotation(current);
-        epubPlayerKey.currentState!.removeAnnotation(widget.annoCfi);
+        epubPlayerKey.currentState!
+            .removeAnnotation(widget.annoCfi, id: current.id);
       }
       widget.onClose();
     } else {

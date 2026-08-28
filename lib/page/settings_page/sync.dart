@@ -266,7 +266,8 @@ class _SyncSettingState extends ConsumerState<SyncSetting> {
       await translationCacheDatabase.close();
       _copyDirectorySync(Directory('$extractPath${pathSeparator}databases'),
           await getAnxDataBasesDir());
-      DBHelper().initDB();
+      await DBHelper().initDB();
+      await maintainAnnotationProjection();
 
       await _restorePrefsFromBackup(extractPath);
 

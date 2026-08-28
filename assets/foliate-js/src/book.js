@@ -1098,6 +1098,7 @@ footnoteDialog.addEventListener('click', e =>
 class Reader {
   annotations = new Map()
   annotationsByValue = new Map()
+  annotationsById = new Map()
   #footnoteHandler = new FootnoteHandler()
   #doc
   #index
@@ -1207,8 +1208,16 @@ class Reader {
     })
   }
 
-  renderAnnotation(annotations) {
+  async renderAnnotation(annotations) {
     const annos = annotations ?? allAnnotations ?? []
+    const previous = [...this.annotations.values()].flat()
+    await Promise.all(previous
+      .filter(annotation => annotation.type !== 'bookmark')
+      .map(annotation => this.view.addAnnotation(annotation, true)))
+    this.annotations.clear()
+    this.annotationsByValue.clear()
+    this.annotationsById.clear()
+
     for (const anno of annos) {
       const { value, type, color, note } = anno
       const annotation = {
@@ -1219,16 +1228,27 @@ class Reader {
         note
       }
 
-      this.addAnnotation(annotation)
+      await this.addAnnotation(annotation)
     }
-
+    this.#checkCurrentPageBookmark()
   }
 
   showContextMenu() {
     return handleSelection(this.view, this.#doc, this.#index)
   }
 
-  addAnnotation(annotation) {
+  async addAnnotation(annotation) {
+    const previous = this.annotationsById.get(annotation.id)
+    if (previous) {
+      const previousSpine = (previous.value.split('/')[2].split('!')[0] - 2) / 2
+      const previousList = this.annotations.get(previousSpine)
+      const previousIndex = previousList?.findIndex(a => a.id === previous.id) ?? -1
+      if (previousIndex !== -1) previousList.splice(previousIndex, 1)
+      if (previousList?.length === 0) this.annotations.delete(previousSpine)
+      if (this.annotationsByValue.get(previous.value)?.id === previous.id)
+        this.annotationsByValue.delete(previous.value)
+    }
+
     const { value } = annotation
     const spineCode = (value.split('/')[2].split('!')[0] - 2) / 2
 
@@ -1237,6 +1257,7 @@ class Reader {
     else this.annotations.set(spineCode, [annotation])
 
     this.annotationsByValue.set(value, annotation)
+    this.annotationsById.set(annotation.id, annotation)
 
     if (annotation.type === 'bookmark') {
       if (this.#checkBookmark(annotation)) {
@@ -1248,7 +1269,7 @@ class Reader {
         }
       }
     } else {
-      this.view.addAnnotation(annotation)
+      await this.view.addAnnotation(annotation)
     }
 
   }
@@ -1295,8 +1316,10 @@ class Reader {
     }
   }
 
-  removeAnnotation(cfi) {
-    const annotation = this.annotationsByValue.get(cfi)
+  async removeAnnotation(cfi, id) {
+    const annotation = id == null
+      ? this.annotationsByValue.get(cfi)
+      : this.annotationsById.get(id)
     if (!annotation) return
     const { value } = annotation
     const spineCode = (value.split('/')[2].split('!')[0] - 2) / 2
@@ -1305,11 +1328,24 @@ class Reader {
     if (list) {
       const index = list.findIndex(a => a.id === annotation.id)
       if (index !== -1) list.splice(index, 1)
+      if (list.length === 0) this.annotations.delete(spineCode)
     }
 
-    this.annotationsByValue.delete(value)
-
-    this.view.addAnnotation(annotation, true)
+    this.annotationsById.delete(annotation.id)
+    const wasVisible = this.annotationsByValue.get(value)?.id === annotation.id
+    if (wasVisible) {
+      const replacement = [...this.annotations.values()].flat()
+        .find(candidate => candidate.value === value)
+      if (replacement) {
+        this.annotationsByValue.set(value, replacement)
+        if (replacement.type !== 'bookmark')
+          await this.view.addAnnotation(replacement)
+      } else {
+        this.annotationsByValue.delete(value)
+        if (annotation.type !== 'bookmark')
+          await this.view.addAnnotation(annotation, true)
+      }
+    }
 
     if (annotation.type === 'bookmark' && this.#checkBookmark(annotation)) {
       this.#hideBookmarkIcon()
@@ -1894,7 +1930,7 @@ window.addAnnotation = (annotation) => reader.addAnnotation(annotation)
 
 window.addBookmarkHere = () => reader.handleBookmark(false)
 
-window.removeAnnotation = (cfi) => reader.removeAnnotation(cfi)
+window.removeAnnotation = (cfi, id) => reader.removeAnnotation(cfi, id)
 
 window.prevSection = () => reader.view.renderer.prevSection()
 

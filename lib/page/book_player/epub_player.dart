@@ -261,17 +261,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
 
   void addAnnotation(BookNote bookNote) {
-    final noteContent =
-        (bookNote.content).replaceAll('\n', ' ').replaceAll("'", "\\'");
-    webViewController.evaluateJavascript(source: '''
-      addAnnotation({
-        id: ${bookNote.id},
-        type: '${bookNote.type}',
-        value: '${bookNote.cfi}',
-        color: '#${bookNote.color}',
-        note: '$noteContent',
-      })
-      ''');
+    final annotation = bookNote.toJson();
+    annotation['note'] = bookNote.content.replaceAll('\n', ' ');
+    webViewController.evaluateJavascript(
+        source: 'addAnnotation(${jsonEncode(annotation)})');
   }
 
   void addBookmark(BookmarkModel bookmark) {
@@ -292,8 +285,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       ''');
   }
 
-  void removeAnnotation(String cfi) =>
-      webViewController.evaluateJavascript(source: "removeAnnotation('$cfi')");
+  void removeAnnotation(String cfi, {int? id}) =>
+      webViewController.evaluateJavascript(
+          source: 'removeAnnotation(${jsonEncode(cfi)}, ${id ?? 'null'})');
 
   void clearSearch() {
     ref.read(tocSearchProvider.notifier).clear();
@@ -599,15 +593,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> renderAnnotations(InAppWebViewController controller) async {
-    List<BookNote> annotationList =
+    final annotationList =
         await bookNoteDao.selectBookNotesByBookId(widget.book.id);
-    String allAnnotations =
-        jsonEncode(annotationList.map((e) => e.toJson()).toList())
-            .replaceAll('\'', '\\\'');
-    controller.evaluateJavascript(source: '''
-     const allAnnotations = $allAnnotations
-     renderAnnotations()
-    ''');
+    final allAnnotations =
+        jsonEncode(annotationList.map((note) => note.toJson()).toList());
+    await controller.evaluateJavascript(
+        source: 'renderAnnotations($allAnnotations)');
   }
 
   /// Re-reads the native projection after canonical remote reconciliation and

@@ -497,6 +497,29 @@ void main() {
       expect((await shared.annotationProjection('unbound'))!.status,
           AnnotationProjectionStatus.unbound);
     });
+
+    test('replacing a book file does not move annotations to its new MD5',
+        () async {
+      const replacementFingerprint = 'fedcba9876543210fedcba9876543210';
+      await shared.putAnnotationDocument(document([annotation('a')]));
+      final native = FakeNativeStore(
+        books: [book(7, md5: replacementFingerprint)],
+        notes: [note(9, 7, sharedId: 'a')],
+      );
+
+      final result = await AnnotationProjectionReconciler(shared,
+              native: native, defaults: defaults)
+          .reconcileBook(fingerprint);
+
+      expect(result.deleted, 1);
+      expect(result.unbound, 1);
+      expect(native.notes, isEmpty);
+      expect((await shared.annotationDocument(fingerprint))!['annotations'],
+          hasLength(1),
+          reason: 'the old fingerprint remains authoritative for its state');
+      expect(await shared.annotationDocument(replacementFingerprint), isNull,
+          reason: 'local Book.id/path reuse must not migrate shared identity');
+    });
   });
 
   test('old replacement snapshot cannot resurrect a canonical tombstone',

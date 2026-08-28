@@ -173,7 +173,17 @@ class AnnotationSyncCoordinator {
     try {
       while (true) {
         final generation = _requestedGeneration[id]!;
-        await _singlePass(id);
+        try {
+          await _singlePass(id);
+        } catch (_) {
+          // A notification received during the failed request represents a
+          // newer durable revision/generation. Give that work an immediate
+          // pass before applying backoff (or stopping on a non-retryable
+          // error); otherwise it can be stranded behind obsolete failure
+          // state until another lifecycle trigger.
+          if (_requestedGeneration[id] != generation) continue;
+          rethrow;
+        }
         final dirty =
             await sharedState.outboxEntry(annotationSyncDomain, id) != null;
         if (_requestedGeneration[id] == generation && !dirty) break;

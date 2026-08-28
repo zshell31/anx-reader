@@ -98,4 +98,41 @@ void main() {
         mergeAnnotationDocuments(document([alive]), document([deleted]));
     expect(merged['annotations'][0]['enrichments'][0]['deletedAt'], timestamp);
   });
+
+  test('AI thread and message tombstones are independently sticky', () {
+    Map<String, dynamic> thread(
+            {bool deleted = false, bool messageDeleted = false}) =>
+        {
+          'id': 'thread-a',
+          'kind': 'ai-thread',
+          'createdAt': timestamp,
+          'updatedAt': timestamp,
+          if (deleted) 'deletedAt': timestamp,
+          'contextSnapshot': {
+            'selectedText': 'selected',
+            'enrichmentIds': <String>[],
+          },
+          'messages': [
+            {
+              'id': 'message-a',
+              'role': 'assistant',
+              'sequence': 0,
+              'content': 'answer',
+              'createdAt': timestamp,
+              'updatedAt': timestamp,
+              if (messageDeleted) 'deletedAt': timestamp,
+            }
+          ],
+        };
+    final live = annotation('a')..['enrichments'] = [thread()];
+    final deleted = annotation('a')
+      ..['enrichments'] = [thread(deleted: true, messageDeleted: true)];
+
+    final merged =
+        mergeAnnotationDocuments(document([live]), document([deleted]));
+    final mergedThread =
+        merged['annotations'][0]['enrichments'][0] as Map<String, dynamic>;
+    expect(mergedThread['deletedAt'], timestamp);
+    expect(mergedThread['messages'][0]['deletedAt'], timestamp);
+  });
 }

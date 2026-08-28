@@ -39,7 +39,8 @@ class Bookmark extends _$Bookmark {
     final db = await DBHelper().database;
 
     final List<Map<String, dynamic>> maps = await db.query('tb_notes',
-        where: 'cfi = ? AND book_id = ?', whereArgs: [bookmark.cfi, bookId]);
+        where: 'cfi = ? AND book_id = ? AND type = ?',
+        whereArgs: [bookmark.cfi, bookId, 'bookmark']);
     if (maps.isEmpty) {
       final book = await BookDao().selectBookById(bookId);
       final projection = await annotationRepository.createBookmark(
@@ -99,6 +100,6 @@ class Bookmark extends _$Bookmark {
 
     final newState = bookmarks.where((value) => value.id != id).toList();
     state = AsyncData(newState);
-    epubPlayerKey.currentState?.removeAnnotation(bookmark.cfi);
+    epubPlayerKey.currentState?.removeAnnotation(bookmark.cfi, id: bookmark.id);
   }
 }

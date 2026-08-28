@@ -799,6 +799,7 @@ class Sync extends _$Sync {
       await DBHelper.close();
       await io.File(backupPath).copy(localDbPath);
       await DBHelper().initDB();
+      await maintainAnnotationProjection();
 
       // Refresh related providers
       try {

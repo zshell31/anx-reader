@@ -276,6 +276,51 @@ void main() {
     expect(remote.puts, 0, reason: 'remote-only pulls must not upload-loop');
   });
 
+  test('clean pull preserves remote note edits and unknown target data',
+      () async {
+    await putLocal([entity('A')]);
+    await makeClean();
+    final before =
+        (await store.documentSnapshot(annotationSyncDomain, fingerprint))!
+            .localRevision;
+    final remoteAnnotation = entity(
+      'A',
+      updatedAt: '2026-08-27T12:00:00.000Z',
+      enrichments: [
+        {
+          'id': 'personal-note:A',
+          'kind': 'personal-note',
+          'content': 'remote note',
+          'createdAt': timestamp,
+          'updatedAt': '2026-08-27T12:00:00.000Z',
+        }
+      ],
+    );
+    remoteAnnotation['futureAnnotation'] = {'preserved': true};
+    final target = remoteAnnotation['target'] as Map<String, dynamic>;
+    target['selectors'] = <Object?>[
+      ...(target['selectors'] as List),
+      {
+        'type': 'future-selector',
+        'payload': {'preserved': true},
+      }
+    ];
+    remote.seed(document([remoteAnnotation]));
+
+    await coordinator.pullBook(fingerprint);
+
+    final snapshot =
+        await store.documentSnapshot(annotationSyncDomain, fingerprint);
+    final canonical = (await store.annotationDocument(fingerprint))!;
+    final pulled = canonical['annotations'].single as Map<String, dynamic>;
+    expect(snapshot!.localRevision, before);
+    expect(snapshot.dirty, isFalse);
+    expect(remote.puts, 0);
+    expect(pulled['enrichments'].single['content'], 'remote note');
+    expect(pulled['futureAnnotation'], {'preserved': true});
+    expect(pulled['target']['selectors'], hasLength(2));
+  });
+
   test('remote-only first discovery creates clean revision zero', () async {
     remote.seed(document([entity('remote')]));
 
@@ -368,6 +413,33 @@ void main() {
     expect(await store.pendingOutbox(), isEmpty);
   });
 
+  test('local mutation after merged persistence prevents a stale PUT',
+      () async {
+    final revision = await putLocal([entity('A')]);
+    remote.seed(document([entity('B')]));
+    var mutated = false;
+    await coordinator.close();
+    coordinator = createCoordinator(reconcile: (_) async {
+      if (!mutated) {
+        mutated = true;
+        final current = (await store.annotationDocument(fingerprint))!;
+        final annotations = (current['annotations'] as List)
+            .cast<Map<String, dynamic>>()
+            .toList()
+          ..add(entity('C'));
+        expect(await putLocal(annotations), revision + 1);
+      }
+      return AnnotationReconciliationResult();
+    });
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.puts, 1,
+        reason: 'the stale revision must stop before its conditional PUT');
+    expect(remote.decoded!['annotations'], hasLength(3));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
   test('local mutation during PUT leaves newer work dirty then runs it',
       () async {
     final revision = await putLocal([entity('A')]);
@@ -383,6 +455,65 @@ void main() {
 
     expect(remote.puts, 2);
     expect(remote.decoded!['annotations'], hasLength(3));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('412 plus a concurrent local mutation rereads and merges current state',
+      () async {
+    final revision = await putLocal([entity('A')]);
+    remote.seed(document([entity('B')]));
+    var raced = false;
+    remote.onPut = () async {
+      if (raced) return;
+      raced = true;
+      expect(await putLocal([entity('A'), entity('C')]), revision + 1);
+      remote.seed(document([entity('B'), entity('D')]), tag: '"v2"');
+    };
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.puts, 2);
+    expect(remote.gets, greaterThanOrEqualTo(2));
+    expect(remote.decoded!['annotations'], hasLength(4));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('notifyDirty coalesces calls and carries the newest revision', () async {
+    final revision = await putLocal([entity('A')]);
+    final gate = Completer<void>();
+    remote.onGet = () => gate.future;
+
+    final first = coordinator.notifyDirty(fingerprint);
+    while (remote.gets == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(await putLocal([entity('A'), entity('B')]), revision + 1);
+    final notifications =
+        List.generate(12, (_) => coordinator.notifyDirty(fingerprint));
+    gate.complete();
+    await Future.wait([first, ...notifications]);
+
+    expect(remote.maxActiveGets, 1);
+    expect(remote.decoded!['annotations'], hasLength(2));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('new notification during a failed request bypasses obsolete retry state',
+      () async {
+    final revision = await putLocal([entity('A')]);
+    var first = true;
+    remote.onGet = () async {
+      if (!first) return;
+      first = false;
+      expect(await putLocal([entity('A'), entity('B')]), revision + 1);
+      unawaited(coordinator.notifyDirty(fingerprint).catchError((_) {}));
+      throw const WebDavTransportException('first request failed');
+    };
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.gets, 2);
+    expect(remote.decoded!['annotations'], hasLength(2));
     expect(await store.pendingOutbox(), isEmpty);
   });
 

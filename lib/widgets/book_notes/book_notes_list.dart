@@ -115,7 +115,7 @@ class BookNotesList extends ConsumerWidget {
                 if (player != null) {
                   for (final note in notesToDelete) {
                     if (note.cfi.isNotEmpty) {
-                      player.removeAnnotation(note.cfi);
+                      player.removeAnnotation(note.cfi, id: note.id);
                     }
                   }
                 }

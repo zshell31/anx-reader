@@ -18,6 +18,30 @@ class WebDavPreconditionFailed extends WebDavTransportException {
       : super('remote object changed', status: 412);
 }
 
+class WebDavLocked extends WebDavTransportException {
+  const WebDavLocked() : super('remote object is locked', status: 423);
+}
+
+class WebDavLockUnsupported extends WebDavTransportException {
+  const WebDavLockUnsupported(int? status)
+      : super('exclusive WebDAV LOCK is unsupported', status: status);
+}
+
+class WebDavInvalidLockToken extends WebDavTransportException {
+  const WebDavInvalidLockToken()
+      : super('LOCK response has a missing or invalid Lock-Token');
+}
+
+class WebDavUnlockFailed extends WebDavTransportException {
+  const WebDavUnlockFailed(int? status)
+      : super('UNLOCK cleanup failed', status: status);
+}
+
+class WebDavLockPutFailed extends WebDavTransportException {
+  const WebDavLockPutFailed(int? status)
+      : super('lock-conditioned PUT failed', status: status);
+}
+
 class WebDavObject {
   final Uint8List body;
   final String etag;
@@ -29,11 +53,22 @@ class WebDavWriteResult {
   const WebDavWriteResult(this.etag);
 }
 
+class WebDavLock {
+  final String token;
+  final Duration? timeout;
+  const WebDavLock(this.token, this.timeout);
+}
+
 abstract interface class AnnotationWebDavTransport {
   Future<WebDavObject?> get(List<String> path);
   Future<WebDavWriteResult> create(List<String> path, List<int> body);
   Future<WebDavWriteResult> replace(
       List<String> path, List<int> body, String strongEtag);
+  Future<WebDavLock> lock(List<String> path,
+      {Duration timeout = const Duration(seconds: 45)});
+  Future<WebDavWriteResult> putLocked(
+      List<String> path, List<int> body, WebDavLock lock);
+  Future<void> unlock(List<String> path, WebDavLock lock);
 }
 
 List<String> annotationDocumentRemotePath(String fingerprint) => [
@@ -121,6 +156,67 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
           List<String> path, List<int> body, String strongEtag) =>
       _put(path, body, {'If-Match': _strongEtag(strongEtag)});
 
+  @override
+  Future<WebDavLock> lock(List<String> path,
+      {Duration timeout = const Duration(seconds: 45)}) async {
+    if (timeout <= Duration.zero) {
+      throw ArgumentError.value(timeout, 'timeout');
+    }
+    final uri = objectUri(path);
+    await _ensureCollections(path.sublist(0, path.length - 1));
+    final response = await _execute('LOCK', uri,
+        headers: {
+          ..._headers,
+          'Content-Type': 'application/xml; charset=utf-8',
+          'Depth': '0',
+          'Timeout': 'Second-${timeout.inSeconds}',
+        },
+        body: utf8.encode(_exclusiveWriteLockBody));
+    if (response.statusCode == 423) throw const WebDavLocked();
+    if (response.statusCode == 405 || response.statusCode == 501) {
+      throw WebDavLockUnsupported(response.statusCode);
+    }
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw WebDavTransportException('LOCK failed',
+          status: response.statusCode);
+    }
+    final token = _lockToken(response.headers.value('lock-token'));
+    return WebDavLock(token, _lockTimeout(response.headers.value('timeout')));
+  }
+
+  @override
+  Future<WebDavWriteResult> putLocked(
+      List<String> path, List<int> body, WebDavLock lock) async {
+    final response = await _execute('PUT', objectUri(path),
+        body: body,
+        headers: {
+          ..._headers,
+          'If': '(${lock.token})',
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        sensitive: true);
+    if (response.statusCode != 200 &&
+        response.statusCode != 201 &&
+        response.statusCode != 204) {
+      throw WebDavLockPutFailed(response.statusCode);
+    }
+    final etag = response.headers.value('etag');
+    return WebDavWriteResult(etag == null ? null : _strongEtag(etag));
+  }
+
+  @override
+  Future<void> unlock(List<String> path, WebDavLock lock) async {
+    final response = await _execute('UNLOCK', objectUri(path),
+        headers: {
+          ..._headers,
+          'Lock-Token': lock.token,
+        },
+        sensitive: true);
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw WebDavUnlockFailed(response.statusCode);
+    }
+  }
+
   Future<WebDavWriteResult> _put(
       List<String> path, List<int> body, Map<String, String> condition) async {
     final uri = objectUri(path);
@@ -153,11 +249,15 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
   }
 
   Future<Response<List<int>>> _execute(String method, Uri uri,
-      {Map<String, String> headers = const {}, List<int>? body}) async {
+      {Map<String, String> headers = const {},
+      List<int>? body,
+      bool sensitive = false}) async {
     try {
       return await executor.execute(method, uri, headers: headers, body: body);
     } catch (error) {
-      throw WebDavTransportException('$method request failed: $error');
+      throw WebDavTransportException(sensitive
+          ? '$method request failed'
+          : '$method request failed: $error');
     }
   }
 
@@ -167,4 +267,27 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
     }
     return value;
   }
+
+  String _lockToken(String? value) {
+    final token = value?.trim();
+    if (token == null || !RegExp(r'^<[^<>\s\r\n]+>$').hasMatch(token)) {
+      throw const WebDavInvalidLockToken();
+    }
+    return token;
+  }
+
+  Duration? _lockTimeout(String? value) {
+    final timeout = value?.trim();
+    if (timeout == null || timeout.toLowerCase() == 'infinite') return null;
+    final match =
+        RegExp(r'^Second-(\d+)$', caseSensitive: false).firstMatch(timeout);
+    final seconds = match == null ? null : int.tryParse(match.group(1)!);
+    return seconds == null ? null : Duration(seconds: seconds);
+  }
 }
+
+const _exclusiveWriteLockBody = '''<?xml version="1.0" encoding="utf-8"?>
+<D:lockinfo xmlns:D="DAV:">
+  <D:lockscope><D:exclusive/></D:lockscope>
+  <D:locktype><D:write/></D:locktype>
+</D:lockinfo>''';

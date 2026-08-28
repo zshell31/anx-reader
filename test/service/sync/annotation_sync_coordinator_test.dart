@@ -62,6 +62,14 @@ class MemoryWebDav implements AnnotationWebDavTransport {
   int maxActiveGets = 0;
   Object? getFailure;
   Object? putFailure;
+  Object? lockFailure;
+  Object? lockedPutFailure;
+  Object? unlockFailure;
+  bool conditionalCreateUnsupported = false;
+  bool isLocked = false;
+  int locks = 0;
+  int unlocks = 0;
+  int lockedPuts = 0;
   Future<void> Function()? onGet;
   Future<void> Function()? onPut;
 
@@ -97,6 +105,9 @@ class MemoryWebDav implements AnnotationWebDavTransport {
     puts++;
     await onPut?.call();
     if (putFailure case final failure?) throw failure;
+    if (conditionalCreateUnsupported) {
+      throw const WebDavPreconditionFailed();
+    }
     if (body != null) throw const WebDavPreconditionFailed();
     return _write(value);
   }
@@ -111,11 +122,124 @@ class MemoryWebDav implements AnnotationWebDavTransport {
     return _write(value);
   }
 
+  @override
+  Future<WebDavLock> lock(List<String> path,
+      {Duration timeout = const Duration(seconds: 45)}) async {
+    locks++;
+    if (lockFailure case final failure?) throw failure;
+    if (isLocked) throw const WebDavLocked();
+    isLocked = true;
+    return const WebDavLock('<opaquelocktoken:test>', Duration(seconds: 45));
+  }
+
+  @override
+  Future<WebDavWriteResult> putLocked(
+      List<String> path, List<int> value, WebDavLock lock) async {
+    lockedPuts++;
+    if (lockedPutFailure case final failure?) throw failure;
+    if (!isLocked) throw const WebDavLockPutFailed(412);
+    return _write(value);
+  }
+
+  @override
+  Future<void> unlock(List<String> path, WebDavLock lock) async {
+    unlocks++;
+    if (unlockFailure case final failure?) throw failure;
+    isLocked = false;
+  }
+
   WebDavWriteResult _write(List<int> value) {
     body = Uint8List.fromList(value);
     etag = '"v${++version}"';
     return WebDavWriteResult(etag);
   }
+}
+
+class RaceWebDavServer {
+  Uint8List? body;
+  String? etag;
+  String? owner = 'Anx';
+  int createArrivals = 0;
+  int lockedCreates = 0;
+  int lockConflicts = 0;
+  int conditionalReplaces = 0;
+  final Completer<void> createBarrier = Completer<void>();
+  final Completer<void> anxMayProceed = Completer<void>();
+  final Completer<void> anxUnlocked = Completer<void>();
+
+  Future<WebDavObject?> read() async =>
+      body == null ? null : WebDavObject(Uint8List.fromList(body!), etag!);
+
+  Future<WebDavWriteResult> create() async {
+    createArrivals++;
+    if (createArrivals == 2) createBarrier.complete();
+    await createBarrier.future;
+    throw const WebDavPreconditionFailed();
+  }
+
+  Future<WebDavLock> acquire(String client) async {
+    if (owner != client) {
+      lockConflicts++;
+      throw const WebDavLocked();
+    }
+    if (client == 'Anx') await anxMayProceed.future;
+    return WebDavLock('<opaquelocktoken:${client.toLowerCase()}>',
+        const Duration(seconds: 45));
+  }
+
+  WebDavWriteResult writeLocked(String client, List<int> value) {
+    if (owner != client) throw const WebDavLockPutFailed(423);
+    lockedCreates++;
+    body = Uint8List.fromList(value);
+    etag = '"v1"';
+    return WebDavWriteResult(etag);
+  }
+
+  WebDavWriteResult replace(List<int> value, String strongEtag) {
+    if (etag != strongEtag) throw const WebDavPreconditionFailed();
+    conditionalReplaces++;
+    body = Uint8List.fromList(value);
+    etag = '"v2"';
+    return WebDavWriteResult(etag);
+  }
+
+  void release(String client) {
+    if (owner != client) throw const WebDavUnlockFailed(409);
+    owner = null;
+    if (client == 'Anx' && !anxUnlocked.isCompleted) anxUnlocked.complete();
+  }
+}
+
+class RaceWebDavClient implements AnnotationWebDavTransport {
+  final String name;
+  final RaceWebDavServer server;
+  RaceWebDavClient(this.name, this.server);
+
+  @override
+  Future<WebDavObject?> get(List<String> path) => server.read();
+
+  @override
+  Future<WebDavWriteResult> create(List<String> path, List<int> body) =>
+      server.create();
+
+  @override
+  Future<WebDavWriteResult> replace(
+          List<String> path, List<int> body, String strongEtag) async =>
+      server.replace(body, strongEtag);
+
+  @override
+  Future<WebDavLock> lock(List<String> path,
+          {Duration timeout = const Duration(seconds: 45)}) =>
+      server.acquire(name);
+
+  @override
+  Future<WebDavWriteResult> putLocked(
+          List<String> path, List<int> body, WebDavLock lock) async =>
+      server.writeLocked(name, body);
+
+  @override
+  Future<void> unlock(List<String> path, WebDavLock lock) async =>
+      server.release(name);
 }
 
 void main() {
@@ -130,6 +254,9 @@ void main() {
 
   AnnotationSyncCoordinator createCoordinator({
     int retries = 2,
+    int lockRetries = 3,
+    List<Duration> lockBackoff = const [],
+    AnnotationLockRetryDelay? waitForLockRetry,
     Future<AnnotationReconciliationResult> Function(String)? reconcile,
     List<Duration> networkBackoff = const [],
     AnnotationRetryScheduler? scheduleRetry,
@@ -138,6 +265,9 @@ void main() {
         sharedState: store,
         transport: remote,
         maxPreconditionRetries: retries,
+        maxLockContentionRetries: lockRetries,
+        lockContentionBackoff: lockBackoff,
+        waitForLockRetry: waitForLockRetry,
         networkBackoff: networkBackoff,
         scheduleRetry: scheduleRetry,
         reconcileProjection: reconcile ??
@@ -360,6 +490,180 @@ void main() {
     expect(remote.decoded!['annotations'], hasLength(1));
     expect(remote.puts, 1);
     expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('native If-None-Match create remains preferred and does not LOCK',
+      () async {
+    await putLocal([entity('A')]);
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.puts, 1);
+    expect(remote.locks, 0);
+    expect(remote.lockedPuts, 0);
+    expect(remote.decoded!['annotations'], hasLength(1));
+  });
+
+  test('create 412 then re-GET finds writer and merges without LOCK', () async {
+    await putLocal([entity('A')]);
+    var raced = false;
+    remote.onPut = () async {
+      if (raced) return;
+      raced = true;
+      remote.seed(document([entity('B')]));
+    };
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.locks, 0);
+    expect(remote.puts, 2);
+    expect(remote.decoded!['annotations'], hasLength(2));
+  });
+
+  test('create 412 while still absent uses LOCK, locked PUT, and UNLOCK',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.puts, 1, reason: 'only the preferred conditional PUT runs');
+    expect(remote.locks, 1);
+    expect(remote.lockedPuts, 1);
+    expect(remote.unlocks, 1);
+    expect(remote.decoded!['annotations'], hasLength(1));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('LOCK recheck merges a representation created before lock acquisition',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.lockFailure = const WebDavLocked();
+    await coordinator.close();
+    coordinator = createCoordinator(waitForLockRetry: (_) async {
+      remote.seed(document([entity('B')]));
+      remote.lockFailure = null;
+    });
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.locks, 1);
+    expect(remote.lockedPuts, 0);
+    expect(remote.puts, 2);
+    expect(remote.decoded!['annotations'], hasLength(2));
+  });
+
+  test('423 contention retries are bounded without aggressive spinning',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.lockFailure = const WebDavLocked();
+    final delays = <Duration>[];
+    await coordinator.close();
+    coordinator = createCoordinator(
+        lockRetries: 2,
+        lockBackoff: const [
+          Duration(milliseconds: 10),
+          Duration(milliseconds: 20)
+        ],
+        waitForLockRetry: (delay) async => delays.add(delay));
+
+    await expectLater(
+        coordinator.syncBook(fingerprint), throwsA(isA<WebDavLocked>()));
+
+    expect(remote.locks, 3);
+    expect(
+        delays, const [Duration(milliseconds: 10), Duration(milliseconds: 20)]);
+    expect(remote.lockedPuts, 0);
+    expect((await store.pendingOutbox()).single.documentId, fingerprint);
+  });
+
+  test('locked PUT failure still attempts UNLOCK and leaves work dirty',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.lockedPutFailure = const WebDavLockPutFailed(500);
+
+    await expectLater(
+        coordinator.syncBook(fingerprint), throwsA(isA<WebDavLockPutFailed>()));
+
+    expect(remote.unlocks, 1);
+    expect((await store.pendingOutbox()).single.documentId, fingerprint);
+  });
+
+  test('UNLOCK failure after successful locked PUT does not lose success',
+      () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.unlockFailure = const WebDavUnlockFailed(500);
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.lockedPuts, 1);
+    expect(remote.unlocks, 1);
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('unsupported LOCK fails safely without unconditional PUT', () async {
+    await putLocal([entity('A')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.lockFailure = const WebDavLockUnsupported(405);
+
+    await expectLater(coordinator.syncBook(fingerprint),
+        throwsA(isA<WebDavLockUnsupported>()));
+
+    expect(remote.puts, 1);
+    expect(remote.lockedPuts, 0);
+    expect((await store.pendingOutbox()).single.documentId, fingerprint);
+  });
+
+  test('Anx/Lingua first-create race converges through LOCK and 423', () async {
+    await coordinator.close();
+    final raceServer = RaceWebDavServer();
+    coordinator = AnnotationSyncCoordinator(
+      sharedState: store,
+      transport: RaceWebDavClient('Anx', raceServer),
+      reconcileProjection: (_) async => AnnotationReconciliationResult(),
+      lockContentionBackoff: const [],
+    );
+    final linguaPath = p.join(directory.path, 'lingua_shared_state.db');
+    final linguaStore =
+        SharedStateDatabase(path: linguaPath, factory: databaseFactoryFfi);
+    final linguaCoordinator = AnnotationSyncCoordinator(
+      sharedState: linguaStore,
+      transport: RaceWebDavClient('Lingua', raceServer),
+      reconcileProjection: (_) async => AnnotationReconciliationResult(),
+      lockContentionBackoff: const [Duration(milliseconds: 1)],
+      waitForLockRetry: (_) async {
+        if (!raceServer.anxMayProceed.isCompleted) {
+          raceServer.anxMayProceed.complete();
+        }
+        await raceServer.anxUnlocked.future;
+      },
+    );
+    try {
+      await putLocal([entity('A')]);
+      await linguaStore.putAnnotationDocument(document([entity('B')]));
+
+      await Future.wait([
+        coordinator.syncBook(fingerprint),
+        linguaCoordinator.syncBook(fingerprint),
+      ]);
+
+      final finalDocument =
+          decodeAnnotationDocument(jsonDecode(utf8.decode(raceServer.body!)));
+      expect((finalDocument['annotations'] as List).map((item) => item['id']),
+          ['A', 'B']);
+      expect(raceServer.lockedCreates, 1);
+      expect(raceServer.lockConflicts, 1);
+      expect(raceServer.conditionalReplaces, 1);
+      expect(await store.pendingOutbox(), isEmpty);
+      expect(await linguaStore.pendingOutbox(), isEmpty);
+    } finally {
+      await linguaCoordinator.close();
+      await linguaStore.close();
+    }
   });
 
   test('412 rereads, merges newest representation, and retries strongly',

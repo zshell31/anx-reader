@@ -20,13 +20,19 @@ class FakeExecutor implements WebDavRequestExecutor {
   }
 }
 
-Response<List<int>> response(int? status, {String? etag, String? body = ''}) =>
+Response<List<int>> response(int? status,
+        {String? etag,
+        String? lockToken,
+        String? timeout,
+        String? body = ''}) =>
     Response(
         requestOptions: RequestOptions(),
         statusCode: status,
         data: body == null ? null : utf8.encode(body),
         headers: Headers.fromMap({
-          if (etag != null) 'etag': [etag]
+          if (etag != null) 'etag': [etag],
+          if (lockToken != null) 'lock-token': [lockToken],
+          if (timeout != null) 'timeout': [timeout],
         }));
 
 ConditionalWebDavTransport transport(FakeExecutor executor,
@@ -117,6 +123,95 @@ void main() {
       final fake = FakeExecutor([response(405), response(201)]);
       await transport(fake, remoteRoot: '')
           .create(['annotations', 'book.json'], []);
+      expect(fake.calls.map((call) => call.$1), isNot(contains('DELETE')));
+    });
+  });
+
+  group('exclusive create locks', () {
+    test('LOCK requests a finite exclusive write lock on a missing object',
+        () async {
+      final fake = FakeExecutor([
+        response(201,
+            lockToken: '<opaquelocktoken:created>', timeout: 'Second-37')
+      ]);
+
+      final lock = await transport(fake, remoteRoot: '')
+          .lock(['book.json'], timeout: const Duration(seconds: 45));
+
+      expect(fake.calls.single.$1, 'LOCK');
+      expect(fake.calls.single.$3['Depth'], '0');
+      expect(fake.calls.single.$3['Timeout'], 'Second-45');
+      expect(utf8.decode(fake.calls.single.$4!), contains('<D:exclusive/>'));
+      expect(lock.token, '<opaquelocktoken:created>');
+      expect(lock.timeout, const Duration(seconds: 37));
+    });
+
+    test('validates Lock-Token syntax', () async {
+      for (final token in <String?>[
+        null,
+        '',
+        'opaquelocktoken:no-brackets',
+        '<bad token>',
+        '<one><two>'
+      ]) {
+        final fake = FakeExecutor([response(201, lockToken: token)]);
+        await expectLater(transport(fake, remoteRoot: '').lock(['book.json']),
+            throwsA(isA<WebDavInvalidLockToken>()));
+      }
+    });
+
+    test('maps LOCK contention and unsupported responses distinctly', () async {
+      await expectLater(
+          transport(FakeExecutor([response(423)]), remoteRoot: '')
+              .lock(['book.json']),
+          throwsA(isA<WebDavLocked>()));
+      for (final status in [405, 501]) {
+        await expectLater(
+            transport(FakeExecutor([response(status)]), remoteRoot: '')
+                .lock(['book.json']),
+            throwsA(isA<WebDavLockUnsupported>()));
+      }
+    });
+
+    test('locked PUT uses only the WebDAV If lock-token condition', () async {
+      final fake = FakeExecutor([response(201, etag: '"v1"')]);
+      final lock =
+          const WebDavLock('<opaquelocktoken:write>', Duration(seconds: 45));
+
+      final result = await transport(fake, remoteRoot: '')
+          .putLocked(['book.json'], utf8.encode('{}'), lock);
+
+      expect(fake.calls.single.$3['If'], '(<opaquelocktoken:write>)');
+      expect(fake.calls.single.$3, isNot(contains('If-None-Match')));
+      expect(fake.calls.single.$3, isNot(contains('If-Match')));
+      expect(result.etag, '"v1"');
+    });
+
+    test('UNLOCK sends the validated token and reports cleanup failure',
+        () async {
+      final lock =
+          const WebDavLock('<opaquelocktoken:cleanup>', Duration(seconds: 45));
+      final success = FakeExecutor([response(204)]);
+      await transport(success, remoteRoot: '').unlock(['book.json'], lock);
+      expect(success.calls.single.$1, 'UNLOCK');
+      expect(success.calls.single.$3['Lock-Token'], lock.token);
+
+      await expectLater(
+          transport(FakeExecutor([response(409)]), remoteRoot: '')
+              .unlock(['book.json'], lock),
+          throwsA(isA<WebDavUnlockFailed>()));
+    });
+
+    test('lock-conditioned PUT failures are distinct and never use DELETE',
+        () async {
+      final fake = FakeExecutor([response(500)]);
+      await expectLater(
+          transport(fake, remoteRoot: '').putLocked(
+              ['book.json'],
+              [],
+              const WebDavLock(
+                  '<opaquelocktoken:failed>', Duration(seconds: 45))),
+          throwsA(isA<WebDavLockPutFailed>()));
       expect(fake.calls.map((call) => call.$1), isNot(contains('DELETE')));
     });
   });

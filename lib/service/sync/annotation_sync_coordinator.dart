@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
@@ -9,6 +10,7 @@ import 'package:anx_reader/service/sync/shared_state_database.dart';
 
 const annotationSyncDomain = 'annotations';
 const defaultAnnotationPreconditionRetries = 2;
+const defaultAnnotationLockContentionRetries = 3;
 
 enum AnnotationSyncStatus { synced, syncing, pendingOffline, error }
 
@@ -35,6 +37,7 @@ typedef AnnotationProjectionChanged = void Function(
     String fingerprint, AnnotationReconciliationResult result);
 typedef AnnotationRetryScheduler = Timer Function(
     Duration delay, void Function() callback);
+typedef AnnotationLockRetryDelay = Future<void> Function(Duration delay);
 
 /// Annotation-specific, revision-safe WebDAV convergence coordinator.
 ///
@@ -47,6 +50,9 @@ class AnnotationSyncCoordinator {
   final AnnotationProjectionCallback reconcileProjection;
   final AnnotationProjectionChanged? onProjectionChanged;
   final int maxPreconditionRetries;
+  final int maxLockContentionRetries;
+  final List<Duration> lockContentionBackoff;
+  final AnnotationLockRetryDelay waitForLockRetry;
   final List<Duration> networkBackoff;
   final AnnotationRetryScheduler scheduleRetry;
 
@@ -66,17 +72,29 @@ class AnnotationSyncCoordinator {
     required this.reconcileProjection,
     this.onProjectionChanged,
     this.maxPreconditionRetries = defaultAnnotationPreconditionRetries,
+    this.maxLockContentionRetries = defaultAnnotationLockContentionRetries,
+    this.lockContentionBackoff = const [
+      Duration(milliseconds: 150),
+      Duration(milliseconds: 350),
+      Duration(milliseconds: 750),
+    ],
+    AnnotationLockRetryDelay? waitForLockRetry,
     this.networkBackoff = const [
       Duration(seconds: 2),
       Duration(seconds: 10),
       Duration(minutes: 1),
     ],
     AnnotationRetryScheduler? scheduleRetry,
-  }) : scheduleRetry =
+  })  : waitForLockRetry = waitForLockRetry ?? Future<void>.delayed,
+        scheduleRetry =
             scheduleRetry ?? ((delay, callback) => Timer(delay, callback)) {
     if (maxPreconditionRetries < 0) {
       throw ArgumentError.value(
           maxPreconditionRetries, 'maxPreconditionRetries');
+    }
+    if (maxLockContentionRetries < 0) {
+      throw ArgumentError.value(
+          maxLockContentionRetries, 'maxLockContentionRetries');
     }
   }
 
@@ -225,9 +243,23 @@ class AnnotationSyncCoordinator {
 
   Future<void> _pushDirty(SharedSyncWork work) async {
     var failures = 0;
+    var lockContentions = 0;
+    var conditionalCreateRejected = false;
     while (true) {
       final remote =
           await transport.get(annotationDocumentRemotePath(work.documentId));
+      if (remote == null && conditionalCreateRejected) {
+        try {
+          await _writeUnderCreateLock(work.documentId, work.localRevision,
+              expectDirty: true);
+          return;
+        } on WebDavLocked {
+          lockContentions++;
+          if (lockContentions > maxLockContentionRetries) rethrow;
+          await _waitForLockContention(lockContentions);
+          continue;
+        }
+      }
       final remoteDocument =
           remote == null ? null : _decodeRemote(remote, work.documentId);
       final merged = await _mergeRemoteSafely(work.documentId, remoteDocument,
@@ -260,6 +292,10 @@ class AnnotationSyncCoordinator {
             strongEtag: write.etag);
         return;
       } on WebDavPreconditionFailed {
+        if (remote == null) {
+          conditionalCreateRejected = true;
+          continue;
+        }
         failures++;
         if (failures > maxPreconditionRetries) {
           throw AnnotationSyncConflictException(failures);
@@ -270,8 +306,21 @@ class AnnotationSyncCoordinator {
 
   Future<void> _pullClean(String id) async {
     var failures = 0;
+    var lockContentions = 0;
+    var conditionalCreateRejected = false;
     while (true) {
       final remote = await transport.get(annotationDocumentRemotePath(id));
+      if (remote == null && conditionalCreateRejected) {
+        try {
+          await _writeUnderCreateLock(id, null, expectDirty: false);
+          return;
+        } on WebDavLocked {
+          lockContentions++;
+          if (lockContentions > maxLockContentionRetries) rethrow;
+          await _waitForLockContention(lockContentions);
+          continue;
+        }
+      }
       final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
       final local =
           await sharedState.documentSnapshot(annotationSyncDomain, id);
@@ -309,12 +358,82 @@ class AnnotationSyncCoordinator {
             strongEtag: write.etag);
         return;
       } on WebDavPreconditionFailed {
+        if (remote == null) {
+          conditionalCreateRejected = true;
+          continue;
+        }
         failures++;
         if (failures > maxPreconditionRetries) {
           throw AnnotationSyncConflictException(failures);
         }
       }
     }
+  }
+
+  Future<void> _writeUnderCreateLock(String id, int? expectedRevision,
+      {required bool expectDirty}) async {
+    final path = annotationDocumentRemotePath(id);
+    final lock = await transport.lock(path);
+    Object? primaryFailure;
+    var putSucceeded = false;
+    try {
+      final remote = await transport.get(path);
+      final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
+      final merged = await _mergeRemoteSafely(id, remoteDocument,
+          strongEtag: remote?.etag);
+      final targetRevision = expectedRevision ?? merged?.snapshot.localRevision;
+      if (merged == null ||
+          merged.snapshot.localRevision != targetRevision ||
+          merged.snapshot.dirty != expectDirty) {
+        return;
+      }
+
+      await _reconcile(id);
+      final beforePut =
+          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      if (beforePut == null ||
+          beforePut.localRevision != targetRevision ||
+          beforePut.dirty != expectDirty) {
+        return;
+      }
+
+      final write = await transport.putLocked(path, merged.bytes, lock);
+      putSucceeded = true;
+      if (expectDirty) {
+        await sharedState.markConverged(
+            annotationSyncDomain, id, beforePut.localRevision,
+            strongEtag: write.etag);
+      } else {
+        await sharedState.markRemoteConverged(
+            annotationSyncDomain, id, beforePut.localRevision,
+            strongEtag: write.etag);
+      }
+    } catch (error, stackTrace) {
+      primaryFailure = error;
+      Error.throwWithStackTrace(error, stackTrace);
+    } finally {
+      try {
+        await transport.unlock(path, lock);
+      } catch (error, stackTrace) {
+        developer.log(
+          'WebDAV UNLOCK cleanup failed after annotation create attempt',
+          name: 'anx_reader.annotation_sync',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (primaryFailure == null && !putSucceeded) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+      }
+    }
+  }
+
+  Future<void> _waitForLockContention(int attempt) {
+    final delay = lockContentionBackoff.isEmpty
+        ? Duration.zero
+        : lockContentionBackoff[
+            (attempt - 1).clamp(0, lockContentionBackoff.length - 1)];
+    return waitForLockRetry(delay);
   }
 
   Future<_RemoteMerge?> _mergeRemoteSafely(

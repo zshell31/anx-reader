@@ -27,6 +27,45 @@ Map<String, dynamic> annotation(String id, {String text = 'text'}) => {
     };
 
 void main() {
+  test('book display metadata is preserved and canonicalized deterministically',
+      () {
+    final input = document(const [])
+      ..['book'] = {
+        'title': '  Dungeon Crawler Carl  ',
+        'fingerprint': fingerprint.toUpperCase(),
+        'fingerprintAlgorithm': 'md5',
+        'author': 'Matt Dinniman',
+        'futureHint': {'z': 2, 'a': 1},
+      };
+
+    final decoded = decodeAnnotationDocument(input);
+    expect(decoded['book']['title'], '  Dungeon Crawler Carl  ');
+    expect(decoded['book']['author'], 'Matt Dinniman');
+    expect(decoded['book']['futureHint'], {'z': 2, 'a': 1});
+    expect(canonicalAnnotationDocumentJson(decoded),
+        canonicalAnnotationDocumentJson(decodeAnnotationDocument(decoded)));
+  });
+
+  test('known metadata enriches an old v2 document without changing identity',
+      () {
+    final input = document(const []);
+    expect(
+        applyAnnotationBookMetadata(
+          input,
+          title: ' Dungeon Crawler Carl ',
+          author: ' Matt Dinniman ',
+        ),
+        isTrue);
+    expect(input['book'], {
+      'fingerprintAlgorithm': 'md5',
+      'fingerprint': fingerprint,
+      'title': 'Dungeon Crawler Carl',
+      'author': 'Matt Dinniman',
+    });
+    expect(
+        applyAnnotationBookMetadata(input, title: '  ', author: ''), isFalse);
+  });
+
   test('canonicalizes timestamps and rejects noncanonical timestamps', () {
     expect(canonicalWireTimestamp(DateTime.parse(timestamp)), timestamp);
     expect(() => validateWireTimestamp('2026-08-28T12:34:56Z', 'time'),

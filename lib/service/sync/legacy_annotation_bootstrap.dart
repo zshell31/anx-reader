@@ -168,6 +168,11 @@ class LegacyAnnotationBootstrap {
             },
             'annotations': <Object>[],
           };
+      final metadataChanged = applyAnnotationBookMetadata(
+        document,
+        title: book.title,
+        author: book.author,
+      );
       final annotations =
           (document['annotations'] as List).cast<Map<String, dynamic>>();
 
@@ -185,6 +190,8 @@ class LegacyAnnotationBootstrap {
         annotations.add(canonical);
         annotations
             .sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
+      }
+      if (!wasImported || metadataChanged) {
         await sharedState.putAnnotationDocument(document);
       }
 

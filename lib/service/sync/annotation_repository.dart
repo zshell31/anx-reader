@@ -138,7 +138,7 @@ class AnnotationRepository {
           'target': target,
           'enrichments': <Object>[],
         };
-        final document = await _document(fingerprint);
+        final document = await _document(input.book, fingerprint);
         (document['annotations'] as List).add(annotation);
 
         final presentation = BookNote(
@@ -162,7 +162,7 @@ class AnnotationRepository {
         _epubCfi(input.epubCfi);
         final timestamp = canonicalWireTimestamp(now());
         final annotationId = uuid.v4();
-        final document = await _document(fingerprint);
+        final document = await _document(input.book, fingerprint);
         (document['annotations'] as List).add(<String, dynamic>{
           'id': annotationId,
           'motivation': 'bookmark',
@@ -367,16 +367,20 @@ class AnnotationRepository {
         fingerprint, annotationId, document, matches.single);
   }
 
-  Future<Map<String, dynamic>> _document(String fingerprint) async =>
-      await sharedState.annotationDocument(fingerprint) ??
-      <String, dynamic>{
-        'schemaVersion': 2,
-        'book': {
-          'fingerprintAlgorithm': 'md5',
-          'fingerprint': fingerprint,
-        },
-        'annotations': <Object>[],
-      };
+  Future<Map<String, dynamic>> _document(Book book, String fingerprint) async {
+    final document = await sharedState.annotationDocument(fingerprint) ??
+        <String, dynamic>{
+          'schemaVersion': 2,
+          'book': {
+            'fingerprintAlgorithm': 'md5',
+            'fingerprint': fingerprint,
+          },
+          'annotations': <Object>[],
+        };
+    applyAnnotationBookMetadata(document,
+        title: book.title, author: book.author);
+    return document;
+  }
 
   Future<void> _commit(
       String fingerprint, Map<String, dynamic> document) async {

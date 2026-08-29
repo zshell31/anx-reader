@@ -215,7 +215,20 @@ class AnnotationSyncRuntime {
     for (final book in await bookDao.selectNotDeleteBooks()) {
       if (p.extension(book.filePath).toLowerCase() != '.epub') continue;
       try {
-        result.add(canonicalMd5Fingerprint(book.md5));
+        final fingerprint = canonicalMd5Fingerprint(book.md5);
+        result.add(fingerprint);
+        final document = await sharedState.annotationDocument(fingerprint);
+        if (document != null &&
+            applyAnnotationBookMetadata(
+              document,
+              title: book.title,
+              author: book.author,
+            )) {
+          // Metadata-only enrichment is a normal v2 canonical mutation. The
+          // durable outbox makes old fingerprint-only documents converge on
+          // their next ordinary synchronization pass.
+          await sharedState.putAnnotationDocument(document);
+        }
       } on AnnotationProtocolException {
         // Legacy/unresolved books remain local until they have portable MD5.
       }

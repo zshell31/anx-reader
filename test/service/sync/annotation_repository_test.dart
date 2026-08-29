@@ -212,6 +212,12 @@ void main() {
         'cfi': 'epubcfi(/6/2!/4/2,/1:0,/1:14)',
       }
     ]);
+    expect(document['book'], {
+      'fingerprintAlgorithm': 'md5',
+      'fingerprint': fingerprint,
+      'title': 'Book',
+      'author': 'Author',
+    });
     expect(shared.events, ['canonical']);
     expect(native.events, ['insert']);
     final outbox = await shared.pendingOutbox();

@@ -97,6 +97,28 @@ Object? _canonicalValue(Object? value) {
 String canonicalAnnotationDocumentJson(Object? input) =>
     canonicalJson(decodeAnnotationDocument(input));
 
+/// Adds portable display hints without changing the fingerprint identity.
+/// Empty local metadata is ignored so it cannot erase a useful remote hint.
+bool applyAnnotationBookMetadata(
+  Map<String, dynamic> document, {
+  String? title,
+  String? author,
+}) {
+  final book = _map(document['book'], 'book');
+  var changed = false;
+  void apply(String key, String? value) {
+    final hint = value?.trim();
+    if (hint == null || hint.isEmpty || book[key] == hint) return;
+    book[key] = hint;
+    changed = true;
+  }
+
+  apply('title', title);
+  apply('author', author);
+  document['book'] = book;
+  return changed;
+}
+
 Map<String, dynamic> decodeAnnotationDocument(Object? input) {
   Object? source;
   try {

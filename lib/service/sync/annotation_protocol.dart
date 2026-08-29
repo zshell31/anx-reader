@@ -162,24 +162,73 @@ Map<String, dynamic> mergeAnnotationDocuments(
   final right = decodeAnnotationDocument(rightInput);
   final leftBook = _map(left['book'], 'book');
   final rightBook = _map(right['book'], 'book');
-  if (leftBook['fingerprint'] != rightBook['fingerprint']) {
+  if (leftBook['fingerprintAlgorithm'] != rightBook['fingerprintAlgorithm'] ||
+      leftBook['fingerprint'] != rightBook['fingerprint']) {
     _fail(AnnotationProtocolErrorCode.bookIdentityCollision,
         'book document identity collision');
   }
   final leftEnvelope = _deepMap(left, 'document')..remove('annotations');
   final rightEnvelope = _deepMap(right, 'document')..remove('annotations');
-  final result = _deepMap(
-      canonicalJson(leftEnvelope).compareTo(canonicalJson(rightEnvelope)) >= 0
-          ? leftEnvelope
-          : rightEnvelope,
-      'document');
+  final result = _mergeEnvelopeMaps(leftEnvelope, rightEnvelope);
   result['schemaVersion'] = 2;
+  final mergedBook = _map(result['book'], 'book');
+  _mergeNonEmptyBookMetadata(mergedBook, leftBook, rightBook, 'title');
+  _mergeNonEmptyBookMetadata(mergedBook, leftBook, rightBook, 'author');
+  result['book'] = mergedBook;
   result['annotations'] = _mergeById(
     _mapList(left['annotations'], 'annotations'),
     _mapList(right['annotations'], 'annotations'),
     _mergeAnnotation,
   );
   return _normalizeAndValidateDocument(result);
+}
+
+Map<String, dynamic> _mergeEnvelopeMaps(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final result = <String, dynamic>{};
+  final keys = {...left.keys, ...right.keys}.toList()..sort(_ordinalCompare);
+  for (final key in keys) {
+    if (!left.containsKey(key)) {
+      result[key] = _deepValue(right[key]);
+    } else if (!right.containsKey(key)) {
+      result[key] = _deepValue(left[key]);
+    } else if (left[key] is Map && right[key] is Map) {
+      result[key] = _mergeEnvelopeMaps(
+        _map(left[key], key),
+        _map(right[key], key),
+      );
+    } else {
+      result[key] = _deepValue(
+        canonicalJson(left[key]).compareTo(canonicalJson(right[key])) >= 0
+            ? left[key]
+            : right[key],
+      );
+    }
+  }
+  return result;
+}
+
+Object? _deepValue(Object? value) {
+  if (value is Map) return _deepMap(value, 'value');
+  if (value is List) return value.map(_deepValue).toList();
+  return value;
+}
+
+void _mergeNonEmptyBookMetadata(
+  Map<String, dynamic> result,
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+  String key,
+) {
+  final candidates = <String>[
+    if (left[key] is String && (left[key] as String).trim().isNotEmpty)
+      left[key] as String,
+    if (right[key] is String && (right[key] as String).trim().isNotEmpty)
+      right[key] as String,
+  ]..sort(_ordinalCompare);
+  if (candidates.isNotEmpty) result[key] = candidates.last;
 }
 
 Map<String, dynamic> _mergeAnnotation(

@@ -111,6 +111,26 @@ void main() {
     expect(mergeAnnotationDocuments(right, left), merged);
   });
 
+  test('merge retains sparse-vs-rich book metadata in either argument order',
+      () {
+    final sparse = document(const [])..['documentHint'] = {'future': 'sparse'};
+    final rich = document(const [])
+      ..['book'] = {
+        'fingerprintAlgorithm': 'md5',
+        'fingerprint': fingerprint,
+        'title': 'Dungeon Crawler Carl',
+        'author': 'Matt Dinniman',
+        'futureHint': {'kept': true},
+      };
+
+    final forward = mergeAnnotationDocuments(rich, sparse);
+    final reverse = mergeAnnotationDocuments(sparse, rich);
+    expect(reverse, forward);
+    expect(forward['book']['title'], 'Dungeon Crawler Carl');
+    expect(forward['book']['author'], 'Matt Dinniman');
+    expect(forward['book']['futureHint'], {'kept': true});
+  });
+
   test('nested tombstones are sticky', () {
     final alive = annotation('a')
       ..['enrichments'] = [

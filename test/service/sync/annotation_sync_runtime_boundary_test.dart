@@ -38,6 +38,14 @@ void main() {
     expect(runtime, isNot(contains('app_database.db')));
   });
 
+  test('shared state configures result-returning pragmas as queries', () {
+    final sharedState = source('lib/service/sync/shared_state_database.dart');
+
+    expect(sharedState, contains("rawQuery('PRAGMA journal_mode = WAL')"));
+    expect(
+        sharedState, isNot(contains("execute('PRAGMA journal_mode = WAL')")));
+  });
+
   test('open reader refresh reuses native projection and Foliate renderer', () {
     final reader = source('lib/page/reading_page.dart');
     final player = source('lib/page/book_player/epub_player.dart');

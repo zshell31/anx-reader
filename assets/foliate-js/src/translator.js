@@ -11,6 +11,10 @@ const PERMANENT_TRANSLATION_ERROR =
   /authentication failed|invalid api key|api key in settings|service not configured/i
 const TRANSLATION_ERROR =
   /^(?:error:|translation error:|translate error:|translation failed:)|translation failed after/i
+const CURRENT_PAGE_PRIORITY = 0
+const OBSERVER_PRIORITY = 1
+const PREFETCH_PRIORITY = 2
+const DEFAULT_MAX_CONCURRENT_TRANSLATIONS = 3
 
 class TranslationRequestError extends Error {
   constructor(message, { retryable = true } = {}) {
@@ -44,11 +48,29 @@ export class Translator {
   #translatedElements = new WeakMap()
   #translationInputs = new WeakMap()
   #inFlightElements = new WeakMap()
+  #queuedElements = new WeakMap()
   #failedElements = new WeakMap()
+  #translationQueue = []
+  #activeTranslationCount = 0
+  #translationSequence = 0
+  #maxConcurrentTranslations
   #observer = null
+  #onlineHandler = () => {
+    if (this.#translationMode === TranslationMode.OFF) return
+    this.reconcileDocuments().catch(error =>
+      console.warn('Online translation reconciliation failed:', error)
+    )
+  }
 
-  constructor() {
+  constructor({
+    maxConcurrentTranslations = DEFAULT_MAX_CONCURRENT_TRANSLATIONS,
+  } = {}) {
+    this.#maxConcurrentTranslations = Math.max(
+      1,
+      Math.floor(maxConcurrentTranslations),
+    )
     this.#initializeObserver()
+    window.addEventListener?.('online', this.#onlineHandler)
   }
 
   #initializeObserver() {
@@ -56,7 +78,7 @@ export class Translator {
       entries => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            this.#reconcileElement(entry.target).catch(error =>
+            this.#reconcileElement(entry.target, OBSERVER_PRIORITY).catch(error =>
               console.warn('Translation failed in observer:', error)
             )
           }
@@ -179,11 +201,12 @@ export class Translator {
 
     const promises = []
     for (const element of documentState.elements) {
-      if (this.#isRelevantElement(
+      const priority = this.#translationPriority(
         element,
         documentState.reconciliationRanges,
-      )) {
-        promises.push(this.#reconcileElement(element))
+      )
+      if (priority !== null) {
+        promises.push(this.#reconcileElement(element, priority))
       }
     }
     await Promise.allSettled(promises)
@@ -220,7 +243,10 @@ export class Translator {
     this.#translatedElements = new WeakMap()
     this.#translationInputs = new WeakMap()
     this.#inFlightElements = new WeakMap()
+    this.#queuedElements = new WeakMap()
     this.#failedElements = new WeakMap()
+    const queued = this.#translationQueue.splice(0)
+    for (const entry of queued) entry.resolve()
     this.#initializeObserver()
   }
 
@@ -281,7 +307,7 @@ export class Translator {
     return elements
   }
 
-  async #reconcileElement(element) {
+  async #reconcileElement(element, priority = OBSERVER_PRIORITY) {
     if (this.#translationMode === TranslationMode.OFF) return Promise.resolve()
     const documentState = this.#elementOwners.get(element)
     if (!documentState?.active) return Promise.resolve()
@@ -293,7 +319,14 @@ export class Translator {
     }
 
     const existing = this.#inFlightElements.get(element)
-    if (existing) return existing
+    if (existing) {
+      const queued = this.#queuedElements.get(element)
+      if (queued && priority < queued.priority) {
+        queued.priority = priority
+        this.#sortTranslationQueue()
+      }
+      return existing
+    }
 
     const previousFailure = this.#failedElements.get(element)
     if (previousFailure && !previousFailure.retryable) return Promise.resolve()
@@ -302,38 +335,75 @@ export class Translator {
     const text = input?.text ?? element.innerText?.trim()
     if (!text) return Promise.resolve()
 
-    let operation
-    operation = (async () => {
-      try {
-        this.#failedElements.delete(element)
-        const translatedText = await translate(text, input?.contextText ?? '')
-
-        // A request belongs only to the element/document generation that
-        // started it. A retired chapter completion is discarded.
-        if (!documentState.active ||
+    let resolveOperation
+    let rejectOperation
+    const operation = new Promise((resolve, reject) => {
+      resolveOperation = resolve
+      rejectOperation = reject
+    })
+    const entry = {
+      element,
+      priority,
+      sequence: this.#translationSequence++,
+      operation,
+      resolve: resolveOperation,
+      reject: rejectOperation,
+      run: async () => {
+        if (this.#translationMode === TranslationMode.OFF ||
+            !documentState.active ||
             this.#elementOwners.get(element) !== documentState) return
+        try {
+          this.#failedElements.delete(element)
+          const translatedText = await translate(text, input?.contextText ?? '')
 
-        this.#translatedElements.set(element, {
-          originalText: text,
-          translatedText,
-        })
-        this.#materializeTranslation(element, translatedText)
-      } catch (error) {
-        if (documentState.active &&
-            this.#elementOwners.get(element) === documentState) {
-          this.#failedElements.set(element, {
-            retryable: error?.retryable !== false,
+          // A request belongs only to the element/document generation that
+          // started it. A retired chapter completion is discarded.
+          if (!documentState.active ||
+              this.#elementOwners.get(element) !== documentState) return
+
+          this.#translatedElements.set(element, {
+            originalText: text,
+            translatedText,
           })
+          this.#materializeTranslation(element, translatedText)
+        } catch (error) {
+          if (documentState.active &&
+              this.#elementOwners.get(element) === documentState) {
+            this.#failedElements.set(element, {
+              retryable: error?.retryable !== false,
+            })
+          }
+          throw error
         }
-        throw error
-      } finally {
-        if (this.#inFlightElements.get(element) === operation) {
-          this.#inFlightElements.delete(element)
-        }
-      }
-    })()
+      },
+    }
     this.#inFlightElements.set(element, operation)
+    this.#queuedElements.set(element, entry)
+    this.#translationQueue.push(entry)
+    this.#sortTranslationQueue()
+    this.#drainTranslationQueue()
     return operation
+  }
+
+  #sortTranslationQueue() {
+    this.#translationQueue.sort((left, right) =>
+      left.priority - right.priority || left.sequence - right.sequence)
+  }
+
+  #drainTranslationQueue() {
+    while (this.#activeTranslationCount < this.#maxConcurrentTranslations &&
+        this.#translationQueue.length > 0) {
+      const entry = this.#translationQueue.shift()
+      this.#queuedElements.delete(entry.element)
+      this.#activeTranslationCount++
+      entry.run().then(entry.resolve, entry.reject).finally(() => {
+        if (this.#inFlightElements.get(entry.element) === entry.operation) {
+          this.#inFlightElements.delete(entry.element)
+        }
+        this.#activeTranslationCount--
+        this.#drainTranslationQueue()
+      })
+    }
   }
 
   #translationChildren(element) {
@@ -436,7 +506,7 @@ export class Translator {
     element.classList.remove('translation-source-hidden')
   }
 
-  #isRelevantElement(element, reconciliationRanges) {
+  #translationPriority(element, reconciliationRanges) {
     // Reflowable paginator documents use an iframe whose layout viewport spans
     // the entire columnized chapter. Geometry alone therefore makes every
     // paragraph look visible and can start hundreds of translations at once.
@@ -444,18 +514,20 @@ export class Translator {
     const domRanges = reconciliationRanges
       ?.filter(range => range?.intersectsNode)
     if (domRanges?.length > 0) {
-      for (const range of domRanges) {
+      for (const [index, range] of domRanges.entries()) {
         try {
-          if (range.intersectsNode(element)) return true
+          if (range.intersectsNode(element)) {
+            return index === 0 ? CURRENT_PAGE_PRIORITY : PREFETCH_PRIORITY
+          }
         } catch (_) {
           // A stale Range is ignored; relocation will provide a replacement.
         }
       }
-      return false
+      return null
     }
     // Before the first relocation there is no reliable reflowable viewport.
     // IntersectionObserver remains active while reconciliation waits for it.
-    if (reconciliationRanges === undefined) return false
+    if (reconciliationRanges === undefined) return null
 
     // Fixed-layout relocation has no DOM Range. Its one- or two-document
     // spread has a meaningful iframe viewport, so geometry is safe there.
@@ -466,6 +538,8 @@ export class Translator {
     const margin = 1280
     return rect.right >= -margin && rect.left <= width + margin &&
       rect.bottom >= -margin && rect.top <= height + margin
+      ? CURRENT_PAGE_PRIORITY
+      : null
   }
 
   #updateTranslationDisplay() {
@@ -482,6 +556,7 @@ export class Translator {
   }
 
   destroy() {
+    window.removeEventListener?.('online', this.#onlineHandler)
     this.clearTranslations()
     this.#observer.disconnect()
     this.#observer = null

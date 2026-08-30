@@ -7,6 +7,17 @@ globalThis.window = {
   innerHeight: 600,
   reader: null,
 }
+const windowListeners = new Map()
+window.addEventListener = (type, listener) => {
+  const listeners = windowListeners.get(type) ?? new Set()
+  listeners.add(listener)
+  windowListeners.set(type, listeners)
+}
+window.removeEventListener = (type, listener) =>
+  windowListeners.get(type)?.delete(listener)
+const dispatchWindowEvent = type => {
+  for (const listener of windowListeners.get(type) ?? []) listener()
+}
 
 const observers = []
 class FakeIntersectionObserver {
@@ -164,8 +175,12 @@ const flushLayout = async view => {
   await settle()
 }
 
-const setup = (handler = async (_name, text) => `translated:${text}`) => {
+const setup = (
+  handler = async (_name, text) => `translated:${text}`,
+  options = undefined,
+) => {
   observers.length = 0
+  windowListeners.clear()
   const calls = []
   window.flutter_inappwebview = {
     callHandler: (...args) => {
@@ -173,7 +188,7 @@ const setup = (handler = async (_name, text) => `translated:${text}`) => {
       return handler(...args)
     },
   }
-  const translator = new Translator()
+  const translator = new Translator(options)
   return { translator, calls, observer: observers.at(-1) }
 }
 
@@ -305,6 +320,26 @@ test('a transient failure remains retryable on later reconciliation', async () =
   assert.equal(wrappers(chapter.paragraphs[0]).length, 1)
 })
 
+test('online lifecycle retries a settled transient failure', async () => {
+  let attempts = 0
+  const { translator, calls } = setup(async () => {
+    attempts++
+    if (attempts === 1) throw new Error('offline')
+    return 'online translation'
+  })
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const chapter = makeDocument('retry online')
+  translator.observeDocument(chapter.doc)
+  await relocate(translator, chapter)
+  assert.equal(wrappers(chapter.paragraphs[0]).length, 0)
+
+  dispatchWindowEvent('online')
+  await settle()
+  assert.equal(calls.length, 2)
+  assert.equal(wrappers(chapter.paragraphs[0])[0].textContent,
+    'online translation')
+})
+
 test('a permanent authentication failure is not retried on every relocation', async () => {
   const { translator, calls } = setup(async () => 'Authentication failed: bad key')
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
@@ -389,4 +424,97 @@ test('reconciliation translates current and next paginator ranges only', async (
     ['visible', 'next page', 'far away'],
   )
   assert.equal(wrappers(chapter.paragraphs[2]).length, 1)
+})
+
+test('translation queue bounds bridge concurrency', async () => {
+  const completions = []
+  let active = 0
+  let maximumActive = 0
+  const { translator, calls } = setup((_name, text) => {
+    active++
+    maximumActive = Math.max(maximumActive, active)
+    return new Promise(resolve => completions.push(value => {
+      active--
+      resolve(value)
+    }))
+  })
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const chapter = makeDocument('A', 'B', 'C', 'D', 'E', 'F')
+  translator.observeDocument(chapter.doc)
+
+  const reconciliation = translator.reconcileDocument(
+    chapter.doc,
+    visibleRange(...chapter.paragraphs.slice(0, 3)),
+    visibleRange(...chapter.paragraphs.slice(3)),
+  )
+  assert.equal(calls.length, 3)
+  while (completions.length > 0 || calls.length < chapter.paragraphs.length) {
+    completions.shift()?.('translated')
+    await settle()
+  }
+  await reconciliation
+
+  assert.equal(maximumActive, 3)
+  assert.equal(calls.length, 6)
+})
+
+test('new current-page work precedes queued prefetch', async () => {
+  const completions = new Map()
+  const { translator, calls } = setup(
+    (_name, text) => new Promise(resolve => completions.set(text, resolve)),
+    { maxConcurrentTranslations: 1 },
+  )
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const chapter = makeDocument('blocking', 'new current', 'prefetch')
+  translator.observeDocument(chapter.doc)
+
+  const first = translator.reconcileDocument(
+    chapter.doc,
+    visibleRange(chapter.paragraphs[0]),
+    visibleRange(chapter.paragraphs[2]),
+  )
+  const second = translator.reconcileDocument(
+    chapter.doc,
+    visibleRange(chapter.paragraphs[1]),
+    visibleRange(chapter.paragraphs[2]),
+  )
+  assert.deepEqual(calls.map(([, text]) => text), ['blocking'])
+
+  completions.get('blocking')('done')
+  await settle()
+  assert.deepEqual(calls.map(([, text]) => text), ['blocking', 'new current'])
+  completions.get('new current')('done')
+  await settle()
+  assert.deepEqual(calls.map(([, text]) => text),
+    ['blocking', 'new current', 'prefetch'])
+  completions.get('prefetch')('done')
+  await Promise.all([first, second])
+})
+
+test('queued work from a retired chapter never reaches the bridge', async () => {
+  const completions = new Map()
+  const { translator, calls } = setup(
+    (_name, text) => new Promise(resolve => completions.set(text, resolve)),
+    { maxConcurrentTranslations: 1 },
+  )
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const retired = makeDocument('running old', 'queued old')
+  translator.observeDocument(retired.doc)
+  const oldReconciliation = relocate(translator, retired)
+
+  const current = makeDocument('current chapter')
+  translator.observeDocument(current.doc)
+  translator.retainDocuments([current.doc])
+  const currentReconciliation = relocate(translator, current)
+  assert.deepEqual(calls.map(([, text]) => text), ['running old'])
+
+  completions.get('running old')('stale')
+  await settle()
+  assert.deepEqual(calls.map(([, text]) => text),
+    ['running old', 'current chapter'])
+  completions.get('current chapter')('translated')
+  await Promise.all([oldReconciliation, currentReconciliation])
+  assert.equal(wrappers(retired.paragraphs[0]).length, 0)
+  assert.equal(wrappers(retired.paragraphs[1]).length, 0)
+  assert.equal(wrappers(current.paragraphs[0]).length, 1)
 })

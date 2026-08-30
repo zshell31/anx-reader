@@ -260,19 +260,45 @@ At the end of every M4E session:
 
 ### M4E.4 — Preserve cross-page selection
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Auto-page callbacks belong to a selection
-  generation and are cancelled/ignored when that generation ends.
-- Tests run: —
-- Discovered limitations or follow-up work: Do not claim DOM selection across
-  separate EPUB spine documents unless verified by Foliate.
+- Status: COMPLETE
+- Commit SHA: pending follow-up documentation checkpoint
+- Important files changed: `assets/foliate-js/src/auto-page-selection.mjs`,
+  `assets/foliate-js/src/selection-session.mjs`,
+  `assets/foliate-js/src/book.js`, `assets/foliate-js/dist/bundle.js`, and
+  `assets/foliate-js/test/auto-page-selection.test.mjs`.
+- Architectural decisions made: `SelectionSessionMachine` remains the only
+  monotonic selection-lifetime authority. A per-view
+  `AutoPageSelectionCoordinator` captures the active content `Document` and
+  SelectionSession generation for the boundary-delay timer, `view.next()`, its
+  guarded completion work, and every post-next selection recheck. It has no
+  independent session counter. Cancellation removes scheduled work, while
+  captured work identity plus owner/generation validation makes an uncancellable
+  stale callback harmless. Page-key replacement cancels an advance that has not
+  begun and cancels obsolete rechecks; relocation emitted while `view.next()` is
+  already running may finish only for its still-active generation. Explicit
+  clear invalidates the session before DOM deselection, `pagehide` invalidates
+  the owning document, and loading a replacement content document ends the old
+  session. Starting range adjustment immediately hides actions and resets
+  pending auto-page work without preventing native pointer behavior.
+- Tests run: configured `npm test` in `assets/foliate-js` passed both test files
+  (19 focused subtests when run directly: 12 auto-page and 7 normal
+  SelectionSession tests); configured `npm run build` succeeded and rebuilt
+  `dist/bundle.js` with the same three top-level-await target warnings; targeted
+  `flutter analyze` on `selection_session_bridge.dart`, `epub_player.dart`, and
+  the bridge test found no issues; focused `flutter test` for
+  `selection_session_bridge_test.dart` passed all 5 tests. `package.json` has no
+  lint script, so no unconfigured lint command was invented.
+- Discovered limitations or follow-up work: Automatic selection advancement is
+  supported across visual pages in paginated mode only while the selection is
+  backed by one live content `Document`/EPUB section. A DOM `Range` is not
+  preserved across separate EPUB spine documents; loading the replacement
+  document explicitly ends the session. Automated tests exercise the pure
+  coordinator rather than real Android WebView native-handle gestures.
 - Acceptance checklist:
-  - [ ] Preserve boundary-triggered page advancement in paginated mode.
-  - [ ] Keep actions hidden during drag/selection changes.
-  - [ ] Scope pending page work to the active session.
-  - [ ] Cover stale timer/new-selection/clear-selection races.
+  - [x] Preserve boundary-triggered page advancement in paginated mode.
+  - [x] Keep actions hidden during drag/selection changes.
+  - [x] Scope pending page work to the active session.
+  - [x] Cover stale timer/new-selection/clear-selection races.
 
 ### M4E.5 — Sentence-aware annotation context
 
@@ -417,21 +443,21 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 3 of 11 implementation phases
+- Completed submilestones: 4 of 11 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.3 — Explicit SelectionSession state machine
+Last completed submilestone: M4E.4 — Preserve cross-page selection
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `16108268 feat: add explicit reader selection sessions`
-Documentation checkpoint: The current commit records the completed M4E.3 implementation SHA and handoff
-Repository state: Clean at the completed M4E.3 documentation checkpoint
-Next submilestone: M4E.4 — Preserve cross-page selection
-Next concrete tasks: Add focused auto-page race coverage around `view.next()`, post-next selection rechecks, clear/new-selection invalidation, and page/document replacement; bind every remaining auto-page callback explicitly to the active selection generation without redesigning Foliate's cross-document Range capabilities
+Last implementation commit: pending M4E.4 implementation commit
+Documentation checkpoint: pending follow-up commit recording the M4E.4 implementation SHA
+Repository state: M4E.4 implementation and documentation complete and validated; commits pending
+Next submilestone: M4E.5 — Sentence-aware annotation context
+Next concrete tasks: Inventory the current persisted character-window context and transient provider-context consumers; introduce sentence-aware persisted `annotationContext` with normalization/fallback while keeping wider `lookupContext` transient; add focused word, phrase, clause, sentence, punctuation, multi-sentence, and whitespace tests
 Known failing tests: None
-Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. M4E.3 preserves the existing paginated auto-page implementation and only invalidates its in-flight continuation on stop; complete timer/page-replacement race coverage is intentionally deferred to M4E.4. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `assets/foliate-js/src/book.js`, especially the existing auto-page state/timers and selection recheck dispatches; `assets/foliate-js/src/selection-session.mjs`; `assets/foliate-js/test/selection-session.test.mjs`; and any feasible Foliate bridge/DOM harness additions for cross-page selection
+Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. Paginated auto-page selection is supported only across visual pages within one live content `Document`/EPUB section; a spine-document replacement ends the session rather than claiming a cross-document DOM `Range`. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
+Important files to inspect next: `assets/foliate-js/src/book.js` and its current `buildRangeContextText`; `lib/page/book_player/selection_session_bridge.dart`; selection payload consumers in `lib/page/book_player/epub_player.dart`; canonical annotation creation/mutation paths that persist context; and focused context/protocol mutation tests
 
 ### M4E.3 discovered pre-implementation lifecycle
 

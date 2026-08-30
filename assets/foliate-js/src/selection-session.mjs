@@ -58,6 +58,13 @@ export class SelectionSessionMachine {
         return this.current
     }
 
+    beginAdjustment(owner) {
+        if (this.#active?.owner !== owner) return null
+        if (this.#active.state !== SelectionSessionState.actionsVisible) return null
+        this.#active.state = SelectionSessionState.selected
+        return this.current
+    }
+
     clear(owner, generation) {
         if (!this.#active) return null
         if (owner && this.#active.owner !== owner) return null
@@ -76,5 +83,10 @@ export class SelectionSessionMachine {
 
     matchesGeneration(generation) {
         return this.#active?.generation === generation
+    }
+
+    matchesSession(owner, generation) {
+        return this.#active?.owner === owner
+            && this.#active.generation === generation
     }
 }

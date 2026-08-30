@@ -2,6 +2,7 @@ console.log('book.js')
 console.log('AnxUA', navigator.userAgent)
 
 import './view.js'
+import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
 import { FootnoteHandler } from './footnotes.js'
 import { Overlayer } from './overlayer.js'
@@ -179,6 +180,7 @@ const selectionCoordinator = {
   pendingPointer: null,
   interactionOwner: null,
   activeView: null,
+  autoPageByView: new WeakMap(),
 };
 
 const getSelectionCoordinator = () => selectionCoordinator;
@@ -239,7 +241,7 @@ const endSelectionSession = (view, doc, generation) => {
   if (globalThis.__anxActiveSelectionView === view) {
     globalThis.__anxActiveSelectionView = null;
   }
-  stopAutoPageSession(view);
+  getAutoPageCoordinator(view).end(ended.owner, ended.generation);
   callFlutter('onSelectionCleared', { sessionId: ended.generation });
   return true;
 };
@@ -258,65 +260,19 @@ const toggleSelectionActions = (view, doc, generation, rangeKey) => {
   return true;
 };
 
-const AUTO_PAGE_DELAY_MS = 1000;
 const AUTO_PAGE_SCREEN_BOTTOM_THRESHOLD = 0.9;
-const AUTO_PAGE_POST_NEXT_RECHECK_INTERVAL_MS = 120;
-const AUTO_PAGE_POST_NEXT_RECHECK_MAX_ATTEMPTS = 12;
-const AUTO_PAGE_POST_NEXT_RECHECK_INITIAL_DELAY_MS = 80;
 
-const getAutoPageState = (view) => {
-  if (!view.__anxAutoPageState) {
-    view.__anxAutoPageState = {
-      sessionId: 0,
-      currentPageKey: null,
-      triggeredPages: new Set(),
-      pendingFromPageKey: null,
-      pendingTimer: null,
-      postNextRecheckTimer: null,
-      postNextRecheckAttempts: 0,
-      awaitingPageAdvanceFromKey: null,
-    };
+const getAutoPageCoordinator = (view) => {
+  const coordinator = getSelectionCoordinator(view);
+  let autoPage = coordinator.autoPageByView.get(view);
+  if (!autoPage) {
+    autoPage = new AutoPageSelectionCoordinator(coordinator.machine);
+    coordinator.autoPageByView.set(view, autoPage);
   }
-  return view.__anxAutoPageState;
+  return autoPage;
 };
 
-const clearAutoPageTimer = (state) => {
-  if (!state.pendingTimer) return;
-  clearTimeout(state.pendingTimer);
-  state.pendingTimer = null;
-};
-
-const clearAutoPagePostNextRecheck = (state) => {
-  if (!state.postNextRecheckTimer) return;
-  clearTimeout(state.postNextRecheckTimer);
-  state.postNextRecheckTimer = null;
-};
-
-const resetAutoPageSessionState = (state) => {
-  state.currentPageKey = null;
-  state.triggeredPages.clear();
-  state.pendingFromPageKey = null;
-  state.postNextRecheckAttempts = 0;
-  state.awaitingPageAdvanceFromKey = null;
-};
-
-const startAutoPageSession = (view) => {
-  const state = getAutoPageState(view);
-  clearAutoPageTimer(state);
-  clearAutoPagePostNextRecheck(state);
-  state.sessionId += 1;
-  resetAutoPageSessionState(state);
-  return state;
-};
-
-const stopAutoPageSession = (view) => {
-  const state = getAutoPageState(view);
-  clearAutoPageTimer(state);
-  clearAutoPagePostNextRecheck(state);
-  // Invalidate a view.next() continuation that may already be in flight.
-  state.sessionId += 1;
-  resetAutoPageSessionState(state);
-};
+const stopAutoPageSession = (view) => getAutoPageCoordinator(view).cancelAll();
 
 const getAutoPageLocationKey = (lastLocation, index) => {
   if (!lastLocation) return `index:${index}:none`;
@@ -331,6 +287,10 @@ const setSelectionHandler = (view, doc, index) => {
 
   doc.addEventListener('selectstart', () => {
     coordinator.interactionOwner = doc;
+    const adjusted = coordinator.machine.beginAdjustment(doc);
+    if (adjusted) {
+      callFlutter('onSelectionActionsHidden', { sessionId: adjusted.generation });
+    }
   });
 
   const handleSelectionStateChange = () => {
@@ -443,13 +403,20 @@ const setSelectionHandler = (view, doc, index) => {
 
   if (!view.isFixedLayout) {
     // go to the next page when selecting to the end of a page
-    // this makes it possible to select across pages
+    // This preserves selection across visual pages backed by this Document.
+    // A spine-section Document replacement ends the selection in #onLoad.
 
     doc.addEventListener('selectstart', () => {
       const container = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
       if (!container) return;
       globalThis.originalScrollLeft = container.scrollLeft;
-      startAutoPageSession(view);
+      const current = coordinator.machine.current;
+      const autoPage = getAutoPageCoordinator(view);
+      if (current?.owner === doc) {
+        autoPage.restart(doc, current.generation);
+      } else {
+        autoPage.cancelAll();
+      }
     });
 
 
@@ -465,28 +432,12 @@ const setSelectionHandler = (view, doc, index) => {
       const container = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
       if (!container) return;
 
-      const state = getAutoPageState(view);
-      if (state.sessionId === 0) {
-        startAutoPageSession(view);
-      }
+      const session = coordinator.machine.current;
+      if (session?.owner !== doc) return;
+      const autoPage = getAutoPageCoordinator(view);
 
       const pageKey = getAutoPageLocationKey(lastLocation, index);
-      if (state.currentPageKey !== pageKey) {
-        if (
-          state.awaitingPageAdvanceFromKey
-          && state.awaitingPageAdvanceFromKey !== pageKey
-        ) {
-          state.awaitingPageAdvanceFromKey = null;
-          state.postNextRecheckAttempts = 0;
-          clearAutoPagePostNextRecheck(state);
-        }
-        state.currentPageKey = pageKey;
-      }
-
-      if (state.pendingFromPageKey && state.pendingFromPageKey !== pageKey) {
-        clearAutoPageTimer(state);
-        state.pendingFromPageKey = null;
-      }
+      if (!autoPage.observePage(doc, session.generation, pageKey)) return;
 
       let compareToPageEnd;
       try {
@@ -499,63 +450,24 @@ const setSelectionHandler = (view, doc, index) => {
       const nearScreenBottom = selectionPos.bottom >= AUTO_PAGE_SCREEN_BOTTOM_THRESHOLD;
       const reachedCurrentPageBottom = rangeReachedPageEnd && nearScreenBottom;
 
-      if (!reachedCurrentPageBottom && state.pendingFromPageKey === pageKey) {
-        clearAutoPageTimer(state);
-        state.pendingFromPageKey = null;
+      if (!reachedCurrentPageBottom) {
+        autoPage.cancelPendingPage(doc, session.generation, pageKey);
       }
 
       if (reachedCurrentPageBottom) {
-        if (state.pendingFromPageKey === pageKey) {
-          if (state.pendingTimer) return;
-          state.pendingFromPageKey = null;
-        }
-        if (state.triggeredPages.has(pageKey)) return;
-
-        state.pendingFromPageKey = pageKey;
-        clearAutoPagePostNextRecheck(state);
-        state.awaitingPageAdvanceFromKey = null;
-        state.postNextRecheckAttempts = 0;
-        clearAutoPageTimer(state);
-        const scheduledSessionId = state.sessionId;
-        state.pendingTimer = setTimeout(async () => {
-          state.pendingTimer = null;
-          if (scheduledSessionId !== state.sessionId) return;
-          state.triggeredPages.add(pageKey);
-          try {
-            await view.next();
+        autoPage.scheduleAdvance({
+          owner: doc,
+          generation: session.generation,
+          pageKey,
+          advance: () => view.next(),
+          afterAdvance: () => {
             const latestContainer = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
             if (latestContainer) {
               globalThis.originalScrollLeft = latestContainer.scrollLeft;
             }
-          } finally {
-            if (state.pendingFromPageKey === pageKey) {
-              state.pendingFromPageKey = null;
-            }
-            state.awaitingPageAdvanceFromKey = pageKey;
-            state.postNextRecheckAttempts = 0;
-            clearAutoPagePostNextRecheck(state);
-            const runPostNextSelectionRecheck = () => {
-              state.postNextRecheckTimer = null;
-              if (scheduledSessionId !== state.sessionId) return;
-              if (state.awaitingPageAdvanceFromKey !== pageKey) return;
-              state.postNextRecheckAttempts += 1;
-              try {
-                doc.dispatchEvent(new Event('selectionchange'));
-              } catch {
-                return;
-              }
-              if (state.postNextRecheckAttempts >= AUTO_PAGE_POST_NEXT_RECHECK_MAX_ATTEMPTS) return;
-              state.postNextRecheckTimer = setTimeout(
-                runPostNextSelectionRecheck,
-                AUTO_PAGE_POST_NEXT_RECHECK_INTERVAL_MS,
-              );
-            };
-            state.postNextRecheckTimer = setTimeout(
-              runPostNextSelectionRecheck,
-              AUTO_PAGE_POST_NEXT_RECHECK_INITIAL_DELAY_MS,
-            );
-          }
-        }, AUTO_PAGE_DELAY_MS);
+          },
+          recheck: () => doc.dispatchEvent(new Event('selectionchange')),
+        });
         return;
       }
 
@@ -576,6 +488,10 @@ const setSelectionHandler = (view, doc, index) => {
     })
 
   }
+
+  doc.defaultView?.addEventListener('pagehide', () => {
+    endSelectionSession(view, doc);
+  }, { once: true });
 }
 const isZip = async file => {
   const arr = new Uint8Array(await file.slice(0, 4).arrayBuffer())
@@ -1350,6 +1266,11 @@ class Reader {
   }
 
   #onLoad({ detail: { doc, index } }) {
+    const coordinator = getSelectionCoordinator(this.view)
+    const current = coordinator.machine.current
+    if (current && current.owner !== doc && coordinator.activeView === this.view) {
+      endSelectionSession(this.view, current.owner, current.generation)
+    }
     this.#doc = doc
     this.#index = index
     setSelectionHandler(this.view, doc, index)
@@ -1373,6 +1294,14 @@ class Reader {
 
   #onRelocate({ detail }) {
     const { cfi, fraction, location, tocItem, pageItem, chapterLocation } = detail
+    const session = getSelectionCoordinator(this.view).machine.current;
+    if (session?.owner === this.#doc) {
+      getAutoPageCoordinator(this.view).replacePage(
+        this.#doc,
+        session.generation,
+        getAutoPageLocationKey(detail, this.#index),
+      );
+    }
     const loc = pageItem
       ? `Page ${pageItem.label}`
       : `Loc ${location.current}`
@@ -1895,6 +1824,9 @@ window.hideSelectionActions = sessionId => {
 
 window.clearSelection = () => {
   const view = globalThis.__anxActiveSelectionView ?? reader.view
+  const coordinator = getSelectionCoordinator(view)
+  const current = coordinator.machine.current
+  if (current) endSelectionSession(view, current.owner, current.generation)
   view.deselect()
 }
 

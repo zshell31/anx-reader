@@ -1130,9 +1130,48 @@ checklist.
   disabling/re-enabling translation or loading a new document permits retry
   after settings change.
 
+### Never-settling provider streams and bounded translation scheduling
+
+A later device reproduction isolated a second translation-specific liveness
+failure after the MIME opening fix. One visible paragraph and one offscreen
+paragraph were ordinary registered elements intersecting the correct paginator
+Ranges, but both remained in JavaScript's private `#inFlightElements` map with
+Promises that never settled. They were absent from success and failure state.
+Repeated relocation and an `off -> bilingual` mode cycle therefore joined the
+same Promises instead of starting replacement work.
+
+The underlying Dart request chain had no liveness bound. The global
+`FullTextTranslationCacheService._inFlight` correctly removed requests in
+`finally`, but `TranslateServiceProvider.translateTextOnly` could wait forever
+when a provider stream neither emitted, failed, nor closed. Because the cache
+service and coordinator are process-wide singletons, reopening the WebView
+could join the same never-completing request. This was the exact cause of the
+two permanently pending paragraph translations; it was not a missed Range,
+stale DOM ownership, cached error, or permanent-failure suppression.
+
+`af60c5db` adds a 30-second per-attempt stream-inactivity contract. Timeout is
+applied to the stream subscription, so leaving the `await for` cancels the
+underlying subscription and reaches `CancelableLangchainRunner.onCancel`.
+Existing retry behavior remains three attempts with 100/200 ms backoff; after
+the final failure, the cache service's existing `finally` removes the complete
+request from `_inFlight`. Timeout output is never persisted. A later identical
+request can run normally and, when successful, persists under the unchanged
+book/provider/language/prompt/source/context fingerprint.
+
+`4c57d7b7` bounds JavaScript bridge work to three concurrent translations.
+Element-scoped Promise joining remains intact for queued and running work.
+Current-page Range work has priority over observer work and next-page prefetch;
+an already queued element is promoted when a new relocation makes it current.
+Queued work rechecks mode and document ownership before calling Flutter, so a
+retired chapter cannot consume a bridge/provider slot. Running stale
+completions remain harmless under the existing owner check. A browser `online`
+event reconciles stored current/prefetch Ranges, allowing settled transient
+network failures to retry without reopening the book, while permanent
+authentication/configuration failures remain quiescent.
+
 ### Automated verification
 
-- Added `assets/foliate-js/test/translator.test.mjs` with 12 deterministic
+- Added `assets/foliate-js/test/translator.test.mjs` with deterministic
   cases: already-enabled bilingual mode across new chapters, missed observer
   callback, element in-flight deduplication, immediate cached result, slow
   result, wrapper repair without a provider call, retired-chapter completion,
@@ -1160,6 +1199,23 @@ checklist.
   suite passed 286 of 286 tests. Targeted analysis of the server and test
   reported no issues. A release APK built successfully and was installed for
   the device-side DevTools smoke verification described above.
+- The provider-liveness regression proves that concurrent identical callers
+  share one three-attempt sequence, every silent stream subscription is
+  cancelled, the failed result is absent from SQLite, Dart `_inFlight` is
+  released, and a later retry succeeds and persists. The focused cache suite
+  passed 12 of 12 tests.
+- Foliate now has 16 translator regressions, including online recovery,
+  max-three concurrency, current-before-prefetch ordering, queued-operation
+  promotion, and retired-chapter queue cleanup. The configured Foliate suite
+  passed 58 of 58 tests. Webpack regenerated `dist/bundle.js` successfully with
+  the same three known top-level-await warnings.
+- Full `flutter test --no-pub` passed 287 of 287 tests. Targeted analysis
+  reported no issues. Full analysis reported zero errors and zero warnings plus
+  the same 42 informational lints (and therefore its normal nonzero exit).
+  The release APK built successfully at 76.7 MB, installed over the existing
+  app with data retained, and launched on `A3DE65C3`; PID 8230 was alive with
+  `MainActivity` resumed, visible, and drawn, with no crash or ANR in the
+  process smoke log. This launch smoke check is not the bilingual checklist.
 
 ### Bilingual translation Android/device checklist
 
@@ -1183,12 +1239,16 @@ DevTools smoke check described above, not the following bilingual checklist.
 ### Remaining limitations
 
 - Real Android WebView/paginator timing, cached and uncached providers, and
-  rapid chapter navigation still require the checklist above. Only the
-  strict-MIME opening repair received device-side diagnostic confirmation.
-- An already-dispatched Flutter translation request cannot be cancelled. Its
-  retired-document completion is ignored by presentation state, while normal
-  provider/cache completion may still finish.
-- Automatic retries are lifecycle-triggered rather than timer-driven.
+  rapid chapter navigation still require the checklist above. The strict-MIME
+  repair received device-side before/after confirmation and the pending-Promise
+  defect received device-side diagnosis, but the new liveness/queue fix has
+  only the launch smoke check described above.
+- Retiring a document does not actively cancel an already-dispatched Flutter
+  bridge request. Its completion is ignored by presentation state. A silent
+  provider attempt is now subscription-cancelled by the inactivity contract;
+  responsive requests may still finish normally.
+- JavaScript transient retries are lifecycle-triggered rather than timer-driven.
+  Connectivity restoration now supplies an `online` lifecycle trigger.
   Permanent authentication/configuration output intentionally waits for an
   explicit mode cycle, corrected settings plus a new document, or book reopen.
 - IntersectionObserver remains the lazy-loading accelerator. Explicit
@@ -1206,15 +1266,15 @@ Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed work: Bilingual chapter-load translation stabilization and
-strict ES-module MIME opening repair
+Last completed work: Bilingual translation provider liveness and bounded
+current-page/next-page scheduling stabilization
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`b5f9d1ab fix: serve foliate modules with JavaScript MIME type`
+`4c57d7b7 fix: bound and prioritize paragraph translations`
 Documentation checkpoint: This section records the diagnosed presentation
 race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
-retry policy, strict-MIME opening failure, automated/device-smoke evidence, and
-added manual-device checklist.
+retry policy, strict-MIME opening failure, never-settling provider root cause,
+bounded queue, automated/device-smoke evidence, and manual-device checklist.
 Repository state: Clean after the stabilization documentation commit
 Next submilestone: Manual bilingual/device verification and merge review
 Next concrete tasks: Execute the manual Android/device checklist, then perform

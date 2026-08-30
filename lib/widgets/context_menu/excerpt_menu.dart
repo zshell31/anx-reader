@@ -30,6 +30,8 @@ class ExcerptMenu extends StatefulWidget {
   final String? chapter;
   final String? annotationContext;
   final String? lookupContext;
+  final String? initialType;
+  final String? initialColor;
   final SelectionPersistenceSession persistenceSession;
   final int? id;
   final Function() onClose;
@@ -49,6 +51,8 @@ class ExcerptMenu extends StatefulWidget {
     this.chapter,
     this.annotationContext,
     this.lookupContext,
+    this.initialType,
+    this.initialColor,
     required this.persistenceSession,
     this.id,
     required this.onClose,
@@ -76,8 +80,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   @override
   initState() {
     super.initState();
-    annoType = Prefs().annotationType;
-    annoColor = Prefs().annotationColor;
+    annoType = widget.initialType ?? Prefs().annotationType;
+    annoColor = (widget.initialColor ?? Prefs().annotationColor)
+        .replaceFirst(RegExp(r'^#'), '');
     _initializeExistingNote();
   }
 
@@ -179,7 +184,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     );
     final note = result.compatibilityProjection;
     _recordProjection(note);
-    if (note != null) epubPlayerKey.currentState!.addAnnotation(note);
+    await epubPlayerKey.currentState!.refreshAnnotations();
     return note;
   }
 
@@ -196,7 +201,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     );
     final note = result.compatibilityProjection;
     _recordProjection(note);
-    if (note != null) epubPlayerKey.currentState!.addAnnotation(note);
+    await epubPlayerKey.currentState!.refreshAnnotations();
     return note;
   }
 
@@ -242,13 +247,11 @@ class ExcerptMenuState extends State<ExcerptMenu> {
 
   Future<void> deleteHandler() async {
     if (deleteConfirm) {
-      final current = await _fetchLatestNote() ?? _currentNote;
       final handle = await widget.persistenceSession.ensureAnnotation(
         _createOrResolve,
       );
       await annotationRepository.tombstoneAnnotation(handle.ref);
-      epubPlayerKey.currentState!
-          .removeAnnotation(widget.annoCfi, id: current?.id);
+      await epubPlayerKey.currentState!.refreshAnnotations();
       widget.onClose();
     } else {
       setState(() {
@@ -267,7 +270,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoColor = color;
     }
     final bookNote = await _persistNote(color: color);
-    if (bookNote != null) epubPlayerKey.currentState!.addAnnotation(bookNote);
+    if (bookNote != null) {
+      await epubPlayerKey.currentState!.refreshAnnotations();
+    }
     if (close) {
       widget.onClose();
     }
@@ -283,7 +288,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoType = type;
     }
     final bookNote = await _persistNote(type: type);
-    if (bookNote != null) epubPlayerKey.currentState!.addAnnotation(bookNote);
+    if (bookNote != null) {
+      await epubPlayerKey.currentState!.refreshAnnotations();
+    }
   }
 
   Widget iconButton({required Icon icon, required Function() onPressed}) {

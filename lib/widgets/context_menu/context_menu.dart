@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
 import 'package:anx_reader/widgets/context_menu/reader_note_menu.dart';
@@ -24,7 +25,10 @@ Future<void> showContextMenu(
     {String? chapter,
     String? annotationContext,
     String? lookupContext,
-    int? selectionSessionGeneration}) async {
+    int? selectionSessionGeneration,
+    AnnotationRef? annotationRef,
+    String? annotationType,
+    String? annotationColor}) async {
   final playerKey = epubPlayerKey.currentState;
   if (playerKey == null) return;
   if (selectionSessionGeneration != null &&
@@ -141,6 +145,9 @@ Future<void> showContextMenu(
       chapter: chapter,
       annotationContext: annotationContext,
       lookupContext: lookupContext,
+      annotationRef: annotationRef,
+      annotationType: annotationType,
+      annotationColor: annotationColor,
       decoration: decoration,
       onClose: onClose,
       menuConstraints: menuConstraints,
@@ -246,6 +253,9 @@ class _ContextMenuOverlay extends StatefulWidget {
     this.chapter,
     this.annotationContext,
     this.lookupContext,
+    this.annotationRef,
+    this.annotationType,
+    this.annotationColor,
     required this.decoration,
     required this.onClose,
     required this.menuConstraints,
@@ -267,6 +277,9 @@ class _ContextMenuOverlay extends StatefulWidget {
   final String? chapter;
   final String? annotationContext;
   final String? lookupContext;
+  final AnnotationRef? annotationRef;
+  final String? annotationType;
+  final String? annotationColor;
   final BoxDecoration decoration;
   final VoidCallback onClose;
   final BoxConstraints menuConstraints;
@@ -307,13 +320,18 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     _reverse = widget.initialPlacement.shouldReverse;
     _showTranslationMenu = widget.showTranslationDefault;
     _noteId = widget.annoId;
-    _persistenceSession = SelectionPersistenceSession(SelectionSnapshot(
-      selectedText: widget.annoContent,
-      annotationContext: widget.annotationContext,
-      lookupContext: widget.lookupContext,
-      chapter: widget.chapter ?? '',
-      selector: widget.annoCfi,
-    ));
+    _persistenceSession = SelectionPersistenceSession(
+      SelectionSnapshot(
+        selectedText: widget.annoContent,
+        annotationContext: widget.annotationContext,
+        lookupContext: widget.lookupContext,
+        chapter: widget.chapter ?? '',
+        selector: widget.annoCfi,
+      ),
+      existingAnnotation: widget.annotationRef == null
+          ? null
+          : SelectionAnnotationHandle(ref: widget.annotationRef!),
+    );
     _bottomInset = widget.initialBottomInset;
     _menuConstraints = _buildConstraints(widget.initialBottomInset);
     _scheduleRecalculate();
@@ -518,6 +536,8 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   chapter: widget.chapter,
                                   annotationContext: widget.annotationContext,
                                   lookupContext: widget.lookupContext,
+                                  initialType: widget.annotationType,
+                                  initialColor: widget.annotationColor,
                                   persistenceSession: _persistenceSession,
                                   id: widget.annoId,
                                   onClose: widget.onClose,

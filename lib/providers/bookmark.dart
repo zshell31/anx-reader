@@ -100,6 +100,6 @@ class Bookmark extends _$Bookmark {
 
     final newState = bookmarks.where((value) => value.id != id).toList();
     state = AsyncData(newState);
-    epubPlayerKey.currentState?.removeAnnotation(bookmark.cfi, id: bookmark.id);
+    await epubPlayerKey.currentState?.refreshAnnotations();
   }
 }

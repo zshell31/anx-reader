@@ -3,6 +3,7 @@ import { TOCProgress, SectionProgress } from './progress.js'
 import { Overlayer } from './overlayer.js'
 import { textWalker } from './text-walker.js'
 import { Translator, TranslationMode } from './translator.js'
+import { rendererAnnotationKey } from './annotation-renderer-identity.mjs'
 const { TTS } = await import('./tts.js')
 
 const SEARCH_PREFIX = 'foliate-search:'
@@ -353,10 +354,12 @@ export class View extends HTMLElement {
     const obj = this.#getOverlayer(index)
     if (obj) {
       const { overlayer, doc } = obj
-      overlayer.remove(value)
+      const renderKey = rendererAnnotationKey(annotation)
+      overlayer.remove(renderKey)
       if (!remove) {
         const range = doc ? anchor(doc) : anchor
-        const draw = (func, opts) => overlayer.add(value, range, func, opts)
+        const draw = (func, opts) =>
+          overlayer.add(renderKey, range, func, opts)
         this.#emit('draw-annotation', { draw, annotation, doc, range })
       }
     }
@@ -373,11 +376,11 @@ export class View extends HTMLElement {
   #createOverlayer({ doc, index }) {
     const overlayer = new Overlayer(doc)
     doc.addEventListener('click', e => {
-      const [value, range] = overlayer.hitTest(e)
-      if (value && !value.startsWith(SEARCH_PREFIX)) {
+      const [renderKey, range] = overlayer.hitTest(e)
+      if (renderKey && !renderKey.startsWith(SEARCH_PREFIX)) {
         e.preventDefault()
         e.stopPropagation()
-        this.#emit('show-annotation', { value, index, range })
+        this.#emit('show-annotation', { renderKey, index, range })
       }
     }, true)
 
@@ -394,7 +397,11 @@ export class View extends HTMLElement {
       const { index, anchor } = resolved
       const { doc } = this.#getOverlayer(index)
       const range = anchor(doc)
-      this.#emit('show-annotation', { value, index, range })
+      this.#emit('show-annotation', {
+        renderKey: rendererAnnotationKey(annotation),
+        index,
+        range,
+      })
     }
   }
   getCFI(index, range) {

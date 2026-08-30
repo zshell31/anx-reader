@@ -5,6 +5,7 @@ import './view.js'
 import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
 import { buildRangeSentenceContext } from './sentence-context.mjs'
+import { annotationForRenderKey } from './annotation-renderer-identity.mjs'
 import { FootnoteHandler } from './footnotes.js'
 import { Overlayer } from './overlayer.js'
 import { collapse, compare, fromRange, toRange } from './epubcfi.js'
@@ -1015,7 +1016,8 @@ class Reader {
     })
 
     view.addEventListener('show-annotation', e => {
-      const annotation = this.annotationsByValue.get(e.detail.value)
+      const annotation = annotationForRenderKey(
+        this.annotationsById, e.detail.renderKey)
       const pos = getPosition(e.detail.range)
       if (window.getSelection()?.toString()) return
       const { annotationContext, lookupContext } = buildRangeSentenceContext(e.detail.range)
@@ -1064,9 +1066,10 @@ class Reader {
     this.annotationsById.clear()
 
     for (const anno of annos) {
-      const { value, type, color, note } = anno
+      const { id, renderKey, value, type, color, note } = anno
       const annotation = {
-        id: anno.id,
+        id,
+        renderKey: renderKey ?? id,
         value,
         type,
         color,

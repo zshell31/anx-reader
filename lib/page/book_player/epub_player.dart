@@ -4,7 +4,6 @@ import 'dart:ui';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/enums/page_turn_mode.dart';
 import 'package:anx_reader/enums/reading_info.dart';
 import 'package:anx_reader/enums/translation_mode.dart';
@@ -20,6 +19,7 @@ import 'package:anx_reader/models/reading_rules.dart';
 import 'package:anx_reader/models/search_result_model.dart';
 import 'package:anx_reader/models/toc_item.dart';
 import 'package:anx_reader/page/book_player/image_viewer.dart';
+import 'package:anx_reader/page/book_player/foliate_annotation_adapter.dart';
 import 'package:anx_reader/page/book_player/selection_session_bridge.dart';
 import 'package:anx_reader/page/home_page.dart';
 import 'package:anx_reader/page/reading_page.dart';
@@ -29,6 +29,8 @@ import 'package:anx_reader/providers/bookmark.dart';
 import 'package:anx_reader/providers/chapter_content_bridge.dart';
 import 'package:anx_reader/providers/current_reading.dart';
 import 'package:anx_reader/service/book_player/book_player_server.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/providers/toc_search.dart';
 import 'package:anx_reader/service/tts/base_tts.dart';
@@ -37,7 +39,6 @@ import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/coordinates_to_part.dart';
 import 'package:anx_reader/utils/js/convert_dart_color_to_js.dart';
 import 'package:anx_reader/utils/platform_utils.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/utils/webView/gererate_url.dart';
 import 'package:anx_reader/utils/webView/webview_console_message.dart';
@@ -254,34 +255,14 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void goToCfi(String cfi) =>
       webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
 
-  void addAnnotation(BookNote bookNote) {
-    final annotation = bookNote.toJson();
-    annotation['note'] = bookNote.content.replaceAll('\n', ' ');
-    webViewController.evaluateJavascript(
-        source: 'addAnnotation(${jsonEncode(annotation)})');
-  }
-
-  void addBookmark(BookmarkModel bookmark) {
-    webViewController.evaluateJavascript(source: '''
-      addAnnotation({
-        id: ${bookmark.id},
-        type: 'bookmark',
-        value: '${bookmark.cfi}',
-        color: '#000000',
-        note: 'None',
-      })
-      ''');
-  }
-
   void addBookmarkHere() {
     webViewController.evaluateJavascript(source: '''
       addBookmarkHere()
       ''');
   }
 
-  void removeAnnotation(String cfi, {int? id}) =>
-      webViewController.evaluateJavascript(
-          source: 'removeAnnotation(${jsonEncode(cfi)}, ${id ?? 'null'})');
+  void removeAnnotation(String cfi) => webViewController.evaluateJavascript(
+      source: 'removeAnnotation(${jsonEncode(cfi)})');
 
   void clearSearch() {
     ref.read(tocSearchProvider.notifier).clear();
@@ -587,16 +568,29 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> renderAnnotations(InAppWebViewController controller) async {
-    final annotationList =
-        await bookNoteDao.selectBookNotesByBookId(widget.book.id);
+    final sharedState = annotationSyncRuntime.sharedState;
+    final document = await sharedState.annotationDocument(widget.book.md5!);
+    final presentations = await sharedState.annotationPresentations();
+    final models = document == null
+        ? const <AnnotationUiModel>[]
+        : CanonicalAnnotationReadAdapter(
+            presentations: presentations,
+            localBookAvailable: (_) => true,
+          ).read(document);
+    final adapter = FoliateAnnotationAdapter(
+      defaultStyle: Prefs().annotationType == 'underline'
+          ? AnnotationPresentationStyle.underline
+          : AnnotationPresentationStyle.highlight,
+      defaultColor: Prefs().annotationColor,
+    );
     final allAnnotations =
-        jsonEncode(annotationList.map((note) => note.toJson()).toList());
+        jsonEncode(adapter.adapt(models).map((dto) => dto.toJson()).toList());
     await controller.evaluateJavascript(
         source: 'renderAnnotations($allAnnotations)');
   }
 
-  /// Re-reads the native projection after canonical remote reconciliation and
-  /// replaces Foliate's rendered annotation set in place.
+  /// Re-reads canonical state and effective Anx presentation, then replaces
+  /// Foliate's ephemeral rendered annotation set in place.
   Future<void> refreshAnnotations() => renderAnnotations(webViewController);
 
   void getThemeColor() {
@@ -764,7 +758,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
             }
           }
 
-          int id = annotation['annotation']['id'];
+          final id = annotation['annotation']['id'] as String;
           String cfi = annotation['annotation']['value'];
           String note = annotation['annotation']['note'];
           _lastSelectionAnnotationContext =
@@ -783,12 +777,18 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
             bottom,
             note,
             cfi,
-            id,
+            null,
             false,
             writingMode.isVertical ? Axis.vertical : Axis.horizontal,
             chapter: _selectionContext(annotation, 'chapter'),
             annotationContext: _lastSelectionAnnotationContext,
             lookupContext: _lastSelectionLookupContext,
+            annotationRef: AnnotationRef(
+              bookFingerprint: widget.book.md5!,
+              annotationId: id,
+            ),
+            annotationType: annotation['annotation']['type'] as String?,
+            annotationColor: annotation['annotation']['color'] as String?,
           );
         });
     controller.addJavaScriptHandler(
@@ -867,9 +867,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           bookmarkCfi = '';
           bookmarkExists = false;
         } else {
-          BookmarkModel bookmark = await ref
-              .read(BookmarkProvider(widget.book.id).notifier)
-              .addBookmark(
+          await ref.read(BookmarkProvider(widget.book.id).notifier).addBookmark(
                 BookmarkModel(
                   bookId: widget.book.id,
                   cfi: cfi,
@@ -882,7 +880,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
               );
           bookmarkCfi = cfi;
           bookmarkExists = true;
-          addBookmark(bookmark);
+          await refreshAnnotations();
         }
         widget.updateParent();
         setState(() {});

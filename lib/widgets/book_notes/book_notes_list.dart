@@ -113,11 +113,7 @@ class BookNotesList extends ConsumerWidget {
               if (reading) {
                 final player = epubPlayerKey.currentState;
                 if (player != null) {
-                  for (final note in notesToDelete) {
-                    if (note.cfi.isNotEmpty) {
-                      player.removeAnnotation(note.cfi, id: note.id);
-                    }
-                  }
+                  await player.refreshAnnotations();
                 }
               }
             },

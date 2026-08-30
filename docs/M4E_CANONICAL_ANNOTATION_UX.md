@@ -985,9 +985,11 @@ Branch readiness: Ready for manual verification / merge review
   - `b663ea35 fix: reconcile bilingual translations on chapter load`
   - `072152c6 fix: bound translation reconciliation to visible pages`
   - `525b327e feat: prefetch translations for the next page`
-- Scope: one post-review presentation/lifecycle fix. Translation request
-  identity, previous-paragraph context, persistent cache schema, invalidation,
-  and WebDAV synchronization semantics are unchanged.
+  - `b5f9d1ab fix: serve foliate modules with JavaScript MIME type`
+- Scope: post-review translation presentation/lifecycle and reader-bootstrap
+  fixes. Translation request identity, previous-paragraph context, persistent
+  cache schema, invalidation, and WebDAV synchronization semantics are
+  unchanged.
 
 ### Diagnosed root cause
 
@@ -1062,6 +1064,49 @@ geometry because their one- or two-document iframe viewport is meaningful.
 This retains missed-callback convergence and smooth page turns while preventing
 chapter-wide request and re-layout storms during book open.
 
+### Repeated opening hang: strict ES-module MIME handling
+
+A later real-device reproduction showed a separate opening failure that occurs
+before EPUB parsing or translation reconciliation. Android WebView 151 loaded
+`index.html` and part of the `book.js` module graph, then rejected every `.mjs`
+dependency because the embedded Shelf server returned
+`application/octet-stream`. The server recognized `.js`, but not `.mjs`.
+WebView's strict module MIME checking rejected `auto-page-selection.mjs`,
+`selection-session.mjs`, `sentence-context.mjs`, and
+`annotation-renderer-identity.mjs`; the dynamically inserted `book.js` script
+reported an error and never executed. Consequently `window.reader` remained
+undefined, no EPUB request or translation request began, and the otherwise idle
+WebView looked like a frozen book screen. There was no ANR, crash, or CPU-bound
+translation loop.
+
+`b5f9d1ab` centralizes Foliate asset MIME selection and serves both `.js` and
+`.mjs` as `application/javascript`. This is a deterministic resource contract;
+it adds no timeout, delay, or rendering retry. A focused Flutter test covers the
+two JavaScript extensions plus the existing HTML, CSS, JSON, and binary
+fallback mappings.
+
+Device-side DevTools supplied before/after evidence on the same WebView 151:
+
+- Before the fix, `document.readyState` was `complete`, `window.reader` was
+  undefined, only the initial module subset appeared in resource timing, and
+  DevTools logged four strict-MIME module failures.
+- After installing the fixed release APK, all 17 JavaScript modules loaded,
+  including `translator.js`; the EPUB and paginator requests completed;
+  `window.reader` was an object; and the paginator owned one active content
+  document. This verifies the opening-path repair, but is not the full
+  bilingual navigation checklist below.
+
+The same device session also explained one untranslated final visible
+paragraph without confusing it with the DOM race: the paragraph intersected
+the active paginator Range and had no wrapper, while WebView console recorded
+`Failed host lookup: api.openai.com`. Wi-Fi was off. The network error remained
+retryable and was not cached; after connectivity was restored and the book was
+reopened, the user confirmed that the translation appeared. That successful
+result is persisted under the existing text/context/book/provider/language
+fingerprint, so later identical requests are local cache hits. This was a
+focused failure/recovery observation, not completion of the navigation
+checklist.
+
 ### In-flight, stale completion, cleanup, and retry strategy
 
 - A `WeakMap<Element, Promise>` owns element-scoped in-flight work. Observer,
@@ -1111,10 +1156,15 @@ chapter-wide request and re-layout storms during book open.
   `flutter analyze --no-pub` reported zero errors and zero warnings plus the
   same 42 repository informational lints documented above.
 - Final staged and worktree diff checks passed.
+- After the MIME fix, its focused Flutter test passed 2 of 2 cases and the full
+  suite passed 286 of 286 tests. Targeted analysis of the server and test
+  reported no issues. A release APK built successfully and was installed for
+  the device-side DevTools smoke verification described above.
 
 ### Bilingual translation Android/device checklist
 
-Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
+Status: **MANUAL VERIFICATION REQUIRED**. Codex performed only the opening-path
+DevTools smoke check described above, not the following bilingual checklist.
 
 1. Enable bilingual mode.
 2. Open a chapter and wait for visible translations.
@@ -1133,8 +1183,8 @@ Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
 ### Remaining limitations
 
 - Real Android WebView/paginator timing, cached and uncached providers, and
-  rapid chapter navigation still require the checklist above; no device result
-  is claimed.
+  rapid chapter navigation still require the checklist above. Only the
+  strict-MIME opening repair received device-side diagnostic confirmation.
 - An already-dispatched Flutter translation request cannot be cancelled. Its
   retired-document completion is ignored by presentation state, while normal
   provider/cache completion may still finish.
@@ -1156,14 +1206,16 @@ Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed work: Bilingual chapter-load translation stabilization
+Last completed work: Bilingual chapter-load translation stabilization and
+strict ES-module MIME opening repair
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`525b327e feat: prefetch translations for the next page`
+`b5f9d1ab fix: serve foliate modules with JavaScript MIME type`
 Documentation checkpoint: This section records the diagnosed presentation
 race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
-retry policy, automated evidence, and added manual-device checklist.
-Repository state: Clean after the bilingual stabilization documentation commit
+retry policy, strict-MIME opening failure, automated/device-smoke evidence, and
+added manual-device checklist.
+Repository state: Clean after the stabilization documentation commit
 Next submilestone: Manual bilingual/device verification and merge review
 Next concrete tasks: Execute the manual Android/device checklist, then perform
 merge review. Do not claim device verification until those checks are run.

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -53,6 +55,7 @@ Uint8List bytes(Map<String, dynamic> value) =>
     Uint8List.fromList(utf8.encode(canonicalJson(value)));
 
 class MemoryWebDav implements AnnotationWebDavTransport {
+  List<String> expectedPath = const ['annotations', '$fingerprint.json'];
   Uint8List? body;
   String? etag;
   int version = 0;
@@ -87,7 +90,7 @@ class MemoryWebDav implements AnnotationWebDavTransport {
 
   @override
   Future<WebDavObject?> get(List<String> path) async {
-    expect(path, ['annotations', '$fingerprint.json']);
+    expect(path, expectedPath);
     gets++;
     activeGets++;
     if (activeGets > maxActiveGets) maxActiveGets = activeGets;
@@ -985,5 +988,104 @@ void main() {
     expect(remote.maxActiveGets, 1);
     expect(remote.puts, 1);
     expect(await coordinator.status(fingerprint), AnnotationSyncStatus.synced);
+  });
+
+  test('two Anx devices converge presentation update and reset independently',
+      () async {
+    await coordinator.close();
+    remote.expectedPath = anxPresentationRemotePath(anxPresentationDocumentId);
+    final deviceA = AnnotationSyncCoordinator(
+      sharedState: store,
+      transport: remote,
+      syncDomain: anxPresentationSyncDomain,
+      normalizeDocumentId: (_) => anxPresentationDocumentId,
+      remotePathFor: anxPresentationRemotePath,
+      decodeDocument: decodeAnxPresentationDocument,
+      mergeDocuments: mergeAnxPresentationDocuments,
+      validateDocumentId: (_, id) => id == anxPresentationDocumentId,
+      reconcileProjection: (_) async => AnnotationReconciliationResult(),
+      networkBackoff: const [],
+    );
+    coordinator = deviceA;
+    final deviceBPath = p.join(directory.path, 'device-b.db');
+    final deviceBStore =
+        SharedStateDatabase(path: deviceBPath, factory: databaseFactoryFfi);
+    final deviceB = AnnotationSyncCoordinator(
+      sharedState: deviceBStore,
+      transport: remote,
+      syncDomain: anxPresentationSyncDomain,
+      normalizeDocumentId: (_) => anxPresentationDocumentId,
+      remotePathFor: anxPresentationRemotePath,
+      decodeDocument: decodeAnxPresentationDocument,
+      mergeDocuments: mergeAnxPresentationDocuments,
+      validateDocumentId: (_, id) => id == anxPresentationDocumentId,
+      reconcileProjection: (_) async => AnnotationReconciliationResult(),
+      networkBackoff: const [],
+    );
+    try {
+      await store.putAnnotationDocument(document([entity('semantic')]));
+      final canonicalBefore =
+          await store.canonicalDocument(annotationSyncDomain, fingerprint);
+      await store.putAnnotationPresentation(const AnnotationPresentation(
+        annotationId: 'annotation-a',
+        style: AnnotationPresentationStyle.underline,
+        color: 'blue',
+      ));
+      await deviceA.syncDirtyAnnotations();
+
+      await deviceB.pullBook(anxPresentationDocumentId);
+      expect((await deviceBStore.annotationPresentation('annotation-a'))?.color,
+          'blue');
+      await deviceBStore.deleteAnnotationPresentation('annotation-a');
+      await deviceB.syncDirtyAnnotations();
+      await deviceA.pullBook(anxPresentationDocumentId);
+
+      expect(await store.annotationPresentation('annotation-a'), isNull);
+      expect(await deviceBStore.annotationPresentation('annotation-a'), isNull);
+      expect(await store.canonicalDocument(annotationSyncDomain, fingerprint),
+          orderedEquals(canonicalBefore!));
+      final pending = await store.pendingOutbox();
+      expect(
+          pending
+              .singleWhere((entry) => entry.domain == annotationSyncDomain)
+              .documentId,
+          fingerprint);
+      expect(pending.any((entry) => entry.domain == anxPresentationSyncDomain),
+          isFalse);
+    } finally {
+      await deviceB.close();
+      await deviceBStore.close();
+    }
+  });
+
+  test('offline presentation failure remains in its own durable outbox',
+      () async {
+    await coordinator.close();
+    remote.expectedPath = anxPresentationRemotePath(anxPresentationDocumentId);
+    coordinator = AnnotationSyncCoordinator(
+      sharedState: store,
+      transport: remote,
+      syncDomain: anxPresentationSyncDomain,
+      normalizeDocumentId: (_) => anxPresentationDocumentId,
+      remotePathFor: anxPresentationRemotePath,
+      decodeDocument: decodeAnxPresentationDocument,
+      mergeDocuments: mergeAnxPresentationDocuments,
+      validateDocumentId: (_, id) => id == anxPresentationDocumentId,
+      reconcileProjection: (_) async => AnnotationReconciliationResult(),
+      networkBackoff: const [],
+    );
+    await store.putAnnotationPresentation(const AnnotationPresentation(
+      annotationId: 'annotation-a',
+      style: AnnotationPresentationStyle.highlight,
+      color: 'red',
+    ));
+    remote.getFailure = const WebDavTransportException('offline');
+
+    await expectLater(coordinator.syncDirtyAnnotations(), completes,
+        reason: 'batch sync records individual durable failures');
+    final entry = (await store.pendingOutbox()).single;
+    expect(entry.domain, anxPresentationSyncDomain);
+    expect(entry.attempts, 1);
+    expect(await coordinator.domainStatus, AnnotationSyncStatus.pendingOffline);
   });
 }

@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
+import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
+import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -172,6 +174,10 @@ void main() {
         context: 'real live context',
       );
 
+  Future<SharedOutboxEntry> annotationOutbox() async =>
+      (await shared.pendingOutbox())
+          .singleWhere((entry) => entry.domain == annotationSyncDomain);
+
   test('canonical mutation is dirty and scheduler-notified before projection',
       () async {
     var notifications = 0;
@@ -194,7 +200,7 @@ void main() {
 
     expect(notifications, 1);
     expect(shared.events, ['canonical', 'scheduled']);
-    expect((await shared.pendingOutbox()).single.documentId, fingerprint);
+    expect((await annotationOutbox()).documentId, fingerprint);
     expect(native.events, ['insert']);
   });
 
@@ -234,9 +240,9 @@ void main() {
     expect(presentation?.color, 'ff0000');
     expect(shared.events, ['canonical']);
     expect(native.events, ['insert']);
-    final outbox = await shared.pendingOutbox();
-    expect(outbox.single.documentId, fingerprint);
-    expect(outbox.single.localRevision, 1);
+    final outbox = await annotationOutbox();
+    expect(outbox.documentId, fingerprint);
+    expect(outbox.localRevision, 1);
   });
 
   test('selection without useful sentence context omits canonical context',
@@ -268,7 +274,7 @@ void main() {
       final document = (await shared.annotationDocument(fingerprint))!;
       final annotation = annotationOf(document, result.ref.annotationId);
 
-      expect((await shared.pendingOutbox()).single.localRevision, 1);
+      expect((await annotationOutbox()).localRevision, 1);
       expect(document['annotations'], hasLength(1));
       expect(annotation['enrichments'], hasLength(1));
       expect(annotation['enrichments'].single['kind'], 'translation');
@@ -403,7 +409,7 @@ void main() {
 
     expect(
         await shared.annotationPresentation(note.sharedAnnotationId!), isNull);
-    expect((await shared.pendingOutbox()).single.localRevision, 1);
+    expect((await annotationOutbox()).localRevision, 1);
   });
 
   test('translation is written only by explicit save and retains identity',
@@ -517,20 +523,31 @@ void main() {
         .singleWhere((value) => value['id'] == 'personal-note-conflict');
     expect(conflict['content'], 'older untouched note');
     expect(conflict.containsKey('deletedAt'), isFalse);
-    expect((await shared.pendingOutbox()).single.localRevision, 5);
+    expect((await annotationOutbox()).localRevision, 5);
   });
 
   test('presentation-only changes preserve canonical bytes and revision',
       () async {
+    var presentationNotifications = 0;
+    repository = AnnotationRepository(
+      shared,
+      native: native,
+      now: () => clock,
+      onPresentationMutation: () => presentationNotifications++,
+      projectionDefaults: () => const NativeAnnotationDefaults(
+        selectionType: 'highlight',
+        color: 'default',
+      ),
+    );
     final note = await createSelection();
     final before = await shared.canonicalDocument('annotations', fingerprint);
-    final revision = (await shared.pendingOutbox()).single.localRevision;
+    final revision = (await annotationOutbox()).localRevision;
 
     final recolored = await repository.updatePresentationForNativeId(
         note.id!, 'underline', '00ff00');
     expect(await shared.canonicalDocument('annotations', fingerprint),
         orderedEquals(before!));
-    expect((await shared.pendingOutbox()).single.localRevision, revision);
+    expect((await annotationOutbox()).localRevision, revision);
     expect(recolored.type, 'underline');
     expect(recolored.color, '00ff00');
     var sidecar = await shared.annotationPresentation(note.sharedAnnotationId!);
@@ -542,12 +559,17 @@ void main() {
     final after = await shared.canonicalDocument('annotations', fingerprint);
 
     expect(after, orderedEquals(before));
-    expect((await shared.pendingOutbox()).single.localRevision, revision);
+    expect((await annotationOutbox()).localRevision, revision);
     expect(retyped.type, 'highlight');
     expect(retyped.updateTime, note.updateTime);
     sidecar = await shared.annotationPresentation(note.sharedAnnotationId!);
     expect(sidecar?.style, AnnotationPresentationStyle.highlight);
     expect(sidecar?.color, '00ff00');
+    expect(presentationNotifications, 3);
+    final presentationOutbox = (await shared.pendingOutbox())
+        .singleWhere((entry) => entry.domain == anxPresentationSyncDomain);
+    expect(presentationOutbox.documentId, anxPresentationDocumentId);
+    expect(presentationOutbox.localRevision, 3);
   });
 
   test('bookmark creation is semantic but percentage stays native-only',
@@ -607,7 +629,7 @@ void main() {
     expect(
         annotations.every((value) => value.containsKey('deletedAt')), isTrue);
     expect(native.notes, isEmpty);
-    expect((await shared.pendingOutbox()).single.localRevision, 4);
+    expect((await annotationOutbox()).localRevision, 4);
   });
 
   test('canonical failure prevents native write', () async {
@@ -626,7 +648,7 @@ void main() {
     final document = (await shared.annotationDocument(fingerprint))!;
     final id = document['annotations'].single['id'] as String;
     expect(native.notes, isEmpty);
-    expect((await shared.pendingOutbox()).single.localRevision, 1);
+    expect((await annotationOutbox()).localRevision, 1);
 
     native.failInsert = false;
     final result = await AnnotationProjectionReconciler(
@@ -688,7 +710,7 @@ void main() {
   test('excerpt edits fail before canonical or native state changes', () async {
     final note = await createSelection();
     final before = await shared.canonicalDocument('annotations', fingerprint);
-    final revision = (await shared.pendingOutbox()).single.localRevision;
+    final revision = (await annotationOutbox()).localRevision;
     final proposed = BookNote(
       id: note.id,
       bookId: note.bookId,
@@ -706,7 +728,7 @@ void main() {
         throwsA(isA<AnnotationExcerptEditUnsupported>()));
     expect(await shared.canonicalDocument('annotations', fingerprint),
         orderedEquals(before!));
-    expect((await shared.pendingOutbox()).single.localRevision, revision);
+    expect((await annotationOutbox()).localRevision, revision);
     expect(native.notes.single.content, 'selected words');
   });
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -22,9 +23,53 @@ Future<void> _createAnnotationPresentations(DatabaseExecutor db) =>
       color TEXT NOT NULL CHECK(length(color) > 0)
     )''');
 
+Future<void> _migrateAnnotationPresentationsToSyncDomain(
+    DatabaseExecutor db) async {
+  final rows =
+      await db.query('annotation_presentations', orderBy: 'annotation_id');
+  if (rows.isEmpty) return;
+  final now = canonicalWireTimestamp(DateTime.now());
+  final document = decodeAnxPresentationDocument(<String, dynamic>{
+    'format': anxPresentationFormat,
+    'version': anxPresentationVersion,
+    'presentations': [
+      for (final row in rows)
+        <String, dynamic>{
+          'annotationId': row['annotation_id'],
+          'style': row['style'],
+          'color': row['color'],
+          'updatedAt': now,
+        },
+    ],
+  });
+  final bytes = Uint8List.fromList(encodeAnxPresentationDocument(document));
+  await db.insert('shared_documents', {
+    'domain': anxPresentationSyncDomain,
+    'document_id': anxPresentationDocumentId,
+    'canonical_state': bytes,
+    'local_revision': 1,
+    'updated_at': now,
+  });
+  await db.insert('sync_outbox', {
+    'domain': anxPresentationSyncDomain,
+    'document_id': anxPresentationDocumentId,
+    'local_revision': 1,
+    'dirty_since': now,
+    'attempts': 0,
+  });
+  await db.insert('sync_metadata', {
+    'domain': anxPresentationSyncDomain,
+    'document_id': anxPresentationDocumentId,
+    'status': 'pending',
+  });
+}
+
 const currentSharedStateSchema = SharedStateSchema(
-  version: 2,
-  migrations: {2: _createAnnotationPresentations},
+  version: 3,
+  migrations: {
+    2: _createAnnotationPresentations,
+    3: _migrateAnnotationPresentationsToSyncDomain,
+  },
 );
 
 /// Versioning policy for the physically independent shared-state database.
@@ -214,10 +259,15 @@ class SharedStateDatabase {
   final String? path;
   final DatabaseFactory? factory;
   final SharedStateSchema schema;
+  final DateTime Function() now;
   Database? _database;
 
   SharedStateDatabase(
-      {this.path, this.factory, this.schema = currentSharedStateSchema});
+      {this.path,
+      this.factory,
+      this.schema = currentSharedStateSchema,
+      DateTime Function()? now})
+      : now = now ?? DateTime.now;
 
   Future<Database> get database async => _database ??= await _open();
 
@@ -270,7 +320,7 @@ class SharedStateDatabase {
     if (domain.isEmpty || documentId.isEmpty) {
       throw ArgumentError('domain and documentId must not be empty');
     }
-    final now = canonicalWireTimestamp(DateTime.now());
+    final now = canonicalWireTimestamp(this.now());
     return (await database).transaction((txn) async {
       final previous = await txn.query('shared_documents',
           columns: ['local_revision'],
@@ -382,7 +432,7 @@ class SharedStateDatabase {
     if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
       throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
     }
-    final now = canonicalWireTimestamp(DateTime.now());
+    final now = canonicalWireTimestamp(this.now());
     return (await database).transaction((txn) async {
       final current = await txn.query('shared_documents',
           columns: ['local_revision'],
@@ -449,7 +499,7 @@ class SharedStateDatabase {
     if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
       throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
     }
-    final now = canonicalWireTimestamp(DateTime.now());
+    final now = canonicalWireTimestamp(this.now());
     return (await database).transaction((txn) async {
       final current = await txn.rawQuery('''SELECT d.local_revision
         FROM shared_documents d
@@ -562,7 +612,7 @@ class SharedStateDatabase {
     if (strongEtag != null && !RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
       throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
     }
-    final now = canonicalWireTimestamp(DateTime.now());
+    final now = canonicalWireTimestamp(this.now());
     return (await database).transaction((txn) async {
       final deleted = await txn.delete('sync_outbox',
           where: 'domain = ? AND document_id = ? AND local_revision = ?',
@@ -653,7 +703,7 @@ class SharedStateDatabase {
           'shared_id': sharedId,
           'status': status,
           'detail': detail,
-          'imported_at': canonicalWireTimestamp(DateTime.now()),
+          'imported_at': canonicalWireTimestamp(now()),
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -664,24 +714,29 @@ class SharedStateDatabase {
       throw ArgumentError.value(
           annotationId, 'annotationId', 'must not be empty');
     }
-    final rows = await (await database).query('annotation_presentations',
-        where: 'annotation_id = ?', whereArgs: [annotationId], limit: 1);
-    if (rows.isEmpty) return null;
-    final row = rows.single;
+    final document = await _anxPresentationDocument();
+    final entries =
+        (document['presentations'] as List).cast<Map<String, dynamic>>();
+    final row = entries
+        .where((entry) => entry['annotationId'] == annotationId)
+        .firstOrNull;
+    if (row == null || row.containsKey('resetAt')) return null;
     return AnnotationPresentation(
-      annotationId: row['annotation_id'] as String,
+      annotationId: row['annotationId'] as String,
       style: AnnotationPresentationStyle.values.byName(row['style'] as String),
       color: row['color'] as String,
     );
   }
 
   Future<Map<String, AnnotationPresentation>> annotationPresentations() async {
-    final rows = await (await database)
-        .query('annotation_presentations', orderBy: 'annotation_id');
+    final document = await _anxPresentationDocument();
+    final rows = (document['presentations'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((entry) => !entry.containsKey('resetAt'));
     return Map.unmodifiable({
       for (final row in rows)
-        row['annotation_id'] as String: AnnotationPresentation(
-          annotationId: row['annotation_id'] as String,
+        row['annotationId'] as String: AnnotationPresentation(
+          annotationId: row['annotationId'] as String,
           style:
               AnnotationPresentationStyle.values.byName(row['style'] as String),
           color: row['color'] as String,
@@ -689,35 +744,123 @@ class SharedStateDatabase {
     });
   }
 
-  /// Writes only client-local style/color state. This table has no trigger or
-  /// foreign key into canonical documents and never touches the sync outbox.
+  /// Writes Anx-only style/color state to its independently synchronized
+  /// document. This never touches the protocol-v2 annotation domain/outbox.
   Future<bool> putAnnotationPresentation(
       AnnotationPresentation presentation) async {
     if (presentation.annotationId.isEmpty ||
         presentation.color.trim().isEmpty) {
       throw ArgumentError('Annotation presentation identity/color is required');
     }
-    final previous = await annotationPresentation(presentation.annotationId);
-    if (previous != null &&
-        previous.style == presentation.style &&
-        previous.color == presentation.color) {
-      return false;
-    }
-    await (await database).insert(
-      'annotation_presentations',
-      {
-        'annotation_id': presentation.annotationId,
+    return _mutateAnxPresentation(presentation.annotationId, (previous, time) {
+      if (previous != null &&
+          !previous.containsKey('resetAt') &&
+          previous['style'] == presentation.style.name &&
+          previous['color'] == presentation.color) {
+        return null;
+      }
+      return <String, dynamic>{
+        'annotationId': presentation.annotationId,
         'style': presentation.style.name,
         'color': presentation.color,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    return true;
+        'updatedAt': time,
+      };
+    });
   }
 
-  Future<void> deleteAnnotationPresentation(String annotationId) async {
-    await (await database).delete('annotation_presentations',
-        where: 'annotation_id = ?', whereArgs: [annotationId]);
+  Future<bool> deleteAnnotationPresentation(String annotationId) async {
+    if (annotationId.isEmpty) {
+      throw ArgumentError.value(
+          annotationId, 'annotationId', 'must not be empty');
+    }
+    return _mutateAnxPresentation(annotationId, (previous, time) {
+      if (previous?.containsKey('resetAt') == true) return null;
+      return <String, dynamic>{
+        'annotationId': annotationId,
+        'updatedAt': time,
+        'resetAt': time,
+      };
+    });
+  }
+
+  Future<Map<String, dynamic>> _anxPresentationDocument() async {
+    final bytes = await canonicalDocument(
+        anxPresentationSyncDomain, anxPresentationDocumentId);
+    return bytes == null
+        ? emptyAnxPresentationDocument()
+        : decodeAnxPresentationDocument(jsonDecode(utf8.decode(bytes)));
+  }
+
+  Future<bool> _mutateAnxPresentation(
+      String annotationId,
+      Map<String, dynamic>? Function(
+              Map<String, dynamic>? previous, String timestamp)
+          mutation) async {
+    return (await database).transaction((txn) async {
+      final rows = await txn.query('shared_documents',
+          columns: ['canonical_state', 'local_revision'],
+          where: 'domain = ? AND document_id = ?',
+          whereArgs: [anxPresentationSyncDomain, anxPresentationDocumentId],
+          limit: 1);
+      final document = rows.isEmpty
+          ? emptyAnxPresentationDocument()
+          : decodeAnxPresentationDocument(jsonDecode(utf8.decode(
+              Uint8List.fromList(
+                  rows.single['canonical_state'] as List<int>))));
+      final entries =
+          (document['presentations'] as List).cast<Map<String, dynamic>>();
+      final previous = entries
+          .where((entry) => entry['annotationId'] == annotationId)
+          .firstOrNull;
+      var instant = now().toUtc();
+      if (previous != null) {
+        final previousTime =
+            DateTime.parse(previous['updatedAt'] as String).toUtc();
+        if (!instant.isAfter(previousTime)) {
+          instant = previousTime.add(const Duration(milliseconds: 1));
+        }
+      }
+      final replacement = mutation(previous, canonicalWireTimestamp(instant));
+      if (replacement == null) return false;
+      entries.removeWhere((entry) => entry['annotationId'] == annotationId);
+      entries.add(replacement);
+      final bytes = Uint8List.fromList(encodeAnxPresentationDocument(document));
+      final revision =
+          rows.isEmpty ? 1 : (rows.single['local_revision'] as int) + 1;
+      final timestamp = canonicalWireTimestamp(instant);
+      await txn.rawInsert('''INSERT INTO shared_documents
+          (domain, document_id, canonical_state, local_revision, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          canonical_state = excluded.canonical_state,
+          local_revision = excluded.local_revision,
+          updated_at = excluded.updated_at''', [
+        anxPresentationSyncDomain,
+        anxPresentationDocumentId,
+        bytes,
+        revision,
+        timestamp,
+      ]);
+      await txn.rawInsert('''INSERT INTO sync_outbox
+          (domain, document_id, local_revision, dirty_since, attempts, last_error)
+        VALUES (?, ?, ?, ?, 0, NULL)
+        ON CONFLICT(domain, document_id) DO UPDATE SET
+          local_revision = excluded.local_revision,
+          dirty_since = excluded.dirty_since,
+          attempts = 0,
+          last_error = NULL''', [
+        anxPresentationSyncDomain,
+        anxPresentationDocumentId,
+        revision,
+        timestamp,
+      ]);
+      await txn.rawInsert('''INSERT INTO sync_metadata
+          (domain, document_id, status)
+        VALUES (?, ?, 'pending')
+        ON CONFLICT(domain, document_id) DO UPDATE SET status = 'pending' ''',
+          [anxPresentationSyncDomain, anxPresentationDocumentId]);
+      return true;
+    });
   }
 
   Future<AnnotationProjectionMetadata?> annotationProjection(

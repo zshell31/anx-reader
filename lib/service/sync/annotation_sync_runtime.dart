@@ -5,6 +5,7 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/enums/sync_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -27,19 +28,41 @@ class AnnotationSyncRuntime {
   final SharedStateDatabase sharedState = SharedStateDatabase();
   final Map<String, Set<void Function()>> _openBookRefresh = {};
   AnnotationSyncCoordinator? _coordinator;
+  AnnotationSyncCoordinator? _presentationCoordinator;
+  final StreamController<void> _statusChanges =
+      StreamController<void>.broadcast();
+  final List<StreamSubscription<void>> _coordinatorStatusSubscriptions = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   Future<void>? _reconfiguring;
   bool _started = false;
 
   AnnotationSyncCoordinator? get coordinator => _coordinator;
-  Stream<void> get statusChanges =>
-      _coordinator?.statusChanges ?? const Stream<void>.empty();
+  AnnotationSyncCoordinator? get presentationCoordinator =>
+      _presentationCoordinator;
+  Stream<void> get statusChanges => _statusChanges.stream;
 
   Future<AnnotationSyncStatus> get status async {
     final coordinator = await _ensureCoordinator();
-    if (coordinator != null) return coordinator.domainStatus;
-    final dirty = (await sharedState.pendingOutbox())
-        .any((entry) => entry.domain == annotationSyncDomain);
+    if (coordinator != null) {
+      final statuses = await Future.wait([
+        coordinator.domainStatus,
+        _presentationCoordinator?.domainStatus ??
+            Future.value(AnnotationSyncStatus.synced),
+      ]);
+      if (statuses.contains(AnnotationSyncStatus.syncing)) {
+        return AnnotationSyncStatus.syncing;
+      }
+      if (statuses.contains(AnnotationSyncStatus.error)) {
+        return AnnotationSyncStatus.error;
+      }
+      if (statuses.contains(AnnotationSyncStatus.pendingOffline)) {
+        return AnnotationSyncStatus.pendingOffline;
+      }
+      return AnnotationSyncStatus.synced;
+    }
+    final dirty = (await sharedState.pendingOutbox()).any((entry) =>
+        entry.domain == annotationSyncDomain ||
+        entry.domain == anxPresentationSyncDomain);
     return dirty
         ? AnnotationSyncStatus.pendingOffline
         : AnnotationSyncStatus.synced;
@@ -91,8 +114,12 @@ class AnnotationSyncRuntime {
 
   Future<void> _performReconfigure() async {
     final old = _coordinator;
+    final oldPresentation = _presentationCoordinator;
     _coordinator = null;
+    _presentationCoordinator = null;
+    await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
+    if (oldPresentation != null) await oldPresentation.close();
     _coordinator = _buildCoordinator();
     unawaited(_runDiscovery());
   }
@@ -104,6 +131,10 @@ class AnnotationSyncRuntime {
     unawaited(_syncTarget(id, localMutation: true));
   }
 
+  void notifyPresentationMutation() {
+    unawaited(_syncPresentation(localMutation: true));
+  }
+
   Future<void> syncNow() => _runDiscovery();
   Future<void> onResume() => _runDiscovery();
   Future<void> onConnectivityRegained() => _runDiscovery();
@@ -111,6 +142,10 @@ class AnnotationSyncRuntime {
   void bestEffortFlush() {
     final coordinator = _coordinator;
     if (coordinator != null) unawaited(coordinator.syncDirtyAnnotations());
+    final presentations = _presentationCoordinator;
+    if (presentations != null) {
+      unawaited(presentations.syncDirtyAnnotations());
+    }
   }
 
   Future<void> openBook(
@@ -163,7 +198,7 @@ class AnnotationSyncRuntime {
       username: config['username'] as String?,
       password: config['password'] as String?,
     );
-    return AnnotationSyncCoordinator(
+    final annotations = AnnotationSyncCoordinator(
       sharedState: sharedState,
       transport: transport,
       reconcileProjection: (fingerprint) =>
@@ -176,6 +211,30 @@ class AnnotationSyncRuntime {
         }
       },
     );
+    _presentationCoordinator = AnnotationSyncCoordinator(
+      sharedState: sharedState,
+      transport: transport,
+      syncDomain: anxPresentationSyncDomain,
+      normalizeDocumentId: (_) => anxPresentationDocumentId,
+      remotePathFor: anxPresentationRemotePath,
+      decodeDocument: decodeAnxPresentationDocument,
+      mergeDocuments: mergeAnxPresentationDocuments,
+      validateDocumentId: (_, id) => id == anxPresentationDocumentId,
+      reconcileProjection: (_) =>
+          AnnotationProjectionReconciler(sharedState).run(),
+      onProjectionChanged: (_, __) {
+        for (final refreshes in _openBookRefresh.values) {
+          for (final refresh in List<void Function()>.from(refreshes)) {
+            refresh();
+          }
+        }
+      },
+    );
+    _coordinatorStatusSubscriptions.addAll([
+      annotations.statusChanges.listen((_) => _emitStatus()),
+      _presentationCoordinator!.statusChanges.listen((_) => _emitStatus()),
+    ]);
+    return annotations;
   }
 
   Future<void> _syncTarget(String fingerprint,
@@ -194,12 +253,29 @@ class AnnotationSyncRuntime {
     }
   }
 
+  Future<void> _syncPresentation({bool localMutation = false}) async {
+    await _ensureCoordinator();
+    final coordinator = _presentationCoordinator;
+    if (coordinator == null || !await _networkPolicyAllowsSync()) return;
+    try {
+      if (localMutation) {
+        await coordinator.notifyDirty(anxPresentationDocumentId);
+      } else {
+        await coordinator.syncBook(anxPresentationDocumentId);
+      }
+    } catch (error, stackTrace) {
+      AnxLog.warning('Anx presentation sync failed: $error\n$stackTrace');
+    }
+  }
+
   Future<void> _runDiscovery() async {
     final coordinator = await _ensureCoordinator();
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
     await Future.wait([
       coordinator.syncDirtyAnnotations(),
       coordinator.pullBooks(await _knownFingerprints()),
+      _presentationCoordinator!.syncDirtyAnnotations(),
+      _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
     ]);
   }
 
@@ -240,10 +316,26 @@ class AnnotationSyncRuntime {
     await _connectivity?.cancel();
     _connectivity = null;
     await _reconfiguring;
+    await _cancelCoordinatorStatusSubscriptions();
     await _coordinator?.close();
+    await _presentationCoordinator?.close();
     _coordinator = null;
+    _presentationCoordinator = null;
     await sharedState.close();
     _started = false;
+  }
+
+  void _emitStatus() {
+    if (!_statusChanges.isClosed) _statusChanges.add(null);
+  }
+
+  Future<void> _cancelCoordinatorStatusSubscriptions() async {
+    final subscriptions =
+        List<StreamSubscription<void>>.from(_coordinatorStatusSubscriptions);
+    _coordinatorStatusSubscriptions.clear();
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
   }
 }
 

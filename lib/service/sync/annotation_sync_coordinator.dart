@@ -38,6 +38,17 @@ typedef AnnotationProjectionChanged = void Function(
 typedef AnnotationRetryScheduler = Timer Function(
     Duration delay, void Function() callback);
 typedef AnnotationLockRetryDelay = Future<void> Function(Duration delay);
+typedef SharedDocumentDecoder = Map<String, dynamic> Function(Object? input);
+typedef SharedDocumentMerger = Map<String, dynamic> Function(
+    Map<String, dynamic> local, Map<String, dynamic> remote);
+typedef SharedDocumentIdValidator = bool Function(
+    Map<String, dynamic> document, String documentId);
+
+bool _annotationDocumentMatchesId(
+    Map<String, dynamic> document, String documentId) {
+  final book = document['book'] as Map<String, dynamic>;
+  return canonicalMd5Fingerprint(book['fingerprint']) == documentId;
+}
 
 /// Annotation-specific, revision-safe WebDAV convergence coordinator.
 ///
@@ -47,6 +58,12 @@ typedef AnnotationLockRetryDelay = Future<void> Function(Duration delay);
 class AnnotationSyncCoordinator {
   final SharedStateDatabase sharedState;
   final AnnotationWebDavTransport transport;
+  final String syncDomain;
+  final String Function(String documentId) normalizeDocumentId;
+  final List<String> Function(String documentId) remotePathFor;
+  final SharedDocumentDecoder decodeDocument;
+  final SharedDocumentMerger mergeDocuments;
+  final SharedDocumentIdValidator validateDocumentId;
   final AnnotationProjectionCallback reconcileProjection;
   final AnnotationProjectionChanged? onProjectionChanged;
   final int maxPreconditionRetries;
@@ -70,6 +87,12 @@ class AnnotationSyncCoordinator {
     required this.sharedState,
     required this.transport,
     required this.reconcileProjection,
+    this.syncDomain = annotationSyncDomain,
+    String Function(String documentId)? normalizeDocumentId,
+    List<String> Function(String documentId)? remotePathFor,
+    SharedDocumentDecoder? decodeDocument,
+    SharedDocumentMerger? mergeDocuments,
+    SharedDocumentIdValidator? validateDocumentId,
     this.onProjectionChanged,
     this.maxPreconditionRetries = defaultAnnotationPreconditionRetries,
     this.maxLockContentionRetries = defaultAnnotationLockContentionRetries,
@@ -85,7 +108,12 @@ class AnnotationSyncCoordinator {
       Duration(minutes: 1),
     ],
     AnnotationRetryScheduler? scheduleRetry,
-  })  : waitForLockRetry = waitForLockRetry ?? Future<void>.delayed,
+  })  : normalizeDocumentId = normalizeDocumentId ?? canonicalMd5Fingerprint,
+        remotePathFor = remotePathFor ?? annotationDocumentRemotePath,
+        decodeDocument = decodeDocument ?? decodeAnnotationDocument,
+        mergeDocuments = mergeDocuments ?? mergeAnnotationDocuments,
+        validateDocumentId = validateDocumentId ?? _annotationDocumentMatchesId,
+        waitForLockRetry = waitForLockRetry ?? Future<void>.delayed,
         scheduleRetry =
             scheduleRetry ?? ((delay, callback) => Timer(delay, callback)) {
     if (maxPreconditionRetries < 0) {
@@ -109,7 +137,7 @@ class AnnotationSyncCoordinator {
           : AnnotationSyncStatus.error;
     }
     final pending = (await sharedState.pendingOutbox())
-        .where((entry) => entry.domain == annotationSyncDomain);
+        .where((entry) => entry.domain == syncDomain);
     var hasPending = false;
     for (final entry in pending) {
       hasPending = true;
@@ -123,9 +151,9 @@ class AnnotationSyncCoordinator {
   }
 
   Future<AnnotationSyncStatus> status(String fingerprint) async {
-    final id = canonicalMd5Fingerprint(fingerprint);
+    final id = normalizeDocumentId(fingerprint);
     if (_active.contains(id)) return AnnotationSyncStatus.syncing;
-    final outbox = await sharedState.outboxEntry(annotationSyncDomain, id);
+    final outbox = await sharedState.outboxEntry(syncDomain, id);
     if (outbox == null) return AnnotationSyncStatus.synced;
     final failure = _lastFailures[id];
     if (failure == null && outbox.lastError != null) {
@@ -145,7 +173,7 @@ class AnnotationSyncCoordinator {
   /// pass so mutations arriving during GET/PUT cannot be stranded.
   Future<void> syncBook(String fingerprint) {
     if (_closing) throw StateError('Annotation sync coordinator is closed');
-    final id = canonicalMd5Fingerprint(fingerprint);
+    final id = normalizeDocumentId(fingerprint);
     _requestedGeneration[id] = (_requestedGeneration[id] ?? 0) + 1;
     final current = _flights[id];
     if (current != null) return current;
@@ -155,7 +183,7 @@ class AnnotationSyncCoordinator {
   }
 
   Future<void> notifyDirty(String fingerprint) {
-    final id = canonicalMd5Fingerprint(fingerprint);
+    final id = normalizeDocumentId(fingerprint);
     _networkAttempts.remove(id);
     return syncBook(id);
   }
@@ -164,7 +192,7 @@ class AnnotationSyncCoordinator {
 
   Future<void> syncDirtyAnnotations() async {
     final pending = (await sharedState.pendingOutbox())
-        .where((entry) => entry.domain == annotationSyncDomain)
+        .where((entry) => entry.domain == syncDomain)
         .toList(growable: false);
     await Future.wait(pending.map((entry) async {
       try {
@@ -202,8 +230,7 @@ class AnnotationSyncCoordinator {
           if (_requestedGeneration[id] != generation) continue;
           rethrow;
         }
-        final dirty =
-            await sharedState.outboxEntry(annotationSyncDomain, id) != null;
+        final dirty = await sharedState.outboxEntry(syncDomain, id) != null;
         if (_requestedGeneration[id] == generation && !dirty) break;
       }
       _lastFailures.remove(id);
@@ -224,19 +251,19 @@ class AnnotationSyncCoordinator {
   }
 
   Future<void> _singlePass(String id) async {
-    final entry = await sharedState.outboxEntry(annotationSyncDomain, id);
+    final entry = await sharedState.outboxEntry(syncDomain, id);
     if (entry == null) {
       await _pullClean(id);
       return;
     }
-    final work = await sharedState.beginSync(
-        annotationSyncDomain, id, entry.localRevision);
+    final work =
+        await sharedState.beginSync(syncDomain, id, entry.localRevision);
     if (work == null) return;
     try {
       await _pushDirty(work);
     } catch (error) {
       await sharedState.recordFailure(
-          annotationSyncDomain, id, work.localRevision, error);
+          syncDomain, id, work.localRevision, error);
       rethrow;
     }
   }
@@ -246,8 +273,7 @@ class AnnotationSyncCoordinator {
     var lockContentions = 0;
     var conditionalCreateRejected = false;
     while (true) {
-      final remote =
-          await transport.get(annotationDocumentRemotePath(work.documentId));
+      final remote = await transport.get(remotePathFor(work.documentId));
       if (remote == null && conditionalCreateRejected) {
         try {
           await _writeUnderCreateLock(work.documentId, work.localRevision,
@@ -271,8 +297,8 @@ class AnnotationSyncCoordinator {
       }
 
       await _reconcile(work.documentId);
-      final beforePut = await sharedState.documentSnapshot(
-          annotationSyncDomain, work.documentId);
+      final beforePut =
+          await sharedState.documentSnapshot(syncDomain, work.documentId);
       if (beforePut == null ||
           beforePut.localRevision != work.localRevision ||
           !beforePut.dirty) {
@@ -282,13 +308,11 @@ class AnnotationSyncCoordinator {
       try {
         final write = remote == null
             ? await transport.create(
-                annotationDocumentRemotePath(work.documentId), merged.bytes)
+                remotePathFor(work.documentId), merged.bytes)
             : await transport.replace(
-                annotationDocumentRemotePath(work.documentId),
-                merged.bytes,
-                remote.etag);
+                remotePathFor(work.documentId), merged.bytes, remote.etag);
         await sharedState.markConverged(
-            annotationSyncDomain, work.documentId, work.localRevision,
+            syncDomain, work.documentId, work.localRevision,
             strongEtag: write.etag);
         return;
       } on WebDavPreconditionFailed {
@@ -309,7 +333,7 @@ class AnnotationSyncCoordinator {
     var lockContentions = 0;
     var conditionalCreateRejected = false;
     while (true) {
-      final remote = await transport.get(annotationDocumentRemotePath(id));
+      final remote = await transport.get(remotePathFor(id));
       if (remote == null && conditionalCreateRejected) {
         try {
           await _writeUnderCreateLock(id, null, expectDirty: false);
@@ -322,8 +346,7 @@ class AnnotationSyncCoordinator {
         }
       }
       final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
-      final local =
-          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      final local = await sharedState.documentSnapshot(syncDomain, id);
       if (local == null && remoteDocument == null) return;
 
       final merged = await _mergeRemoteSafely(id, remoteDocument,
@@ -335,13 +358,12 @@ class AnnotationSyncCoordinator {
           _sameCanonical(
               merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
         await sharedState.markRemoteConverged(
-            annotationSyncDomain, id, merged.snapshot.localRevision,
+            syncDomain, id, merged.snapshot.localRevision,
             strongEtag: remote.etag);
         return;
       }
 
-      final beforePut =
-          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      final beforePut = await sharedState.documentSnapshot(syncDomain, id);
       if (beforePut == null ||
           beforePut.localRevision != merged.snapshot.localRevision ||
           beforePut.dirty) {
@@ -349,12 +371,11 @@ class AnnotationSyncCoordinator {
       }
       try {
         final write = remote == null
-            ? await transport.create(
-                annotationDocumentRemotePath(id), merged.bytes)
+            ? await transport.create(remotePathFor(id), merged.bytes)
             : await transport.replace(
-                annotationDocumentRemotePath(id), merged.bytes, remote.etag);
+                remotePathFor(id), merged.bytes, remote.etag);
         await sharedState.markRemoteConverged(
-            annotationSyncDomain, id, merged.snapshot.localRevision,
+            syncDomain, id, merged.snapshot.localRevision,
             strongEtag: write.etag);
         return;
       } on WebDavPreconditionFailed {
@@ -372,7 +393,7 @@ class AnnotationSyncCoordinator {
 
   Future<void> _writeUnderCreateLock(String id, int? expectedRevision,
       {required bool expectDirty}) async {
-    final path = annotationDocumentRemotePath(id);
+    final path = remotePathFor(id);
     final lock = await transport.lock(path);
     Object? primaryFailure;
     var putSucceeded = false;
@@ -393,8 +414,7 @@ class AnnotationSyncCoordinator {
       }
 
       await _reconcile(id);
-      final beforePut =
-          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      final beforePut = await sharedState.documentSnapshot(syncDomain, id);
       if (beforePut == null ||
           beforePut.localRevision != targetRevision ||
           beforePut.dirty != expectDirty) {
@@ -404,12 +424,11 @@ class AnnotationSyncCoordinator {
       final write = await transport.putLocked(path, merged.bytes, lock);
       putSucceeded = true;
       if (expectDirty) {
-        await sharedState.markConverged(
-            annotationSyncDomain, id, beforePut.localRevision,
+        await sharedState.markConverged(syncDomain, id, beforePut.localRevision,
             strongEtag: write.etag);
       } else {
         await sharedState.markRemoteConverged(
-            annotationSyncDomain, id, beforePut.localRevision,
+            syncDomain, id, beforePut.localRevision,
             strongEtag: write.etag);
       }
     } catch (error, stackTrace) {
@@ -444,42 +463,38 @@ class AnnotationSyncCoordinator {
       String id, Map<String, dynamic>? remote,
       {String? strongEtag}) async {
     while (true) {
-      final snapshot =
-          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      final snapshot = await sharedState.documentSnapshot(syncDomain, id);
       if (snapshot == null && remote == null) return null;
       final local = snapshot == null ? null : _decodeLocal(snapshot);
       final document = local == null
           ? remote!
           : remote == null
               ? local
-              : mergeAnnotationDocuments(local, remote);
+              : mergeDocuments(local, remote);
       final bytes = Uint8List.fromList(utf8.encode(canonicalJson(document)));
       final applied = await sharedState.applyRemoteMerge(
-        annotationSyncDomain,
+        syncDomain,
         id,
         snapshot?.localRevision,
         bytes,
         strongEtag: strongEtag,
       );
       if (!applied) continue;
-      final current =
-          await sharedState.documentSnapshot(annotationSyncDomain, id);
+      final current = await sharedState.documentSnapshot(syncDomain, id);
       if (current == null) throw StateError('Remote merge disappeared');
       return _RemoteMerge(current, bytes);
     }
   }
 
   Map<String, dynamic> _decodeLocal(SharedDocumentSnapshot snapshot) =>
-      decodeAnnotationDocument(
-          jsonDecode(utf8.decode(snapshot.canonicalState)));
+      decodeDocument(jsonDecode(utf8.decode(snapshot.canonicalState)));
 
   Map<String, dynamic> _decodeRemote(WebDavObject remote, String id) {
     try {
-      final document = decodeAnnotationDocument(
+      final document = decodeDocument(
           jsonDecode(utf8.decode(remote.body, allowMalformed: false)));
-      final book = document['book'] as Map<String, dynamic>;
-      if (canonicalMd5Fingerprint(book['fingerprint']) != id) {
-        throw const FormatException('book fingerprint does not match path');
+      if (!validateDocumentId(document, id)) {
+        throw const FormatException('document identity does not match path');
       }
       return document;
     } catch (error) {
@@ -499,7 +514,7 @@ class AnnotationSyncCoordinator {
   Future<void> _scheduleNetworkRetry(String id, Object error) async {
     if (_closing || !_isRetryableNetworkFailure(error)) return;
     if (networkBackoff.isEmpty || _retryTimers.containsKey(id)) return;
-    final entry = await sharedState.outboxEntry(annotationSyncDomain, id);
+    final entry = await sharedState.outboxEntry(syncDomain, id);
     final durableAttempts = entry?.attempts ?? 0;
     final memoryAttempts = _networkAttempts[id] ?? 0;
     final recordedAttempts =

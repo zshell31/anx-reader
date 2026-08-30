@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -285,10 +286,10 @@ void main() {
     setUp(() async => directory = await temporaryDirectory());
     tearDown(() async => directory.delete(recursive: true));
 
-    test('fresh creation and reopening retain explicit schema v2', () async {
+    test('fresh creation and reopening retain explicit schema v3', () async {
       final path = p.join(directory.path, 'shared_state.db');
       var store = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await store.schemaVersion, 2);
+      expect(await store.schemaVersion, 3);
       final tables = await (await store.database).rawQuery(
           "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
       expect(
@@ -304,7 +305,7 @@ void main() {
       await store.close();
 
       store = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await store.schemaVersion, 2);
+      expect(await store.schemaVersion, 3);
       await store.close();
     });
 
@@ -336,7 +337,7 @@ void main() {
       const schema = SharedStateSchema();
       final newer = await databaseFactoryFfi.openDatabase(path,
           options: OpenDatabaseOptions(
-              version: 3, onCreate: (db, _) => schema.create(db)));
+              version: 4, onCreate: (db, _) => schema.create(db)));
       await newer.close();
 
       final store =
@@ -385,7 +386,8 @@ void main() {
         () async {
       await store.putAnnotationDocument(annotationDocument());
       final before = await store.canonicalDocument('annotations', fingerprint);
-      final outbox = (await store.pendingOutbox()).single;
+      final outbox = (await store.pendingOutbox())
+          .singleWhere((entry) => entry.domain == 'annotations');
 
       await store.putAnnotationPresentation(const AnnotationPresentation(
         annotationId: 'annotation-a',
@@ -395,9 +397,15 @@ void main() {
 
       expect(await store.canonicalDocument('annotations', fingerprint),
           orderedEquals(before!));
-      final after = (await store.pendingOutbox()).single;
+      final entries = await store.pendingOutbox();
+      final after =
+          entries.singleWhere((entry) => entry.domain == 'annotations');
       expect(after.localRevision, outbox.localRevision);
       expect(after.attempts, outbox.attempts);
+      expect(
+          entries.singleWhere(
+              (entry) => entry.domain == anxPresentationSyncDomain),
+          isNotNull);
     });
 
     test('v1 migration adds the sidecar without changing canonical state',
@@ -412,11 +420,69 @@ void main() {
       await legacy.close();
 
       legacy = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await legacy.schemaVersion, 2);
+      expect(await legacy.schemaVersion, 3);
       expect(await legacy.annotationPresentations(), isEmpty);
       expect(await legacy.canonicalDocument('annotations', fingerprint),
           orderedEquals(before!));
       await legacy.close();
+    });
+
+    test('v2 sidecar migrates to dirty synchronized presentation document',
+        () async {
+      final path = p.join(directory.path, 'v2-presentation.db');
+      var legacy = SharedStateDatabase(
+        path: path,
+        factory: databaseFactoryFfi,
+        schema: SharedStateSchema(
+          version: 2,
+          migrations: {2: currentSharedStateSchema.migrations[2]!},
+        ),
+      );
+      final database = await legacy.database;
+      await database.insert('annotation_presentations', {
+        'annotation_id': 'annotation-a',
+        'style': 'underline',
+        'color': '00ff00',
+      });
+      await legacy.close();
+
+      legacy = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
+      expect(await legacy.schemaVersion, 3);
+      final migrated = await legacy.annotationPresentation('annotation-a');
+      expect(migrated?.style, AnnotationPresentationStyle.underline);
+      expect(migrated?.color, '00ff00');
+      final outbox = (await legacy.pendingOutbox()).single;
+      expect(outbox.domain, anxPresentationSyncDomain);
+      expect(outbox.documentId, anxPresentationDocumentId);
+      await legacy.close();
+    });
+
+    test('reset is durable, independently dirty, and restores defaults',
+        () async {
+      await store.putAnnotationPresentation(const AnnotationPresentation(
+        annotationId: 'annotation-a',
+        style: AnnotationPresentationStyle.highlight,
+        color: 'red',
+      ));
+      expect(await store.deleteAnnotationPresentation('annotation-a'), isTrue);
+      expect(await store.deleteAnnotationPresentation('annotation-a'), isFalse);
+      expect(await store.deleteAnnotationPresentation('remote-unknown'), isTrue,
+          reason: 'reset must suppress an explicit value not yet pulled');
+      expect(await store.annotationPresentation('annotation-a'), isNull);
+      await store.close();
+
+      store = SharedStateDatabase(
+          path: p.join(directory.path, 'shared_state.db'),
+          factory: databaseFactoryFfi);
+      expect(await store.annotationPresentation('annotation-a'), isNull);
+      final bytes = await store.canonicalDocument(
+          anxPresentationSyncDomain, anxPresentationDocumentId);
+      final document =
+          decodeAnxPresentationDocument(jsonDecode(utf8.decode(bytes!)));
+      expect((document['presentations'] as List),
+          everyElement(contains('resetAt')));
+      expect((await store.pendingOutbox()).single.domain,
+          anxPresentationSyncDomain);
     });
   });
 }

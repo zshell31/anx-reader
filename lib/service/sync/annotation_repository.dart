@@ -133,6 +133,7 @@ class AnnotationRepository {
   final Uuid uuid;
   final DateTime Function() now;
   final void Function(String fingerprint)? onCanonicalMutation;
+  final void Function()? onPresentationMutation;
   late final AnnotationProjectionReconciler _reconciler;
   Future<void> _serial = Future<void>.value();
 
@@ -142,6 +143,7 @@ class AnnotationRepository {
     Uuid? uuid,
     DateTime Function()? now,
     this.onCanonicalMutation,
+    this.onPresentationMutation,
     AnnotationProjectionReconciler? reconciler,
     NativeAnnotationDefaults Function()? projectionDefaults,
   })  : native = native ?? DaoNativeAnnotationProjectionStore(),
@@ -242,7 +244,7 @@ class AnnotationRepository {
         );
         await _commit(fingerprint, document);
         if (input.persistPresentation) {
-          await sharedState.putAnnotationPresentation(AnnotationPresentation(
+          await _putPresentation(AnnotationPresentation(
             annotationId: annotationId,
             style: input.type == 'underline'
                 ? AnnotationPresentationStyle.underline
@@ -553,7 +555,7 @@ class AnnotationRepository {
       annotation['deletedAt'] = timestamp;
       await _commit(binding.fingerprint, binding.document);
     }
-    await sharedState.deleteAnnotationPresentation(ref.annotationId);
+    await _resetPresentation(ref.annotationId);
     return _refreshCanonical(ref);
   }
 
@@ -567,7 +569,7 @@ class AnnotationRepository {
     if (type != 'highlight' && type != 'underline') {
       throw ArgumentError.value(type, 'type', 'must be highlight or underline');
     }
-    await sharedState.putAnnotationPresentation(AnnotationPresentation(
+    await _putPresentation(AnnotationPresentation(
       annotationId: ref.annotationId,
       style: type == 'underline'
           ? AnnotationPresentationStyle.underline
@@ -743,7 +745,7 @@ class AnnotationRepository {
       if (annotationId == null || annotationId.isEmpty) {
         throw StateError('Presentation is not bound to canonical annotation');
       }
-      await sharedState.putAnnotationPresentation(AnnotationPresentation(
+      await _putPresentation(AnnotationPresentation(
         annotationId: annotationId,
         style: type == 'underline'
             ? AnnotationPresentationStyle.underline
@@ -764,7 +766,7 @@ class AnnotationRepository {
       annotation['deletedAt'] = timestamp;
       await _commit(binding.fingerprint, binding.document);
     }
-    await sharedState.deleteAnnotationPresentation(binding.annotationId);
+    await _resetPresentation(binding.annotationId);
     await _project(binding.fingerprint, binding.annotationId);
   }
 
@@ -891,6 +893,18 @@ class AnnotationRepository {
     }
     return canonicalWireTimestamp(candidate);
   }
+
+  Future<void> _putPresentation(AnnotationPresentation presentation) async {
+    if (await sharedState.putAnnotationPresentation(presentation)) {
+      onPresentationMutation?.call();
+    }
+  }
+
+  Future<void> _resetPresentation(String annotationId) async {
+    if (await sharedState.deleteAnnotationPresentation(annotationId)) {
+      onPresentationMutation?.call();
+    }
+  }
 }
 
 class _CanonicalBinding {
@@ -906,4 +920,5 @@ class _CanonicalBinding {
 final annotationRepository = AnnotationRepository(
   SharedStateDatabase(),
   onCanonicalMutation: annotationSyncRuntime.notifyLocalMutation,
+  onPresentationMutation: annotationSyncRuntime.notifyPresentationMutation,
 );

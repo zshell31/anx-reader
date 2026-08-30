@@ -34,8 +34,10 @@ void main() {
         contains("final id = annotation['annotation']['id'] as String"));
     expect(player, contains('annotationId: id'));
     expect(player, isNot(contains('annotationRefForNativeId')));
-    expect(excerpt,
-        contains('annotationRepository.tombstoneAnnotation(handle.ref)'));
+    expect(excerpt, contains('annotationRepository.tombstoneAnnotation(ref)'));
+    expect(foliate,
+        contains('annotationForRemoval(this.annotationsById, id)'));
+    expect(foliate, isNot(contains('this.annotationsByValue.get(cfi)')));
   });
 
   test('bookmark creation does not dedupe against a selection at the same CFI',

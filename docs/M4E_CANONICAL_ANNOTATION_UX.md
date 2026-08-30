@@ -128,7 +128,7 @@ At the end of every M4E session:
 ### M4E.1 — Canonical annotation read model and semantic helpers
 
 - Status: COMPLETE
-- Commit SHA: Pending this phase commit
+- Commit SHA: `ff25b491`
 - Important files changed: `lib/service/sync/annotation_read_model.dart`,
   `lib/service/sync/annotation_projection_reconciler.dart`,
   `lib/service/sync/annotation_repository.dart`,
@@ -165,21 +165,45 @@ At the end of every M4E session:
 
 ### M4E.2 — Local annotation presentation sidecar
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Presentation is keyed by canonical annotation
-  UUID and stored outside canonical protocol bytes/outbox state.
-- Tests run: —
-- Discovered limitations or follow-up work: Existing `BookNote.type/color` must
-  be migrated or reused without collapsing same-CFI annotations.
+- Status: COMPLETE
+- Commit SHA: Pending this phase commit
+- Important files changed: `lib/service/sync/shared_state_database.dart`,
+  `lib/service/sync/annotation_repository.dart`,
+  `lib/service/sync/annotation_projection_reconciler.dart`,
+  `test/service/sync/shared_state_database_test.dart`,
+  `test/service/sync/annotation_repository_test.dart`, and
+  `test/service/sync/annotation_projection_reconciliation_test.dart`
+- Architectural decisions made: Shared-state schema v2 adds the local-only
+  `annotation_presentations` table keyed solely by canonical annotation UUID.
+  The table stores only highlight/underline style and color, has no canonical
+  document foreign key or outbox path, and stores no semantic timestamp. New
+  selections write canonical state first and then their sidecar. Presentation
+  edits update the sidecar and native compatibility projection without touching
+  canonical bytes. Reconciliation treats the sidecar as authoritative, performs
+  a one-time migration from an existing bound `BookNote` when the sidecar is
+  absent, and otherwise applies current Anx preferences without persisting a
+  default. Tombstones remove their orphaned local presentation.
+- Tests run: `dart format` on all touched Dart files; targeted `flutter analyze`
+  on all touched production/test files (no issues); focused `flutter test` for
+  `shared_state_database_test.dart`, `annotation_repository_test.dart`,
+  `annotation_projection_reconciliation_test.dart`, and
+  `annotation_read_model_test.dart` (53 passed); full `flutter test
+  test/service/sync` including protocol conformance, repository, synchronization,
+  runtime, renderer refresh, and WebDAV transport coverage (161 passed).
+- Discovered limitations or follow-up work: Native `BookNote.type/color` remains
+  a compatibility mirror until the direct renderer and legacy-removal phases.
+  Bookmark percentage remains in that compatibility row and is intentionally
+  not modeled as highlight presentation; its final navigation representation
+  must be resolved during M4E.8/M4E.10. Existing presentation migration occurs
+  when a bound representable annotation is reconciled, because the physically
+  separate shared-state schema migration cannot directly read the app database.
 - Acceptance checklist:
-  - [ ] Persist highlight/underline and color locally by annotation UUID.
-  - [ ] Apply current Anx preferences when no sidecar exists.
-  - [ ] Ensure presentation writes do not alter canonical bytes, revisions, or
+  - [x] Persist highlight/underline and color locally by annotation UUID.
+  - [x] Apply current Anx preferences when no sidecar exists.
+  - [x] Ensure presentation writes do not alter canonical bytes, revisions, or
     semantic timestamps.
-  - [ ] Migrate relevant existing local presentation.
-  - [ ] Add migration and repository tests.
+  - [x] Migrate relevant existing local presentation.
+  - [x] Add migration and repository tests.
 
 ### M4E.3 — Explicit SelectionSession state machine
 
@@ -359,17 +383,17 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 1 of 11 implementation phases
+- Completed submilestones: 2 of 11 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.1 — Canonical annotation read model and semantic helpers (pending its phase commit)
+Last completed submilestone: M4E.2 — Local annotation presentation sidecar (pending its phase commit)
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last commit: `6aeed3d3 docs: add M4E canonical annotation UX plan`
-Repository state: M4E.1 implementation, tests, and this progress update are ready for their independent commit
-Next submilestone: M4E.2 — Local annotation presentation sidecar
-Next concrete tasks: Commit M4E.1, then inspect the application database migration framework, shared-state schema migration conventions, annotation preference defaults, and legacy BookNote presentation/bootstrap paths; design a UUID-keyed local sidecar that migrates type/color without dirtying canonical state
+Last commit: `ff25b491 feat: add canonical annotation read model`
+Repository state: M4E.2 implementation, migration, tests, and this progress update are ready for their independent commit
+Next submilestone: M4E.3 — Explicit SelectionSession state machine
+Next concrete tasks: Commit M4E.2, then map every selection event/message and overlay lifecycle transition in `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `lib/page/book_player/epub_player.dart`, and the context-menu widgets; identify configured Foliate JS test commands; introduce generation-scoped IDLE/SELECTED/ACTIONS_VISIBLE transitions without disrupting Android native handles
 Known failing tests: None
 Known limitations: Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `lib/service/sync/shared_state_database.dart`, `lib/dao/database.dart`, `lib/dao/book_note.dart`, `lib/service/sync/legacy_annotation_bootstrap.dart`, `lib/service/sync/annotation_projection_reconciler.dart`, `lib/config/shared_preference_provider.dart`, and `test/service/sync/shared_state_database_test.dart`
+Important files to inspect next: `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `assets/foliate-js/package.json`, `lib/page/book_player/epub_player.dart`, `lib/widgets/context_menu/context_menu.dart`, `lib/widgets/context_menu/excerpt_menu.dart`, and any existing reader bridge/selection tests

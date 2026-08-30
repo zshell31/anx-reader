@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -218,6 +219,9 @@ void main() {
       'title': 'Book',
       'author': 'Author',
     });
+    final presentation = await shared.annotationPresentation(id);
+    expect(presentation?.style, AnnotationPresentationStyle.underline);
+    expect(presentation?.color, 'ff0000');
     expect(shared.events, ['canonical']);
     expect(native.events, ['insert']);
     final outbox = await shared.pendingOutbox();
@@ -323,6 +327,9 @@ void main() {
     expect((await shared.pendingOutbox()).single.localRevision, revision);
     expect(recolored.type, 'underline');
     expect(recolored.color, '00ff00');
+    var sidecar = await shared.annotationPresentation(note.sharedAnnotationId!);
+    expect(sidecar?.style, AnnotationPresentationStyle.underline);
+    expect(sidecar?.color, '00ff00');
 
     final retyped =
         await repository.updatePresentation(note.id!, 'highlight', '00ff00');
@@ -332,6 +339,9 @@ void main() {
     expect((await shared.pendingOutbox()).single.localRevision, revision);
     expect(retyped.type, 'highlight');
     expect(retyped.updateTime, note.updateTime);
+    sidecar = await shared.annotationPresentation(note.sharedAnnotationId!);
+    expect(sidecar?.style, AnnotationPresentationStyle.highlight);
+    expect(sidecar?.color, '00ff00');
   });
 
   test('bookmark creation is semantic but percentage stays native-only',
@@ -358,6 +368,8 @@ void main() {
         (await shared.annotationDocument(fingerprint))!,
         note.sharedAnnotationId!);
     expect(deleted['deletedAt'], isNotNull);
+    expect(
+        await shared.annotationPresentation(note.sharedAnnotationId!), isNull);
     expect(native.notes, isEmpty);
   });
 

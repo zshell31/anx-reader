@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -352,6 +353,11 @@ void main() {
           native: native, defaults: defaults);
       await reconciler.run();
       expect(native.notes.single.id, 10);
+      expect(native.notes.single.type, 'highlight');
+      expect(native.notes.single.color, '66CCFF');
+      expect(await shared.annotationPresentation('a'), isNull,
+          reason:
+              'current defaults must remain dynamic when no sidecar exists');
 
       native.notes.clear();
       native.nextNativeId = 57;
@@ -416,9 +422,36 @@ void main() {
       expect(native.notes.single.readerNote, 'newer');
       expect(native.notes.single.type, 'underline');
       expect(native.notes.single.color, 'local-red');
+      final sidecar = await shared.annotationPresentation('a');
+      expect(sidecar?.style, AnnotationPresentationStyle.underline);
+      expect(sidecar?.color, 'local-red');
       expect((await reconciler.run()).nativeWrites, 0);
       final canonical = await shared.annotationDocument(fingerprint);
       expect(canonical!['annotations'].single['enrichments'], hasLength(3));
+    });
+
+    test('stored sidecar overrides stale native presentation', () async {
+      await shared.putAnnotationDocument(document([annotation('a')]));
+      await shared.putAnnotationPresentation(const AnnotationPresentation(
+        annotationId: 'a',
+        style: AnnotationPresentationStyle.highlight,
+        color: 'sidecar-green',
+      ));
+      final native = FakeNativeStore(
+        books: [book(7)],
+        notes: [
+          note(9, 7, type: 'underline', color: 'native-red', sharedId: 'a'),
+        ],
+      );
+
+      expect(
+          (await AnnotationProjectionReconciler(shared,
+                      native: native, defaults: defaults)
+                  .run())
+              .updated,
+          1);
+      expect(native.notes.single.type, 'highlight');
+      expect(native.notes.single.color, 'sidecar-green');
     });
 
     test('tombstoned personal note clears readerNote without canonical loss',
@@ -459,12 +492,18 @@ void main() {
         () async {
       await shared.putAnnotationDocument(
           document([annotation('a', deletedAt: updated)]));
+      await shared.putAnnotationPresentation(const AnnotationPresentation(
+        annotationId: 'a',
+        style: AnnotationPresentationStyle.underline,
+        color: 'local-red',
+      ));
       final native = FakeNativeStore(
           books: [book(7)], notes: [note(10, 7, sharedId: 'a')]);
       final reconciler = AnnotationProjectionReconciler(shared,
           native: native, defaults: defaults);
       expect((await reconciler.run()).deleted, 1);
       expect(native.notes, isEmpty);
+      expect(await shared.annotationPresentation('a'), isNull);
       expect((await reconciler.run()).nativeWrites, 0);
       expect(
           (await shared.annotationDocument(fingerprint))!['annotations']

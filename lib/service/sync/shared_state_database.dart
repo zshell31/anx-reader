@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -13,6 +14,18 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 enum SharedSyncStatus { synced, pending, syncing, error }
 
 typedef SharedStateMigration = Future<void> Function(DatabaseExecutor db);
+
+Future<void> _createAnnotationPresentations(DatabaseExecutor db) =>
+    db.execute('''CREATE TABLE annotation_presentations (
+      annotation_id TEXT PRIMARY KEY,
+      style TEXT NOT NULL CHECK(style IN ('highlight', 'underline')),
+      color TEXT NOT NULL CHECK(length(color) > 0)
+    )''');
+
+const currentSharedStateSchema = SharedStateSchema(
+  version: 2,
+  migrations: {2: _createAnnotationPresentations},
+);
 
 /// Versioning policy for the physically independent shared-state database.
 ///
@@ -74,6 +87,7 @@ class SharedStateSchema {
       canonical_hash TEXT,
       last_error TEXT
     )''');
+    if (version >= 2) await _createAnnotationPresentations(db);
   }
 
   Future<void> upgrade(
@@ -203,7 +217,7 @@ class SharedStateDatabase {
   Database? _database;
 
   SharedStateDatabase(
-      {this.path, this.factory, this.schema = const SharedStateSchema()});
+      {this.path, this.factory, this.schema = currentSharedStateSchema});
 
   Future<Database> get database async => _database ??= await _open();
 
@@ -642,6 +656,68 @@ class SharedStateDatabase {
           'imported_at': canonicalWireTimestamp(DateTime.now()),
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<AnnotationPresentation?> annotationPresentation(
+      String annotationId) async {
+    if (annotationId.isEmpty) {
+      throw ArgumentError.value(
+          annotationId, 'annotationId', 'must not be empty');
+    }
+    final rows = await (await database).query('annotation_presentations',
+        where: 'annotation_id = ?', whereArgs: [annotationId], limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return AnnotationPresentation(
+      annotationId: row['annotation_id'] as String,
+      style: AnnotationPresentationStyle.values.byName(row['style'] as String),
+      color: row['color'] as String,
+    );
+  }
+
+  Future<Map<String, AnnotationPresentation>> annotationPresentations() async {
+    final rows = await (await database)
+        .query('annotation_presentations', orderBy: 'annotation_id');
+    return Map.unmodifiable({
+      for (final row in rows)
+        row['annotation_id'] as String: AnnotationPresentation(
+          annotationId: row['annotation_id'] as String,
+          style:
+              AnnotationPresentationStyle.values.byName(row['style'] as String),
+          color: row['color'] as String,
+        ),
+    });
+  }
+
+  /// Writes only client-local style/color state. This table has no trigger or
+  /// foreign key into canonical documents and never touches the sync outbox.
+  Future<bool> putAnnotationPresentation(
+      AnnotationPresentation presentation) async {
+    if (presentation.annotationId.isEmpty ||
+        presentation.color.trim().isEmpty) {
+      throw ArgumentError('Annotation presentation identity/color is required');
+    }
+    final previous = await annotationPresentation(presentation.annotationId);
+    if (previous != null &&
+        previous.style == presentation.style &&
+        previous.color == presentation.color) {
+      return false;
+    }
+    await (await database).insert(
+      'annotation_presentations',
+      {
+        'annotation_id': presentation.annotationId,
+        'style': presentation.style.name,
+        'color': presentation.color,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return true;
+  }
+
+  Future<void> deleteAnnotationPresentation(String annotationId) async {
+    await (await database).delete('annotation_presentations',
+        where: 'annotation_id = ?', whereArgs: [annotationId]);
   }
 
   Future<AnnotationProjectionMetadata?> annotationProjection(

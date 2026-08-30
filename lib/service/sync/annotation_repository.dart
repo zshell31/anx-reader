@@ -154,6 +154,13 @@ class AnnotationRepository {
           updateTime: DateTime.parse(timestamp),
         );
         await _commit(fingerprint, document);
+        await sharedState.putAnnotationPresentation(AnnotationPresentation(
+          annotationId: annotationId,
+          style: input.type == 'underline'
+              ? AnnotationPresentationStyle.underline
+              : AnnotationPresentationStyle.highlight,
+          color: input.color,
+        ));
         return (await _project(fingerprint, annotationId,
             localPresentation: presentation))!;
       });
@@ -329,6 +336,19 @@ class AnnotationRepository {
       // Presentation does not advance semantic projection time.
       updateTime: existing.updateTime,
     );
+    if (existing.type != 'bookmark') {
+      final annotationId = existing.sharedAnnotationId;
+      if (annotationId == null || annotationId.isEmpty) {
+        throw StateError('Presentation is not bound to canonical annotation');
+      }
+      await sharedState.putAnnotationPresentation(AnnotationPresentation(
+        annotationId: annotationId,
+        style: type == 'underline'
+            ? AnnotationPresentationStyle.underline
+            : AnnotationPresentationStyle.highlight,
+        color: color,
+      ));
+    }
     await native.updateProjection(updated);
     return updated;
   }
@@ -342,6 +362,7 @@ class AnnotationRepository {
       annotation['deletedAt'] = timestamp;
       await _commit(binding.fingerprint, binding.document);
     }
+    await sharedState.deleteAnnotationPresentation(binding.annotationId);
     await _project(binding.fingerprint, binding.annotationId);
   }
 

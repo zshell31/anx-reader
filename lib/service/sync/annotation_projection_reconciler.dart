@@ -170,6 +170,7 @@ class AnnotationProjectionReconciler {
     final existing = await native.findBySharedAnnotationId(annotationId);
 
     if (annotation.containsKey('deletedAt')) {
+      await sharedState.deleteAnnotationPresentation(annotationId);
       if (existing?.id != null) {
         await native.deleteProjection(existing!.id!);
         result.deleted++;
@@ -233,8 +234,13 @@ class AnnotationProjectionReconciler {
       return;
     }
 
+    final presentation = await _presentation(
+      annotationId,
+      annotation['motivation'] as String,
+      localPresentation ?? existing,
+    );
     final desired = _desiredNote(annotationId, annotation, projection,
-        localBook.id, existing, localPresentation);
+        localBook.id, existing, localPresentation, presentation);
     int nativeNoteId;
     if (existing == null) {
       nativeNoteId = await native.insertProjection(desired);
@@ -318,6 +324,31 @@ class AnnotationProjectionReconciler {
     return canonicalWireTimestamp(personalNote.updatedAt);
   }
 
+  Future<AnnotationPresentation?> _presentation(
+    String annotationId,
+    String motivation,
+    BookNote? legacyPresentation,
+  ) async {
+    if (motivation != 'selection') return null;
+    final stored = await sharedState.annotationPresentation(annotationId);
+    if (stored != null) return stored;
+    if (legacyPresentation == null ||
+        (legacyPresentation.type != 'highlight' &&
+            legacyPresentation.type != 'underline') ||
+        legacyPresentation.color.isEmpty) {
+      return null;
+    }
+    final migrated = AnnotationPresentation(
+      annotationId: annotationId,
+      style: legacyPresentation.type == 'underline'
+          ? AnnotationPresentationStyle.underline
+          : AnnotationPresentationStyle.highlight,
+      color: legacyPresentation.color,
+    );
+    await sharedState.putAnnotationPresentation(migrated);
+    return migrated;
+  }
+
   BookNote _desiredNote(
     String annotationId,
     Map<String, dynamic> annotation,
@@ -325,26 +356,27 @@ class AnnotationProjectionReconciler {
     int bookId,
     BookNote? existing,
     BookNote? localPresentation,
+    AnnotationPresentation? presentation,
   ) {
     final localDefaults = defaults();
     final motivation = annotation['motivation'] as String;
-    final presentation = localPresentation ?? existing;
-    final selectionType = presentation != null &&
-            (presentation.type == 'highlight' ||
-                presentation.type == 'underline')
-        ? presentation.type
+    final selectionType = presentation != null
+        ? presentation.style.name
         : (localDefaults.selectionType == 'underline'
             ? 'underline'
             : 'highlight');
+    final bookmarkPresentation = localPresentation ?? existing;
     return BookNote(
       bookId: bookId,
       content: projection.content,
       cfi: projection.cfi,
       chapter: projection.chapter,
       type: motivation == 'bookmark' ? 'bookmark' : selectionType,
-      color: presentation?.color.isNotEmpty == true
-          ? presentation!.color
-          : localDefaults.color,
+      color: motivation == 'bookmark'
+          ? (bookmarkPresentation?.color.isNotEmpty == true
+              ? bookmarkPresentation!.color
+              : localDefaults.color)
+          : presentation?.color ?? localDefaults.color,
       readerNote: projection.readerNote,
       sharedAnnotationId: annotationId,
       createTime: DateTime.parse(annotation['createdAt'] as String),

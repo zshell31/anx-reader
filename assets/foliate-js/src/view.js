@@ -174,6 +174,13 @@ export class View extends HTMLElement {
     return this.dispatchEvent(new CustomEvent(name, { detail, cancelable }))
   }
   #onRelocate({ reason, range, index, fraction, size }) {
+    // Relocation is the renderer's layout-complete boundary. Reconcile all
+    // documents it still owns so a missed IntersectionObserver transition
+    // cannot leave a visible paragraph untranslated.
+    const documents = this.renderer.getContents().map(({ doc }) => doc)
+    this.#translator.reconcileDocuments(documents).catch(error =>
+      console.warn('Translation relocation reconciliation failed:', error))
+
     this.#index = index
     const progress = this.#sectionProgress?.getProgress(index, fraction, size) ?? {}
     const tocItem = this.#tocProgress?.getProgress(index, range)
@@ -208,6 +215,12 @@ export class View extends HTMLElement {
     
     // Start translation observation for this document
     this.#translator.observeDocument(doc)
+    // Paginators may own one document or a fixed-layout spread. Retire only
+    // documents the renderer has actually replaced.
+    this.#translator.retainDocuments(
+      this.renderer.getContents().map(({ doc: ownedDocument }) => ownedDocument)
+        .concat(doc),
+    )
     
     this.#emit('load', { doc, index })
   }

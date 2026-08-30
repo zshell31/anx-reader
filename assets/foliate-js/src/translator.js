@@ -1,56 +1,68 @@
-// Translation modes
 export const TranslationMode = {
   OFF: 'off',
-  TRANSLATION_ONLY: 'translation-only', 
+  TRANSLATION_ONLY: 'translation-only',
   ORIGINAL_ONLY: 'original-only',
   BILINGUAL: 'bilingual'
 }
 
-// Make TranslationMode globally available for debugging
-if (typeof window !== 'undefined') {
-  window.TranslationMode = TranslationMode
+if (typeof window !== 'undefined') window.TranslationMode = TranslationMode
+
+const PERMANENT_TRANSLATION_ERROR =
+  /authentication failed|invalid api key|api key in settings|service not configured/i
+const TRANSLATION_ERROR =
+  /^(?:error:|translation error:|translate error:|translation failed:)|translation failed after/i
+
+class TranslationRequestError extends Error {
+  constructor(message, { retryable = true } = {}) {
+    super(message)
+    this.name = 'TranslationRequestError'
+    this.retryable = retryable
+  }
 }
 
-// Translation function that calls Flutter's translation service
+// Keep bridge failures out of successful element state. A later lifecycle
+// reconciliation may retry transient failures; permanent configuration and
+// authentication failures remain quiescent for the document.
 const translate = async (text, contextText) => {
-  try {
-    // Call Flutter's translation handler
-      const result = await window.flutter_inappwebview.callHandler('translateText', text, contextText)
-      return result || `Translation failed: ${text}`
-  } catch (error) {
-    console.error('Translation failed:', error)
-    return `Translation error: ${text}`
+  const result = await window.flutter_inappwebview.callHandler(
+    'translateText', text, contextText)
+  const translatedText = typeof result === 'string' ? result.trim() : ''
+  if (!translatedText || TRANSLATION_ERROR.test(translatedText) ||
+      PERMANENT_TRANSLATION_ERROR.test(translatedText)) {
+    throw new TranslationRequestError(
+      translatedText || 'Translation returned an empty result',
+      { retryable: !PERMANENT_TRANSLATION_ERROR.test(translatedText) },
+    )
   }
+  return result
 }
 
 export class Translator {
   #translationMode = TranslationMode.OFF
-  observedElements = new Set()
+  #documents = new Map()
+  #elementOwners = new WeakMap()
   #translatedElements = new WeakMap()
   #translationInputs = new WeakMap()
+  #inFlightElements = new WeakMap()
+  #failedElements = new WeakMap()
   #observer = null
-  
+
   constructor() {
     this.#initializeObserver()
   }
 
   #initializeObserver() {
     this.#observer = new IntersectionObserver(
-      (entries) => {
-        // console.log(`IntersectionObserver triggered with ${entries.length} entries`)
+      entries => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            // console.log('Element intersecting, translating:', entry.target.tagName, entry.target.textContent?.substring(0, 30))
-            this.#translateElement(entry.target).catch(error => 
+            this.#reconcileElement(entry.target).catch(error =>
               console.warn('Translation failed in observer:', error)
             )
           }
         })
       },
-      {
-        rootMargin: '1280px',
-        threshold: 0
-      }
+      { rootMargin: '1280px', threshold: 0 },
     )
   }
 
@@ -59,30 +71,27 @@ export class Translator {
       console.warn(`Invalid translation mode: ${mode}`)
       return
     }
-    
+
     const oldMode = this.#translationMode
     this.#translationMode = mode
-    
+
     if (oldMode !== mode) {
-      // console.log(`Translation mode changed from ${oldMode} to ${mode}`)
-      
       if (mode === TranslationMode.OFF) {
-        // Turn off translation
         this.#updateTranslationDisplay()
       } else if (oldMode === TranslationMode.OFF) {
-        // Turn on translation - force translate visible elements and wait for completion
-        await this.#forceTranslateVisibleElements()
+        // Joining element-scoped operations makes this safe when an observer
+        // callback is already translating the same element. Explicitly
+        // re-enabling translation also permits a retry after settings change.
+        this.#failedElements = new WeakMap()
+        await this.reconcileDocuments()
       } else {
-        // Just update display mode
         this.#updateTranslationDisplay()
       }
     }
 
-    // Re-render annotations after translation mode change (and after translation completion)
     if (window.reader && window.reader.annotationsById) {
       const existingAnnotations = Array.from(window.reader.annotationsById.values())
       if (existingAnnotations.length > 0) {
-        // console.log('Re-rendering annotations after translation mode change:', existingAnnotations.length)
         window.renderAnnotations(existingAnnotations)
       }
     }
@@ -93,73 +102,141 @@ export class Translator {
   }
 
   observeDocument(doc) {
-    // console.log('Observing document for translation, doc:', doc)
     if (!doc) {
       console.warn('No document provided to observeDocument')
       return
     }
-        
-    const textElements = this.#walkTextNodes(doc.body || doc.documentElement)
-    // console.log(`Found ${textElements.length} text elements to observe`)
 
+    let documentState = this.#documents.get(doc)
+    if (!documentState) {
+      documentState = {
+        doc,
+        elements: new Set(),
+        active: true,
+        reconciliationScheduled: false,
+      }
+      this.#documents.set(doc, documentState)
+    }
+
+    const textElements = this.#walkTextNodes(doc.body || doc.documentElement)
     let previousText = ''
-    const translationInputs = textElements.map(element => {
+    for (const element of textElements) {
       const existingInput = this.#translationInputs.get(element)
       const text = existingInput?.text ?? element.innerText?.trim() ?? ''
       const input = existingInput ?? { text, contextText: previousText }
       this.#translationInputs.set(element, input)
       if (text) previousText = text
-      return { element, input }
-    })
 
-    translationInputs.forEach(({ element }) => {
-      if (!this.observedElements.has(element)) {
+      if (!documentState.elements.has(element)) {
+        documentState.elements.add(element)
+        this.#elementOwners.set(element, documentState)
         this.#observer.observe(element)
-        this.observedElements.add(element)
-        // console.log('Added element to observer:', element.tagName, element.textContent?.substring(0, 50))
       }
-    })
-    
-    // console.log(`Total observed elements: ${this.observedElements.size}`)
+    }
+
+    // The iframe load callback runs before paginator layout. Two animation
+    // frames provide a deterministic post-render boundary without a timer.
+    // Relocation also reconciles explicitly through View.
+    this.#scheduleDocumentReconciliation(documentState)
+  }
+
+  retainDocuments(documents) {
+    const retained = new Set(documents.filter(Boolean))
+    for (const doc of this.#documents.keys()) {
+      if (!retained.has(doc)) this.unobserveDocument(doc)
+    }
+  }
+
+  unobserveDocument(doc) {
+    const documentState = this.#documents.get(doc)
+    if (!documentState) return
+    documentState.active = false
+    documentState.reconciliationScheduled = false
+    for (const element of documentState.elements) {
+      this.#observer?.unobserve(element)
+      if (this.#elementOwners.get(element) === documentState) {
+        this.#elementOwners.delete(element)
+      }
+    }
+    documentState.elements.clear()
+    this.#documents.delete(doc)
+  }
+
+  async reconcileDocument(doc) {
+    const documentState = this.#documents.get(doc)
+    if (!documentState?.active || this.#translationMode === TranslationMode.OFF) {
+      return
+    }
+
+    const promises = []
+    for (const element of documentState.elements) {
+      if (this.#isRelevantElement(element)) {
+        promises.push(this.#reconcileElement(element))
+      }
+    }
+    await Promise.allSettled(promises)
+  }
+
+  async reconcileDocuments(documents = this.#documents.keys()) {
+    await Promise.allSettled(
+      Array.from(documents, doc => this.reconcileDocument(doc)),
+    )
   }
 
   clearTranslations() {
-    // Remove all translation elements and restore original content
-    this.observedElements.forEach(element => {
-      const translationElements = element.querySelectorAll('.translated-text')
-      translationElements.forEach(trans => trans.remove())
-      
-      // Restore original text if hidden
-      this.#restoreOriginalText(element)
-    })
-    
-    // Clear observer
+    for (const documentState of this.#documents.values()) {
+      documentState.active = false
+      for (const element of documentState.elements) {
+        for (const translation of this.#translationChildren(element)) {
+          translation.remove()
+        }
+        this.#restoreOriginalText(element)
+      }
+    }
+
     this.#observer.disconnect()
-    this.observedElements.clear()
+    this.#documents.clear()
+    this.#elementOwners = new WeakMap()
     this.#translatedElements = new WeakMap()
     this.#translationInputs = new WeakMap()
-    
-    // Reinitialize observer
+    this.#inFlightElements = new WeakMap()
+    this.#failedElements = new WeakMap()
     this.#initializeObserver()
+  }
+
+  #scheduleDocumentReconciliation(documentState) {
+    if (documentState.reconciliationScheduled) return
+    documentState.reconciliationScheduled = true
+    const view = documentState.doc.defaultView ?? window
+    const requestFrame = view?.requestAnimationFrame?.bind(view)
+      ?? globalThis.requestAnimationFrame?.bind(globalThis)
+
+    const reconcile = () => {
+      if (!documentState.active) return
+      documentState.reconciliationScheduled = false
+      this.reconcileDocument(documentState.doc).catch(error =>
+        console.warn('Document translation reconciliation failed:', error)
+      )
+    }
+
+    if (!requestFrame) {
+      queueMicrotask(reconcile)
+      return
+    }
+    requestFrame(() => requestFrame(reconcile))
   }
 
   #walkTextNodes(root, rejectTags = ['pre', 'code', 'math', 'style', 'script']) {
     const elements = []
-    
+
     const walk = (node, depth = 0) => {
       if (depth > 15) return
-      
+
       const children = Array.from(node.children || [])
       for (const child of children) {
-        if (rejectTags.includes(child.tagName.toLowerCase())) {
-          continue
-        }
-        
-        // Skip translation elements
-        if (child.classList.contains('translated-text')) {
-          continue
-        }
-        
+        if (rejectTags.includes(child.tagName.toLowerCase())) continue
+        if (child.classList.contains('translated-text')) continue
+
         const hasDirectText = Array.from(child.childNodes).some(node => {
           if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
             return true
@@ -169,7 +246,7 @@ export class Translator {
           }
           return false
         })
-        
+
         if (child.children.length === 0 && child.textContent?.trim()) {
           elements.push(child)
         } else if (hasDirectText) {
@@ -179,78 +256,107 @@ export class Translator {
         }
       }
     }
-    
+
     walk(root)
     return elements
   }
 
-  async #translateElement(element) {
-    if (this.#translationMode === TranslationMode.OFF) return
-    if (this.#translatedElements.has(element)) return
-    
+  async #reconcileElement(element) {
+    if (this.#translationMode === TranslationMode.OFF) return Promise.resolve()
+    const documentState = this.#elementOwners.get(element)
+    if (!documentState?.active) return Promise.resolve()
+
+    const translated = this.#translatedElements.get(element)
+    if (translated) {
+      this.#materializeTranslation(element, translated.translatedText)
+      return Promise.resolve()
+    }
+
+    const existing = this.#inFlightElements.get(element)
+    if (existing) return existing
+
+    const previousFailure = this.#failedElements.get(element)
+    if (previousFailure && !previousFailure.retryable) return Promise.resolve()
+
     const input = this.#translationInputs.get(element)
     const text = input?.text ?? element.innerText?.trim()
-    if (!text) return
-    
-    try {
-      const translatedText = await translate(text, input?.contextText ?? '')
-      
-      // Mark as translated to prevent re-processing
-      this.#translatedElements.set(element, {
-        originalText: text,
-        translatedText: translatedText
-      })
-      
-      this.#applyTranslation(element, translatedText)
-    } catch (error) {
-      console.warn('Translation failed:', error)
-    }
+    if (!text) return Promise.resolve()
+
+    let operation
+    operation = (async () => {
+      try {
+        this.#failedElements.delete(element)
+        const translatedText = await translate(text, input?.contextText ?? '')
+
+        // A request belongs only to the element/document generation that
+        // started it. A retired chapter completion is discarded.
+        if (!documentState.active ||
+            this.#elementOwners.get(element) !== documentState) return
+
+        this.#translatedElements.set(element, {
+          originalText: text,
+          translatedText,
+        })
+        this.#materializeTranslation(element, translatedText)
+      } catch (error) {
+        if (documentState.active &&
+            this.#elementOwners.get(element) === documentState) {
+          this.#failedElements.set(element, {
+            retryable: error?.retryable !== false,
+          })
+        }
+        throw error
+      } finally {
+        if (this.#inFlightElements.get(element) === operation) {
+          this.#inFlightElements.delete(element)
+        }
+      }
+    })()
+    this.#inFlightElements.set(element, operation)
+    return operation
   }
 
-  #applyTranslation(element, translatedText) {
-    // Remove existing translation if any
-    const existingTranslation = element.querySelector('.translated-text')
-    if (existingTranslation) {
-      existingTranslation.remove()
+  #translationChildren(element) {
+    return Array.from(element.children || [])
+      .filter(child => child.classList?.contains('translated-text'))
+  }
+
+  #materializeTranslation(element, translatedText) {
+    const translations = this.#translationChildren(element)
+    let wrapper = translations.shift()
+    for (const duplicate of translations) duplicate.remove()
+
+    if (!wrapper) {
+      wrapper = element.ownerDocument.createElement('span')
+      wrapper.className = 'translated-text'
+      wrapper.setAttribute('data-translation-mark', '1')
+      wrapper.style.marginTop = '0.2em'
+      element.appendChild(wrapper)
     }
-    
-    // Create translation wrapper
-    const wrapper = document.createElement('span')
-    wrapper.className = 'translated-text'
-    wrapper.setAttribute('data-translation-mark', '1')
-    wrapper.style.display = 'block'
-    // wrapper.style.fontSize = '0.9em'
-    // wrapper.style.color = '#666'
-    // wrapper.style.fontStyle = 'italic'
-    wrapper.style.marginTop = '0.2em'
     wrapper.textContent = translatedText
-    
-    // Apply based on current mode
     this.#updateElementDisplay(element, wrapper)
-    
-    element.appendChild(wrapper)
   }
 
   #updateElementDisplay(element, translationWrapper) {
     const data = this.#translatedElements.get(element)
     if (!data) return
-    
+
     switch (this.#translationMode) {
       case TranslationMode.TRANSLATION_ONLY:
         this.#hideOriginalText(element)
         translationWrapper.style.display = 'block'
         break
-        
+
       case TranslationMode.ORIGINAL_ONLY:
         this.#restoreOriginalText(element)
         translationWrapper.style.display = 'none'
         break
-        
+
       case TranslationMode.BILINGUAL:
         this.#restoreOriginalText(element)
         translationWrapper.style.display = 'block'
         break
-        
+
       case TranslationMode.OFF:
       default:
         this.#restoreOriginalText(element)
@@ -260,23 +366,19 @@ export class Translator {
   }
 
   #hideOriginalText(element) {
-    // Use CSS to hide original content instead of removing DOM nodes
     if (!element.hasAttribute('data-original-visibility')) {
       element.setAttribute('data-original-visibility', 'hidden')
-      
-      // Hide all child nodes except translation elements using CSS
+
       Array.from(element.childNodes).forEach(node => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           const el = node
           if (!el.classList || !el.classList.contains('translated-text')) {
-            // Store and hide using CSS
             if (!el.hasAttribute('data-original-display')) {
               el.setAttribute('data-original-display', el.style.display || 'initial')
               el.style.display = 'none'
             }
           }
         } else if (node.nodeType === Node.TEXT_NODE) {
-          // For text nodes, store content and make invisible
           if (!node.__originalContent) {
             node.__originalContent = node.textContent
             node.textContent = ''
@@ -284,20 +386,16 @@ export class Translator {
         }
       })
     }
-    
-    // Mark element as having hidden text
+
     element.classList.add('translation-source-hidden')
   }
 
   #restoreOriginalText(element) {
-    // Restore visibility by reversing the hide operations
     if (element.hasAttribute('data-original-visibility')) {
-      // Restore all child nodes
       Array.from(element.childNodes).forEach(node => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           const el = node
           if (!el.classList || !el.classList.contains('translated-text')) {
-            // Restore original display
             if (el.hasAttribute('data-original-display')) {
               const originalDisplay = el.getAttribute('data-original-display')
               el.style.display = originalDisplay === 'initial' ? '' : originalDisplay
@@ -305,68 +403,45 @@ export class Translator {
             }
           }
         } else if (node.nodeType === Node.TEXT_NODE) {
-          // Restore text content
           if (node.__originalContent !== undefined) {
             node.textContent = node.__originalContent
             delete node.__originalContent
           }
         }
       })
-      
+
       element.removeAttribute('data-original-visibility')
     }
-    
+
     element.classList.remove('translation-source-hidden')
   }
 
-  async #forceTranslateVisibleElements() {
-    // console.log('Force translating visible elements')
-    
-    const translationPromises = []
-    
-    // Find elements in viewport and translate them immediately
-    this.observedElements.forEach(element => {
-      const rect = element.getBoundingClientRect()
-      const isVisible = rect.top < window.innerHeight && rect.bottom > 0
-      
-      if (isVisible && !this.#translatedElements.has(element)) {
-        // console.log('Force translating visible element:', element)
-        const translationPromise = this.#translateElement(element).catch(error => {
-          console.warn('Force translation failed:', error)
-        })
-        translationPromises.push(translationPromise)
-      } else if (isVisible && this.#translatedElements.has(element)) {
-        // Element already translated, just update display
-        const translationWrapper = element.querySelector('.translated-text')
-        if (translationWrapper) {
-          this.#updateElementDisplay(element, translationWrapper)
-        }
-      }
-    })
-    
-    // Wait for all visible translations to complete
-    if (translationPromises.length > 0) {
-      // console.log(`Waiting for ${translationPromises.length} translations to complete`)
-      await Promise.allSettled(translationPromises)
-      // console.log('All visible translations completed')
-    }
+  #isRelevantElement(element) {
+    const rect = element.getBoundingClientRect()
+    const view = element.ownerDocument?.defaultView ?? window
+    const width = view?.innerWidth ?? window.innerWidth
+    const height = view?.innerHeight ?? window.innerHeight
+    const margin = 1280
+    return rect.right >= -margin && rect.left <= width + margin &&
+      rect.bottom >= -margin && rect.top <= height + margin
   }
 
   #updateTranslationDisplay() {
-    // console.log('Updating translation display for mode:', this.#translationMode, 'Elements:', this.observedElements.size)
-    this.observedElements.forEach(element => {
-      const translationWrapper = element.querySelector('.translated-text')
-      if (translationWrapper) {
-        // console.log('Updating display for element with translation:', element)
-        this.#updateElementDisplay(element, translationWrapper)
-      } else {
-        // console.log('No translation wrapper found for element:', element)
+    for (const documentState of this.#documents.values()) {
+      for (const element of documentState.elements) {
+        const translated = this.#translatedElements.get(element)
+        if (translated) {
+          this.#materializeTranslation(element, translated.translatedText)
+        } else {
+          this.#restoreOriginalText(element)
+        }
       }
-    })
+    }
   }
 
   destroy() {
     this.clearTranslations()
+    this.#observer.disconnect()
     this.#observer = null
   }
 }

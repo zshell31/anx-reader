@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
 
-import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -31,10 +30,7 @@ class MalformedRemoteAnnotationException implements Exception {
   String toString() => 'Malformed remote annotation document: $cause';
 }
 
-typedef AnnotationProjectionCallback = Future<AnnotationReconciliationResult>
-    Function(String fingerprint);
-typedef AnnotationProjectionChanged = void Function(
-    String fingerprint, AnnotationReconciliationResult result);
+typedef SharedDocumentChanged = FutureOr<void> Function(String documentId);
 typedef AnnotationRetryScheduler = Timer Function(
     Duration delay, void Function() callback);
 typedef AnnotationLockRetryDelay = Future<void> Function(Duration delay);
@@ -54,7 +50,7 @@ bool _annotationDocumentMatchesId(
 ///
 /// Network work is single-flight per fingerprint. SQLite transactions are
 /// limited to snapshots and compare-and-set writes; no transaction spans a
-/// GET, projection update, retry delay, or PUT.
+/// GET, local notification, retry delay, or PUT.
 class AnnotationSyncCoordinator {
   final SharedStateDatabase sharedState;
   final AnnotationWebDavTransport transport;
@@ -64,8 +60,7 @@ class AnnotationSyncCoordinator {
   final SharedDocumentDecoder decodeDocument;
   final SharedDocumentMerger mergeDocuments;
   final SharedDocumentIdValidator validateDocumentId;
-  final AnnotationProjectionCallback reconcileProjection;
-  final AnnotationProjectionChanged? onProjectionChanged;
+  final SharedDocumentChanged? onDocumentChanged;
   final int maxPreconditionRetries;
   final int maxLockContentionRetries;
   final List<Duration> lockContentionBackoff;
@@ -86,14 +81,13 @@ class AnnotationSyncCoordinator {
   AnnotationSyncCoordinator({
     required this.sharedState,
     required this.transport,
-    required this.reconcileProjection,
     this.syncDomain = annotationSyncDomain,
     String Function(String documentId)? normalizeDocumentId,
     List<String> Function(String documentId)? remotePathFor,
     SharedDocumentDecoder? decodeDocument,
     SharedDocumentMerger? mergeDocuments,
     SharedDocumentIdValidator? validateDocumentId,
-    this.onProjectionChanged,
+    this.onDocumentChanged,
     this.maxPreconditionRetries = defaultAnnotationPreconditionRetries,
     this.maxLockContentionRetries = defaultAnnotationLockContentionRetries,
     this.lockContentionBackoff = const [
@@ -296,7 +290,7 @@ class AnnotationSyncCoordinator {
         return;
       }
 
-      await _reconcile(work.documentId);
+      await _notifyDocumentChanged(work.documentId);
       final beforePut =
           await sharedState.documentSnapshot(syncDomain, work.documentId);
       if (beforePut == null ||
@@ -352,7 +346,7 @@ class AnnotationSyncCoordinator {
       final merged = await _mergeRemoteSafely(id, remoteDocument,
           strongEtag: remote?.etag);
       if (merged == null || merged.snapshot.dirty) return;
-      await _reconcile(id);
+      await _notifyDocumentChanged(id);
 
       if (remote != null &&
           _sameCanonical(
@@ -413,7 +407,7 @@ class AnnotationSyncCoordinator {
         return;
       }
 
-      await _reconcile(id);
+      await _notifyDocumentChanged(id);
       final beforePut = await sharedState.documentSnapshot(syncDomain, id);
       if (beforePut == null ||
           beforePut.localRevision != targetRevision ||
@@ -502,12 +496,11 @@ class AnnotationSyncCoordinator {
     }
   }
 
-  Future<void> _reconcile(String id) async {
+  Future<void> _notifyDocumentChanged(String id) async {
     try {
-      final result = await reconcileProjection(id);
-      if (result.nativeWrites > 0) onProjectionChanged?.call(id, result);
+      await onDocumentChanged?.call(id);
     } catch (_) {
-      // Canonical convergence is independent of repairable native projection.
+      // Canonical convergence is independent of local UI/renderer listeners.
     }
   }
 

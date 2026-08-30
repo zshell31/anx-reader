@@ -53,7 +53,7 @@ void main() {
     expect(source, isNot(contains('tombstoneAnnotationForBookNote')));
   });
 
-  test('Notes and semantic consumers do not read BookNote projections', () {
+  test('Notes and semantic consumers read canonical annotations only', () {
     const canonicalConsumers = [
       'lib/providers/book_notes.dart',
       'lib/providers/bookmark.dart',
@@ -81,6 +81,31 @@ void main() {
     expect(list, contains('ValueKey(bookNote.ref.annotationId)'));
     expect(File('lib/providers/book_notes.dart').readAsStringSync(),
         contains('tombstoneAnnotation(annotation.ref)'));
+  });
+
+  test('modern runtime has no legacy annotation-table writes or reads', () {
+    const migrationOnly = {
+      'lib/dao/database.dart',
+      'lib/service/sync/legacy_annotation_bootstrap.dart',
+      'lib/service/sync/legacy_annotation_store.dart',
+    };
+    final legacyTableAccess = RegExp(r'tb_notes|shared_annotation_id');
+    final activeFiles = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where((file) => !migrationOnly.contains(file.path));
+
+    for (final file in activeFiles) {
+      expect(legacyTableAccess.hasMatch(file.readAsStringSync()), isFalse,
+          reason: file.path);
+    }
+    final migration = File('lib/service/sync/legacy_annotation_store.dart')
+        .readAsStringSync();
+    expect(migration, contains("'tb_notes'"));
+    expect(migration, isNot(contains('insert(')));
+    expect(migration, isNot(contains('update(')));
+    expect(migration, isNot(contains('delete(')));
   });
 
   test(

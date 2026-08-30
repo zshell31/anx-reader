@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
@@ -262,7 +261,7 @@ void main() {
   late String databasePath;
   late SharedStateDatabase store;
   late MemoryWebDav remote;
-  late List<String> projections;
+  late List<String> notifications;
   late AnnotationSyncCoordinator coordinator;
 
   AnnotationSyncCoordinator createCoordinator({
@@ -270,7 +269,7 @@ void main() {
     int lockRetries = 3,
     List<Duration> lockBackoff = const [],
     AnnotationLockRetryDelay? waitForLockRetry,
-    Future<AnnotationReconciliationResult> Function(String)? reconcile,
+    SharedDocumentChanged? onDocumentChanged,
     List<Duration> networkBackoff = const [],
     AnnotationRetryScheduler? scheduleRetry,
   }) =>
@@ -283,11 +282,7 @@ void main() {
         waitForLockRetry: waitForLockRetry,
         networkBackoff: networkBackoff,
         scheduleRetry: scheduleRetry,
-        reconcileProjection: reconcile ??
-            (id) async {
-              projections.add(id);
-              return AnnotationReconciliationResult();
-            },
+        onDocumentChanged: onDocumentChanged ?? notifications.add,
       );
 
   Future<int> putLocal(Iterable<Map<String, dynamic>> values) =>
@@ -306,7 +301,7 @@ void main() {
     store =
         SharedStateDatabase(path: databasePath, factory: databaseFactoryFfi);
     remote = MemoryWebDav();
-    projections = [];
+    notifications = [];
     coordinator = createCoordinator();
   });
 
@@ -326,7 +321,7 @@ void main() {
         hasLength(2));
     expect(remote.decoded!['annotations'], hasLength(2));
     expect(await store.pendingOutbox(), isEmpty);
-    expect(projections, [fingerprint]);
+    expect(notifications, [fingerprint]);
   });
 
   test('protocol winner resolves the same annotation edit', () async {
@@ -365,7 +360,7 @@ void main() {
         containsAll(['personal-note', 'translation']));
   });
 
-  test('remote tombstone is sticky and reaches projection', () async {
+  test('remote tombstone is sticky when document listeners run', () async {
     await putLocal([entity('A')]);
     await makeClean();
     remote.seed(document([
@@ -375,9 +370,8 @@ void main() {
     ]));
     Map<String, dynamic>? projected;
     await coordinator.close();
-    coordinator = createCoordinator(reconcile: (id) async {
+    coordinator = createCoordinator(onDocumentChanged: (id) async {
       projected = await store.annotationDocument(id);
-      return AnnotationReconciliationResult()..deleted = 1;
     });
 
     await coordinator.pullBook(fingerprint);
@@ -476,16 +470,14 @@ void main() {
     expect(remote.puts, 0);
   });
 
-  test('remote bookmark is materialized through projection reconciliation',
-      () async {
+  test('remote bookmark reaches canonical document listeners', () async {
     remote.seed(document([bookmarkEntity('bookmark')]));
     String? motivation;
     await coordinator.close();
-    coordinator = createCoordinator(reconcile: (id) async {
+    coordinator = createCoordinator(onDocumentChanged: (id) async {
       final local = await store.annotationDocument(id);
       motivation = ((local!['annotations'] as List).single as Map)['motivation']
           as String;
-      return AnnotationReconciliationResult()..inserted = 1;
     });
 
     await coordinator.pullBook(fingerprint);
@@ -657,7 +649,6 @@ void main() {
     coordinator = AnnotationSyncCoordinator(
       sharedState: store,
       transport: RaceWebDavClient('Anx', raceServer),
-      reconcileProjection: (_) async => AnnotationReconciliationResult(),
       lockContentionBackoff: const [],
     );
     final linguaPath = p.join(directory.path, 'lingua_shared_state.db');
@@ -666,7 +657,6 @@ void main() {
     final linguaCoordinator = AnnotationSyncCoordinator(
       sharedState: linguaStore,
       transport: RaceWebDavClient('Lingua', raceServer),
-      reconcileProjection: (_) async => AnnotationReconciliationResult(),
       lockContentionBackoff: const [Duration(milliseconds: 1)],
       waitForLockRetry: (_) async {
         if (!raceServer.anxMayProceed.isCompleted) {
@@ -756,7 +746,7 @@ void main() {
     remote.seed(document([entity('B')]));
     var mutated = false;
     await coordinator.close();
-    coordinator = createCoordinator(reconcile: (_) async {
+    coordinator = createCoordinator(onDocumentChanged: (_) async {
       if (!mutated) {
         mutated = true;
         final current = (await store.annotationDocument(fingerprint))!;
@@ -766,7 +756,6 @@ void main() {
           ..add(entity('C'));
         expect(await putLocal(annotations), revision + 1);
       }
-      return AnnotationReconciliationResult();
     });
 
     await coordinator.syncBook(fingerprint);
@@ -954,13 +943,13 @@ void main() {
     expect(await store.pendingOutbox(), isNotEmpty);
   });
 
-  test('projection failure does not roll back canonical or network convergence',
+  test('listener failure does not roll back canonical or network convergence',
       () async {
     await putLocal([entity('A')]);
     remote.seed(document([entity('B')]));
     await coordinator.close();
     coordinator = createCoordinator(
-        reconcile: (_) async => throw StateError('native unavailable'));
+        onDocumentChanged: (_) async => throw StateError('listener failed'));
 
     await coordinator.syncBook(fingerprint);
 
@@ -1003,7 +992,6 @@ void main() {
       decodeDocument: decodeAnxPresentationDocument,
       mergeDocuments: mergeAnxPresentationDocuments,
       validateDocumentId: (_, id) => id == anxPresentationDocumentId,
-      reconcileProjection: (_) async => AnnotationReconciliationResult(),
       networkBackoff: const [],
     );
     coordinator = deviceA;
@@ -1019,7 +1007,6 @@ void main() {
       decodeDocument: decodeAnxPresentationDocument,
       mergeDocuments: mergeAnxPresentationDocuments,
       validateDocumentId: (_, id) => id == anxPresentationDocumentId,
-      reconcileProjection: (_) async => AnnotationReconciliationResult(),
       networkBackoff: const [],
     );
     try {
@@ -1071,7 +1058,6 @@ void main() {
       decodeDocument: decodeAnxPresentationDocument,
       mergeDocuments: mergeAnxPresentationDocuments,
       validateDocumentId: (_, id) => id == anxPresentationDocumentId,
-      reconcileProjection: (_) async => AnnotationReconciliationResult(),
       networkBackoff: const [],
     );
     await store.putAnnotationPresentation(const AnnotationPresentation(

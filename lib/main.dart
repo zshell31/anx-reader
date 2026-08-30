@@ -13,7 +13,6 @@ import 'package:anx_reader/page/home_page.dart';
 import 'package:anx_reader/page/migration_page.dart';
 import 'package:anx_reader/service/book_player/book_player_server.dart';
 import 'package:anx_reader/service/network/http_proxy_overrides.dart';
-import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -63,7 +62,7 @@ Future<void> main() async {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
-    await maintainAnnotationProjection();
+    await migrateLegacyAnnotations();
     unawaited(annotationSyncRuntime.start());
   }
 
@@ -92,21 +91,23 @@ Future<void> main() async {
   );
 }
 
-Future<void> maintainAnnotationProjection() async {
+Future<void> migrateLegacyAnnotations() async {
   final sharedState = SharedStateDatabase();
   try {
     final bootstrap = await LegacyAnnotationBootstrap(sharedState).run();
-    final reconciliation =
-        await AnnotationProjectionReconciler(sharedState).run();
-    AnxLog.info('Annotation projection: imported ${bootstrap.imported}, '
+    for (final fingerprint in bootstrap.changedFingerprints) {
+      annotationSyncRuntime.notifyLocalMutation(fingerprint);
+    }
+    if (bootstrap.presentationChanged) {
+      annotationSyncRuntime.notifyPresentationMutation();
+    }
+    AnxLog.info('Legacy annotations: imported ${bootstrap.imported}, '
         'recognized ${bootstrap.alreadyImported}, '
-        'unsupported ${bootstrap.unsupported}; '
-        'native writes ${reconciliation.nativeWrites}');
+        'unsupported ${bootstrap.unsupported}');
   } catch (error, stackTrace) {
-    // Shared state must fail closed: native notes remain usable and bootstrap
-    // can retry on the next launch without inventing canonical state.
-    AnxLog.warning(
-        'Annotation projection maintenance failed: $error\n$stackTrace');
+    // The read-only import can retry on the next launch without duplicating or
+    // overwriting canonical state.
+    AnxLog.warning('Legacy annotation migration failed: $error\n$stackTrace');
   } finally {
     await sharedState.close();
   }
@@ -296,7 +297,7 @@ class _MigrationWrapperState extends State<_MigrationWrapper> {
     AnxLog.init();
     AnxError.init();
     await DBHelper().initDB();
-    await maintainAnnotationProjection();
+    await migrateLegacyAnnotations();
     unawaited(annotationSyncRuntime.start());
 
     if (mounted) {

@@ -45,7 +45,7 @@ class Bookmark extends _$Bookmark {
         percentage: bookmark.percentage ?? 0,
       ),
     );
-    final created = bookmark.copyWith(ref: result.ref);
+    final created = bookmark.copyWith(ref: result);
     state = AsyncData([...existing, created]);
     return created;
   }

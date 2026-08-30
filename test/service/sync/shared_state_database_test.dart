@@ -286,10 +286,11 @@ void main() {
     setUp(() async => directory = await temporaryDirectory());
     tearDown(() async => directory.delete(recursive: true));
 
-    test('fresh creation and reopening retain explicit schema v3', () async {
+    test('fresh creation and reopening retain projection-free schema v4',
+        () async {
       final path = p.join(directory.path, 'shared_state.db');
       var store = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await store.schemaVersion, 3);
+      expect(await store.schemaVersion, 4);
       final tables = await (await store.database).rawQuery(
           "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
       expect(
@@ -299,13 +300,15 @@ void main() {
             'sync_outbox',
             'sync_metadata',
             'legacy_import_receipts',
-            'annotation_projections',
-            'annotation_presentations',
           ]));
+      expect(tables.map((row) => row['name']),
+          isNot(contains('annotation_projections')));
+      expect(tables.map((row) => row['name']),
+          isNot(contains('annotation_presentations')));
       await store.close();
 
       store = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await store.schemaVersion, 3);
+      expect(await store.schemaVersion, 4);
       await store.close();
     });
 
@@ -337,7 +340,7 @@ void main() {
       const schema = SharedStateSchema();
       final newer = await databaseFactoryFfi.openDatabase(path,
           options: OpenDatabaseOptions(
-              version: 4, onCreate: (db, _) => schema.create(db)));
+              version: 5, onCreate: (db, _) => schema.create(db)));
       await newer.close();
 
       final store =
@@ -420,7 +423,7 @@ void main() {
       await legacy.close();
 
       legacy = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await legacy.schemaVersion, 3);
+      expect(await legacy.schemaVersion, 4);
       expect(await legacy.annotationPresentations(), isEmpty);
       expect(await legacy.canonicalDocument('annotations', fingerprint),
           orderedEquals(before!));
@@ -447,7 +450,7 @@ void main() {
       await legacy.close();
 
       legacy = SharedStateDatabase(path: path, factory: databaseFactoryFfi);
-      expect(await legacy.schemaVersion, 3);
+      expect(await legacy.schemaVersion, 4);
       final migrated = await legacy.annotationPresentation('annotation-a');
       expect(migrated?.style, AnnotationPresentationStyle.underline);
       expect(migrated?.color, '00ff00');
@@ -469,6 +472,8 @@ void main() {
       expect(await store.deleteAnnotationPresentation('remote-unknown'), isTrue,
           reason: 'reset must suppress an explicit value not yet pulled');
       expect(await store.annotationPresentation('annotation-a'), isNull);
+      expect(await store.hasAnnotationPresentationOperation('annotation-a'),
+          isTrue);
       await store.close();
 
       store = SharedStateDatabase(

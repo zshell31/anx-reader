@@ -231,7 +231,7 @@ class DatabaseSyncManager {
 
     // Re-initialize database
     await DBHelper().initDB();
-    await maintainAnnotationProjection();
+    await migrateLegacyAnnotations();
   }
 
   /// Recover database from backup
@@ -244,7 +244,7 @@ class DatabaseSyncManager {
 
       await io.File(backupPath).copy(localDbPath);
       await DBHelper().initDB();
-      await maintainAnnotationProjection();
+      await migrateLegacyAnnotations();
 
       AnxLog.info(
           'DatabaseSync: Successfully recovered from backup: $backupPath');

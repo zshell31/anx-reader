@@ -64,11 +64,16 @@ Future<void> _migrateAnnotationPresentationsToSyncDomain(
   });
 }
 
+/// Existing obsolete tables are retained physically for migration safety.
+/// Fresh schema-v4 databases do not create them, and no active API reads them.
+Future<void> _retireLegacyAnnotationTables(DatabaseExecutor db) async {}
+
 const currentSharedStateSchema = SharedStateSchema(
-  version: 3,
+  version: 4,
   migrations: {
     2: _createAnnotationPresentations,
     3: _migrateAnnotationPresentationsToSyncDomain,
+    4: _retireLegacyAnnotationTables,
   },
 );
 
@@ -124,15 +129,19 @@ class SharedStateSchema {
       imported_at TEXT NOT NULL,
       PRIMARY KEY(source, source_key)
     )''');
-    await db.execute('''CREATE TABLE annotation_projections (
-      annotation_id TEXT PRIMARY KEY,
-      book_fingerprint TEXT NOT NULL,
-      native_note_id INTEGER,
-      status TEXT NOT NULL,
-      canonical_hash TEXT,
-      last_error TEXT
-    )''');
-    if (version >= 2) await _createAnnotationPresentations(db);
+    if (version <= 3) {
+      await db.execute('''CREATE TABLE annotation_projections (
+        annotation_id TEXT PRIMARY KEY,
+        book_fingerprint TEXT NOT NULL,
+        native_note_id INTEGER,
+        status TEXT NOT NULL,
+        canonical_hash TEXT,
+        last_error TEXT
+      )''');
+    }
+    if (version >= 2 && version <= 3) {
+      await _createAnnotationPresentations(db);
+    }
   }
 
   Future<void> upgrade(
@@ -234,24 +243,6 @@ class LegacyImportReceipt {
     required this.sharedId,
     required this.status,
     required this.detail,
-  });
-}
-
-class AnnotationProjectionMetadata {
-  final String annotationId;
-  final String bookFingerprint;
-  final int? nativeNoteId;
-  final String status;
-  final String? canonicalHash;
-  final String? lastError;
-
-  const AnnotationProjectionMetadata({
-    required this.annotationId,
-    required this.bookFingerprint,
-    required this.nativeNoteId,
-    required this.status,
-    required this.canonicalHash,
-    required this.lastError,
   });
 }
 
@@ -744,6 +735,19 @@ class SharedStateDatabase {
     });
   }
 
+  /// Whether an explicit update or reset already exists for this annotation.
+  /// Legacy bootstrap uses this to avoid overwriting newer synchronized state.
+  Future<bool> hasAnnotationPresentationOperation(String annotationId) async {
+    if (annotationId.isEmpty) {
+      throw ArgumentError.value(
+          annotationId, 'annotationId', 'must not be empty');
+    }
+    final document = await _anxPresentationDocument();
+    return (document['presentations'] as List)
+        .cast<Map<String, dynamic>>()
+        .any((entry) => entry['annotationId'] == annotationId);
+  }
+
   /// Writes Anx-only style/color state to its independently synchronized
   /// document. This never touches the protocol-v2 annotation domain/outbox.
   Future<bool> putAnnotationPresentation(
@@ -861,57 +865,6 @@ class SharedStateDatabase {
           [anxPresentationSyncDomain, anxPresentationDocumentId]);
       return true;
     });
-  }
-
-  Future<AnnotationProjectionMetadata?> annotationProjection(
-      String annotationId) async {
-    final rows = await (await database).query('annotation_projections',
-        where: 'annotation_id = ?', whereArgs: [annotationId], limit: 1);
-    if (rows.isEmpty) return null;
-    final row = rows.single;
-    return AnnotationProjectionMetadata(
-      annotationId: row['annotation_id'] as String,
-      bookFingerprint: row['book_fingerprint'] as String,
-      nativeNoteId: row['native_note_id'] as int?,
-      status: row['status'] as String,
-      canonicalHash: row['canonical_hash'] as String?,
-      lastError: row['last_error'] as String?,
-    );
-  }
-
-  /// Stores local materialization metadata only when it actually changed.
-  /// The native note id is a cache; callers must recover identity through the
-  /// canonical annotation id / `shared_annotation_id` binding.
-  Future<bool> putAnnotationProjection({
-    required String annotationId,
-    required String bookFingerprint,
-    required int? nativeNoteId,
-    required String status,
-    String? canonicalHash,
-    String? lastError,
-  }) async {
-    final previous = await annotationProjection(annotationId);
-    if (previous != null &&
-        previous.bookFingerprint == bookFingerprint &&
-        previous.nativeNoteId == nativeNoteId &&
-        previous.status == status &&
-        previous.canonicalHash == canonicalHash &&
-        previous.lastError == lastError) {
-      return false;
-    }
-    await (await database).insert(
-      'annotation_projections',
-      {
-        'annotation_id': annotationId,
-        'book_fingerprint': bookFingerprint,
-        'native_note_id': nativeNoteId,
-        'status': status,
-        'canonical_hash': canonicalHash,
-        'last_error': lastError,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    return true;
   }
 
   Future<void> close() async {

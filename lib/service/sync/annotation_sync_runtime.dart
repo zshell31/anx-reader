@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/enums/sync_protocol.dart';
-import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
@@ -157,14 +156,6 @@ class AnnotationSyncRuntime {
       String fingerprint, void Function() refreshOpenReader) async {
     final id = canonicalMd5Fingerprint(fingerprint);
     _openBookRefresh.putIfAbsent(id, () => {}).add(refreshOpenReader);
-    try {
-      final result =
-          await AnnotationProjectionReconciler(sharedState).reconcileBook(id);
-      if (result.nativeWrites > 0) refreshOpenReader();
-    } catch (error, stackTrace) {
-      AnxLog.warning(
-          'Annotation book-open reconciliation failed: $error\n$stackTrace');
-    }
     unawaited(_syncTarget(id));
   }
 
@@ -206,10 +197,7 @@ class AnnotationSyncRuntime {
     final annotations = AnnotationSyncCoordinator(
       sharedState: sharedState,
       transport: transport,
-      reconcileProjection: (fingerprint) =>
-          AnnotationProjectionReconciler(sharedState)
-              .reconcileBook(fingerprint),
-      onProjectionChanged: (fingerprint, _) {
+      onDocumentChanged: (fingerprint) {
         _annotationChanges.add(null);
         for (final refresh in List<void Function()>.from(
             _openBookRefresh[fingerprint] ?? {})) {
@@ -226,9 +214,7 @@ class AnnotationSyncRuntime {
       decodeDocument: decodeAnxPresentationDocument,
       mergeDocuments: mergeAnxPresentationDocuments,
       validateDocumentId: (_, id) => id == anxPresentationDocumentId,
-      reconcileProjection: (_) =>
-          AnnotationProjectionReconciler(sharedState).run(),
-      onProjectionChanged: (_, __) {
+      onDocumentChanged: (_) {
         _annotationChanges.add(null);
         for (final refreshes in _openBookRefresh.values) {
           for (final refresh in List<void Function()>.from(refreshes)) {

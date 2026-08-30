@@ -106,7 +106,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       SelectionSnapshot snapshot) async {
     final result = await annotationRepository
         .createAnnotation(_canonicalCreation(snapshot));
-    return SelectionAnnotationHandle(ref: result.ref);
+    return SelectionAnnotationHandle(ref: result);
   }
 
   CanonicalSelectionCreation _canonicalCreation(SelectionSnapshot snapshot) {
@@ -128,7 +128,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
             await annotationRepository.createAnnotationWithPersonalNote(
                 _canonicalCreation(snapshot), value);
         return SelectionFirstSaveResult(
-            SelectionAnnotationHandle(ref: mutation.ref), mutation);
+            SelectionAnnotationHandle(ref: mutation), mutation);
       },
       save: (ref) => annotationRepository.setPersonalNote(ref, value),
     );
@@ -143,7 +143,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
             await annotationRepository.createAnnotationWithTranslation(
                 _canonicalCreation(snapshot), value);
         return SelectionFirstSaveResult(
-            SelectionAnnotationHandle(ref: mutation.ref), mutation);
+            SelectionAnnotationHandle(ref: mutation), mutation);
       },
       save: (ref) => annotationRepository.saveTranslation(ref, value),
     );

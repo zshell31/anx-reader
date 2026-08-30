@@ -117,14 +117,6 @@ class ReadingTimeDao extends BaseDao {
     return result ?? 0;
   }
 
-  Future<int> selectTotalNumberOfNotes() async {
-    final result = await rawQuerySingle(
-      'SELECT COUNT(*) AS total_count FROM tb_notes',
-      mapper: (row) => row['total_count'] as int? ?? 0,
-    );
-    return result ?? 0;
-  }
-
   Future<List<int>> selectReadingTimeOfWeek(DateTime dateTime) async {
     final start = dateTime.subtract(Duration(days: dateTime.weekday - 1));
     final end = start.add(const Duration(days: 6));

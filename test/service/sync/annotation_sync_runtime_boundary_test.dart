@@ -46,7 +46,7 @@ void main() {
         sharedState, isNot(contains("execute('PRAGMA journal_mode = WAL')")));
   });
 
-  test('open reader refresh reuses native projection and Foliate renderer', () {
+  test('open reader refresh drives the canonical Foliate renderer', () {
     final reader = source('lib/page/reading_page.dart');
     final player = source('lib/page/book_player/epub_player.dart');
 
@@ -59,16 +59,17 @@ void main() {
             'refreshAnnotations() => renderAnnotations(webViewController)'));
   });
 
-  test('native database replacement immediately repairs from canonical state',
+  test('legacy database replacement immediately reruns read-only migration',
       () {
     final main = source('lib/main.dart');
     final manager = source('lib/service/database_sync_manager.dart');
     final provider = source('lib/providers/sync.dart');
     final settings = source('lib/page/settings_page/sync.dart');
 
-    expect(main, contains('Future<void> maintainAnnotationProjection()'));
-    expect(manager, contains('await maintainAnnotationProjection()'));
-    expect(provider, contains('await maintainAnnotationProjection()'));
-    expect(settings, contains('await maintainAnnotationProjection()'));
+    expect(main, contains('Future<void> migrateLegacyAnnotations()'));
+    expect(manager, contains('await migrateLegacyAnnotations()'));
+    expect(provider, contains('await migrateLegacyAnnotations()'));
+    expect(settings, contains('await migrateLegacyAnnotations()'));
+    expect(main, isNot(contains('AnnotationProjectionReconciler')));
   });
 }

@@ -6,6 +6,7 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/providers/statistic_data.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/utils/date/convert_seconds.dart';
 import 'package:anx_reader/utils/date/week_of_year.dart';
 import 'package:anx_reader/widgets/bookshelf/book_cover.dart';
@@ -39,7 +40,9 @@ class _StatisticPageState extends State<StatisticPage> {
   void setNumbers() async {
     final numberOfBook = await readingTimeDao.selectTotalNumberOfBook();
     final numberOfDate = await readingTimeDao.selectTotalNumberOfDate();
-    final numberOfNotes = await readingTimeDao.selectTotalNumberOfNotes();
+    final annotationBooks = await canonicalAnnotationCatalog.readAll();
+    final numberOfNotes = annotationBooks.fold<int>(
+        0, (count, book) => count + book.annotations.length);
     setState(() {
       totalNumberOfBook = numberOfBook;
       totalNumberOfDate = numberOfDate;

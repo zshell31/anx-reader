@@ -554,22 +554,54 @@ At the end of every M4E session:
 
 ### M4E.9 — Migrate Notes UI to canonical state
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: UI keys/multiselect use canonical UUIDs;
-  semantic fields are canonical and style/color comes from the sidecar.
-- Tests run: —
-- Discovered limitations or follow-up work: Remote book catalog work is not in
-  scope. Unsupported/unbound annotations remain visible with capability-aware
-  navigation.
+- Status: COMPLETE
+- Commit SHA: `b763440f`
+- Important files changed: `lib/service/sync/annotation_catalog.dart`,
+  `lib/providers/book_notes.dart`, `lib/models/book_notes_state.dart`,
+  `lib/widgets/book_notes/`, `lib/page/book_notes_page.dart`,
+  `lib/page/home_page/notes_page.dart`, `lib/widgets/reading_page/notes_widget.dart`,
+  `lib/widgets/context_menu/`, `lib/providers/bookmark.dart`,
+  `lib/service/notes/export_notes.dart`, Notes statistics/search/random-highlight
+  consumers, and the corresponding provider/repository/boundary tests.
+- Architectural decisions made: The inventory covered the per-book, home, and
+  reading-page Notes lists; tiles/details; reader-note editor; selection and
+  multiselect deletion; bookmark creation/removal; navigation; export;
+  statistics/counts; search and AI Notes search; random highlights; and
+  semantic/presentation filtering. All now read immutable `AnnotationUiModel`
+  projections directly from canonical documents through
+  `CanonicalAnnotationCatalog`. UI keys and multiselect sets use canonical
+  UUIDs, while mutations use `AnnotationRef`. Personal notes are canonical
+  enrichments, bookmark filtering uses canonical motivation, and style/color
+  filtering uses effective synchronized Anx presentation. Same-CFI entries are
+  never collapsed. Catalog refresh listens to canonical semantic/presentation
+  changes. Remote-only, unbound, and unsupported-selector annotations remain
+  visible and exportable; navigation alone is disabled when capability or a
+  local binding is unavailable. No fake local-book binding or shared-library
+  catalog was introduced.
+- Tests run: Dart generation/formatting succeeded; full `flutter analyze` had
+  no errors (46 existing informational lints), and targeted analysis of the
+  final changed UI/catalog/export files reported no issues. The combined
+  selection/provider and complete `test/service/sync` Flutter run passed 200
+  tests. Focused catalog/state/mutation/navigation coverage passed 11 tests.
+  Foliate `npm test` passed 40 tests and `npm run build` succeeded with the
+  three previously documented top-level-await target warnings.
+- Discovered limitations or follow-up work: The repository-wide post-migration
+  audit found no active user-facing `BookNote`, numeric-note-ID, `readerNote`,
+  `sharedAnnotationId`, or DAO semantic consumer. Remaining references are
+  confined to `lib/models/book_note.dart`, `lib/dao/book_note.dart`, legacy
+  bootstrap, native projection/reconciliation, compatibility sections of the
+  annotation repository, projection metadata in the shared-state database, and
+  their startup/sync callbacks. They are retained only so M4E.10 can replace
+  legacy-installation bootstrap safely before removing the entire runtime
+  projection stack. Remote shared-library/catalog discovery remains outside
+  M4E; canonical documents already present locally are preserved and shown.
 - Acceptance checklist:
-  - [ ] Migrate per-book and reading-page Notes lists, tiles, details/editing,
+  - [x] Migrate per-book and reading-page Notes lists, tiles, details/editing,
     personal notes, selection, deletion, navigation, export, statistics, and
     filtering.
-  - [ ] Distinguish bookmark motivation from local presentation filtering.
-  - [ ] Keep annotations visible when the renderer cannot materialize them.
-  - [ ] Add provider/UI tests where practical.
+  - [x] Distinguish bookmark motivation from local presentation filtering.
+  - [x] Keep annotations visible when the renderer cannot materialize them.
+  - [x] Add provider/UI tests where practical.
 
 ### M4E.10 — Remove BookNote and native projection infrastructure
 
@@ -621,37 +653,40 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 9 of 12 implementation phases
+- Completed submilestones: 10 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.8 — Direct Foliate annotation renderer adapter
+Last completed submilestone: M4E.9 — Migrate Notes UI to canonical state
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `30121b6e refactor: render canonical annotations in Foliate`
-Documentation checkpoint: The current commit records the completed M4E.8
+Last implementation commit: `b763440f refactor: drive notes UI from canonical annotations`
+Documentation checkpoint: The current commit records the completed M4E.9
 implementation SHA and handoff
-Repository state: Clean at the completed M4E.8 documentation checkpoint
-Next submilestone: M4E.9 — Migrate Notes UI to canonical state
-Next concrete tasks: Inventory every Notes/bookmark provider, list/tile/detail,
-editor, multiselect, delete, navigation, export, statistics, and filtering
-consumer; replace `BookNote`/numeric identity with `AnnotationUiModel` and
-`AnnotationRef`; keep unsupported/unbound annotations visible with explicit
-capabilities; distinguish bookmark motivation from presentation filters; move
-personal-note reads/edits and reader-note opening to canonical enrichments; add
-provider/UI coverage before removing compatibility infrastructure in M4E.10.
+Repository state: Clean at the completed M4E.9 documentation checkpoint
+Next submilestone: M4E.10 — Remove BookNote and native projection infrastructure
+Next concrete tasks: Audit and classify every remaining `BookNote`, DAO,
+`readerNote`, `sharedAnnotationId`, native-note-ID, projection status/hash/table,
+reconciler/store, and compatibility mutation reference; preserve only an
+idempotent, restart-safe legacy-read bootstrap into canonical annotation plus
+synchronized Anx presentation; prove it cannot duplicate annotations or
+resurrect tombstones; then remove active legacy writes, the semantic model/DAO,
+runtime projection reconciliation and native identity bridges.
 Known failing tests: None
 Known limitations: Presentation LWW uses wall-clock timestamps and retains
 reset records without compaction. Coincident renderer ranges have distinct UUID
-identity but no visual chooser. Notes/bookmark/editor callers retain named
-native compatibility APIs for M4E.9/M4E.10. External provider apps do not return
-a savable result. Automated tests do not synthesize real Android WebView native-
+identity but no visual chooser. The legacy bootstrap/projection stack still
+contains `BookNote` and native compatibility identities pending M4E.10, but no
+Notes/UI semantic consumer uses them. External provider apps do not return a
+savable result. Automated tests do not synthesize real Android WebView native-
 handle or overlay-tap gestures. Local `develop` still has the previously
 documented divergence from `origin/develop`.
-Important files to inspect next: `lib/providers/book_notes.dart`,
-`lib/providers/bookmark.dart`, `lib/widgets/book_notes/`, reader-note/context
-menu widgets, export/statistics code, `lib/dao/book_note.dart`, and every
-remaining `BookNote`, numeric note ID, or compatibility repository API caller.
+Important files to inspect next: `lib/models/book_note.dart`,
+`lib/dao/book_note.dart`, `lib/service/sync/legacy_annotation_bootstrap.dart`,
+`lib/service/sync/annotation_projection_reconciler.dart`,
+`lib/service/sync/native_annotation_projection.dart`, compatibility portions of
+`lib/service/sync/annotation_repository.dart`, projection metadata in
+`lib/service/sync/shared_state_database.dart`, and their runtime/startup callers.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

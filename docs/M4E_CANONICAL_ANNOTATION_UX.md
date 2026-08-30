@@ -455,22 +455,51 @@ At the end of every M4E session:
 
 ### M4E.7a — Cross-device Anx presentation sync
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Anx presentation remains outside
-  `AnnotationBookDocument` and protocol v2, but gains its own client-specific
-  WebDAV document, deterministic merge, tombstones/reset behavior, and durable
-  outbox lifecycle.
-- Tests run: —
-- Discovered limitations or follow-up work: Lingua Reader is not required to
-  understand or mutate this domain. Missing explicit presentation continues to
-  mean current Anx defaults and must not be persisted merely by rendering.
+- Status: COMPLETE
+- Commit SHA: `5301d438`
+- Important files changed: `lib/service/sync/annotation_presentation_protocol.dart`,
+  `lib/service/sync/shared_state_database.dart`,
+  `lib/service/sync/annotation_sync_coordinator.dart`,
+  `lib/service/sync/annotation_sync_runtime.dart`,
+  `lib/service/sync/annotation_repository.dart`, and focused presentation,
+  database, coordinator, and repository tests under `test/service/sync/`.
+- Architectural decisions made: Anx owns one separately serialized version-1
+  presentation document at `anx/annotation-presentations.json`, stored under
+  the independent `anx-annotation-presentations` shared-state domain. Entries
+  are keyed only by canonical annotation UUID. Each explicit style/color update
+  or reset carries an operation timestamp; the newer operation wins,
+  canonical-JSON ordering resolves equal update/update values, and reset wins
+  an exact update/reset tie. Reset records are retained even when this device
+  has not seen an explicit value, preventing a stale remote value from being
+  resurrected; a strictly later explicit update intentionally restores it.
+  Missing/reset presentation means current Anx defaults and rendering never
+  persists those defaults. Schema v3 migrates M4E.2 rows into this document and
+  marks only its own durable revision dirty. The conditional WebDAV coordinator
+  is domain/codec/path configurable, giving both domains the same single-flight,
+  compare-and-set, ETag, first-create LOCK fallback, offline retry, and restart
+  behavior without sharing bytes or outbox rows. Runtime status and lifecycle
+  cover both coordinators, and remote presentation merges reconcile/refresh the
+  current temporary native renderer projection.
+- Tests run: Dart formatting on all touched Dart files; targeted `flutter
+  analyze` on the nine touched production/test files (no issues); focused
+  presentation protocol, shared-state, coordinator, and repository tests (81
+  passed); full `flutter test --no-pub test/service/sync` (183 passed), including
+  protocol fixtures/conformance, restart, two-device update/reset convergence,
+  offline durability, conditional WebDAV behavior, and canonical protocol
+  isolation.
+- Discovered limitations or follow-up work: Merge order uses device wall-clock
+  timestamps because the M4E.2 sidecar had no logical clock; badly skewed clocks
+  can delay a later real-world operation until its timestamp is exceeded. The
+  one-time sidecar migration necessarily uses migration time for previously
+  timestamp-free values. Reset records and the single global document have no
+  compaction policy yet. The legacy physical `annotation_presentations` table
+  remains only as a schema-migration source until M4E.10. Lingua Reader is not
+  required to understand or mutate this Anx-only domain.
 - Acceptance checklist:
-  - [ ] Migrate the M4E.2 local sidecar into a synchronizable Anx domain.
-  - [ ] Add deterministic update/reset convergence and tombstone safety.
-  - [ ] Keep presentation dirty/outbox state independent from canonical state.
-  - [ ] Cover restart, two-device, offline, convergence, and protocol isolation.
+  - [x] Migrate the M4E.2 local sidecar into a synchronizable Anx domain.
+  - [x] Add deterministic update/reset convergence and tombstone safety.
+  - [x] Keep presentation dirty/outbox state independent from canonical state.
+  - [x] Cover restart, two-device, offline, convergence, and protocol isolation.
 
 ### M4E.8 — Direct Foliate annotation renderer adapter
 
@@ -558,34 +587,36 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 7 of 12 implementation phases
+- Completed submilestones: 8 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.7 — Canonical enrichment mutation API
+Last completed submilestone: M4E.7a — Cross-device Anx presentation sync
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `486c62f0 refactor: use canonical annotation mutation identities`
-Documentation checkpoint: The current commit records the completed M4E.7
+Last implementation commit: `5301d438 feat: sync Anx annotation presentation`
+Documentation checkpoint: The current commit records the completed M4E.7a
 implementation SHA and handoff
-Repository state: Clean at the completed M4E.7 documentation checkpoint
-Next submilestone: M4E.7a — Cross-device Anx presentation sync
-Next concrete tasks: Inventory shared-state domain/path dispatch and WebDAV
-coordinator assumptions; add a separately serialized Anx presentation document
-with deterministic updated/reset convergence; migrate local M4E.2 sidecars;
-give it independent durable dirty/outbox behavior; prove two-instance, offline,
-tombstone, and protocol isolation behavior.
+Repository state: Clean at the completed M4E.7a documentation checkpoint
+Next submilestone: M4E.8 — Direct Foliate annotation renderer adapter
+Next concrete tasks: Inventory the Flutter/Foliate annotation bridge and
+`BookNote` renderer payload; add an ephemeral `FoliateAnnotationDto` built from
+canonical `AnnotationUiModel` plus effective Anx presentation; send canonical
+UUID string identities through render/hit-test callbacks; keep rendered taps
+separate from SelectionSession; remove the open-reader renderer's dependency on
+native note rows and verify adapter/bridge refresh behavior.
 Known failing tests: None
-Known limitations: Existing rendered-annotation taps still resolve the native
-compatibility handle to canonical identity until M4E.8; Notes/bookmark callers
-retain named compatibility APIs for later phases. External provider apps do not
-return a savable result. Automated tests do not synthesize real Android WebView
-native-handle gestures. Local `develop` still has the previously documented
-divergence from `origin/develop`.
-Important files to inspect next: `lib/service/sync/shared_state_database.dart`,
-`lib/service/sync/annotation_sync_coordinator.dart`, conditional WebDAV path
-construction, `annotation_sync_runtime.dart`, M4E.2 presentation schema/tests,
-and protocol fixture isolation tests.
+Known limitations: Presentation LWW uses wall-clock timestamps and retains
+reset records without compaction. Existing rendered-annotation taps still
+resolve the native compatibility handle to canonical identity until M4E.8;
+Notes/bookmark callers retain named compatibility APIs for later phases.
+External provider apps do not return a savable result. Automated tests do not
+synthesize real Android WebView native-handle gestures. Local `develop` still
+has the previously documented divergence from `origin/develop`.
+Important files to inspect next: `lib/page/book_player/epub_player.dart`,
+Foliate annotation bridge methods in `assets/foliate-js/src/book.js`,
+`lib/service/sync/annotation_read_model.dart`, open-reader refresh tests, native
+projection calls in the reader, and rendered-annotation click handling.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

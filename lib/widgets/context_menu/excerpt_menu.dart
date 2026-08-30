@@ -121,36 +121,35 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     }
   }
 
-  Future<SelectionAnnotationHandle> _createOrResolve(SelectionSnapshot snapshot,
-      {required bool persistPresentation}) async {
+  Future<SelectionAnnotationHandle> _createOrResolve(
+      SelectionSnapshot snapshot) async {
     final existingId = noteId ?? widget.id;
     if (existingId != null) {
       return SelectionAnnotationHandle(
         ref: await annotationRepository.annotationRefForNativeId(existingId),
-        nativeCompatibilityId: existingId,
       );
     }
 
+    final result = await annotationRepository
+        .createAnnotation(_canonicalCreation(snapshot));
+    _recordProjection(result.compatibilityProjection);
+    return SelectionAnnotationHandle(ref: result.ref);
+  }
+
+  CanonicalSelectionCreation _canonicalCreation(SelectionSnapshot snapshot) {
     final player = epubPlayerKey.currentState!;
-    final created = await annotationRepository.createSelectionAnnotation(
-      AnnotationCreation(
-        book: player.book,
-        selectedText: snapshot.selectedText,
-        epubCfi: snapshot.selector,
-        chapter:
-            snapshot.chapter.isEmpty ? player.chapterTitle : snapshot.chapter,
-        context: snapshot.annotationContext,
-        type: annoType,
-        color: annoColor,
-        persistPresentation: persistPresentation,
-      ),
+    return CanonicalSelectionCreation(
+      book: player.book,
+      selectedText: snapshot.selectedText,
+      epubCfi: snapshot.selector,
+      chapter:
+          snapshot.chapter.isEmpty ? player.chapterTitle : snapshot.chapter,
+      context: snapshot.annotationContext,
     );
-    final id = created.id!;
-    _recordNote(created);
-    return SelectionAnnotationHandle(
-      ref: await annotationRepository.annotationRefForNativeId(id),
-      nativeCompatibilityId: id,
-    );
+  }
+
+  void _recordProjection(BookNote? note) {
+    if (note != null) _recordNote(note);
   }
 
   void _recordNote(BookNote note) {
@@ -167,40 +166,52 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     }
   }
 
-  Future<BookNote> savePersonalNote(String value) async {
-    final note = await widget.persistenceSession.persist(
-      create: (snapshot) =>
-          _createOrResolve(snapshot, persistPresentation: false),
-      save: (annotation) => annotationRepository.setPersonalNote(
-          annotation.nativeCompatibilityId, value),
+  Future<BookNote?> savePersonalNote(String value) async {
+    final result = await widget.persistenceSession.persistWithFirstSave(
+      createAndSave: (snapshot) async {
+        final mutation =
+            await annotationRepository.createAnnotationWithPersonalNote(
+                _canonicalCreation(snapshot), value);
+        return SelectionFirstSaveResult(
+            SelectionAnnotationHandle(ref: mutation.ref), mutation);
+      },
+      save: (ref) => annotationRepository.setPersonalNote(ref, value),
     );
-    _recordNote(note);
-    epubPlayerKey.currentState!.addAnnotation(note);
+    final note = result.compatibilityProjection;
+    _recordProjection(note);
+    if (note != null) epubPlayerKey.currentState!.addAnnotation(note);
     return note;
   }
 
-  Future<BookNote> saveTranslation(String value) async {
-    final note = await widget.persistenceSession.persist(
-      create: (snapshot) =>
-          _createOrResolve(snapshot, persistPresentation: false),
-      save: (annotation) => annotationRepository.saveTranslation(
-          annotation.nativeCompatibilityId, value),
+  Future<BookNote?> saveTranslation(String value) async {
+    final result = await widget.persistenceSession.persistWithFirstSave(
+      createAndSave: (snapshot) async {
+        final mutation =
+            await annotationRepository.createAnnotationWithTranslation(
+                _canonicalCreation(snapshot), value);
+        return SelectionFirstSaveResult(
+            SelectionAnnotationHandle(ref: mutation.ref), mutation);
+      },
+      save: (ref) => annotationRepository.saveTranslation(ref, value),
     );
-    _recordNote(note);
-    epubPlayerKey.currentState!.addAnnotation(note);
+    final note = result.compatibilityProjection;
+    _recordProjection(note);
+    if (note != null) epubPlayerKey.currentState!.addAnnotation(note);
     return note;
   }
 
-  Future<BookNote> _persistNote({String? color, String? type}) async {
+  Future<BookNote?> _persistNote({String? color, String? type}) async {
     final existingNote = await _fetchLatestNote() ?? _currentNote;
     final resolvedType = type ?? existingNote?.type ?? annoType;
     final resolvedColor = color ?? existingNote?.color ?? annoColor;
 
     final handle = await widget.persistenceSession.ensureAnnotation(
-      (snapshot) => _createOrResolve(snapshot, persistPresentation: true),
+      _createOrResolve,
     );
-    final BookNote bookNote = await annotationRepository.updatePresentation(
-        handle.nativeCompatibilityId, resolvedType, resolvedColor);
+    final result = await annotationRepository.updatePresentation(
+        handle.ref, resolvedType, resolvedColor);
+    final bookNote = result.compatibilityProjection;
+    if (bookNote == null) return null;
     final id = bookNote.id!;
 
     if (mounted) {
@@ -232,11 +243,12 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   Future<void> deleteHandler() async {
     if (deleteConfirm) {
       final current = await _fetchLatestNote() ?? _currentNote;
-      if (current != null) {
-        await annotationRepository.tombstoneAnnotation(current);
-        epubPlayerKey.currentState!
-            .removeAnnotation(widget.annoCfi, id: current.id);
-      }
+      final handle = await widget.persistenceSession.ensureAnnotation(
+        _createOrResolve,
+      );
+      await annotationRepository.tombstoneAnnotation(handle.ref);
+      epubPlayerKey.currentState!
+          .removeAnnotation(widget.annoCfi, id: current?.id);
       widget.onClose();
     } else {
       setState(() {
@@ -255,7 +267,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoColor = color;
     }
     final bookNote = await _persistNote(color: color);
-    epubPlayerKey.currentState!.addAnnotation(bookNote);
+    if (bookNote != null) epubPlayerKey.currentState!.addAnnotation(bookNote);
     if (close) {
       widget.onClose();
     }
@@ -271,7 +283,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoType = type;
     }
     final bookNote = await _persistNote(type: type);
-    epubPlayerKey.currentState!.addAnnotation(bookNote);
+    if (bookNote != null) epubPlayerKey.currentState!.addAnnotation(bookNote);
   }
 
   Widget iconButton({required Icon icon, required Function() onPressed}) {

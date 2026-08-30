@@ -21,7 +21,7 @@ class ReaderNoteMenu extends StatefulWidget {
   final Axis axis;
   final ValueChanged<bool> onVisibilityChange;
   final VoidCallback onSizeChanged;
-  final Future<BookNote> Function(String value) onSave;
+  final Future<BookNote?> Function(String value) onSave;
 
   @override
   State<ReaderNoteMenu> createState() => ReaderNoteMenuState();

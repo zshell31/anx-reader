@@ -40,6 +40,19 @@ void main() {
     }
   });
 
+  test('selection save workflow uses canonical identities', () {
+    final source =
+        File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
+    expect(source, contains('annotationRepository.saveTranslation(ref'));
+    expect(source, contains('annotationRepository.setPersonalNote(ref'));
+    expect(source, contains('annotationRepository.updatePresentation('));
+    expect(source, contains('annotationRepository.tombstoneAnnotation('));
+    expect(source, isNot(contains('saveTranslationForNativeId')));
+    expect(source, isNot(contains('setPersonalNoteForNativeId')));
+    expect(source, isNot(contains('updatePresentationForNativeId')));
+    expect(source, isNot(contains('tombstoneAnnotationForBookNote')));
+  });
+
   test(
       'lookup context is transient and annotation creation uses only annotation context',
       () {

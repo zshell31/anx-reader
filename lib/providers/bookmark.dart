@@ -83,7 +83,7 @@ class Bookmark extends _$Bookmark {
     final bookmark = matches.first;
     id = bookmark.id;
     if (id == null) return;
-    await annotationRepository.tombstoneAnnotation(
+    await annotationRepository.tombstoneAnnotationForBookNote(
       BookNote(
         id: bookmark.id,
         bookId: bookmark.bookId,

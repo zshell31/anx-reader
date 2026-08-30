@@ -20,19 +20,21 @@ class SelectionSnapshot {
 
 class SelectionAnnotationHandle {
   final AnnotationRef ref;
-  final int nativeCompatibilityId;
 
   const SelectionAnnotationHandle({
     required this.ref,
-    required this.nativeCompatibilityId,
   });
+}
+
+class SelectionFirstSaveResult<T> {
+  final SelectionAnnotationHandle annotation;
+  final T value;
+
+  const SelectionFirstSaveResult(this.annotation, this.value);
 }
 
 /// Persistence and transient provider state owned by one active selection.
 ///
-/// The native ID is a temporary compatibility handle until M4E.7 migrates all
-/// mutations to [AnnotationRef]. It is never used to discover another
-/// annotation by selector/CFI.
 class SelectionPersistenceSession {
   final SelectionSnapshot snapshot;
 
@@ -87,5 +89,28 @@ class SelectionPersistenceSession {
   }) async {
     final annotation = await ensureAnnotation(create);
     return save(annotation);
+  }
+
+  Future<T> persistWithFirstSave<T>({
+    required Future<SelectionFirstSaveResult<T>> Function(
+            SelectionSnapshot snapshot)
+        createAndSave,
+    required Future<T> Function(AnnotationRef ref) save,
+  }) async {
+    final current = _annotation;
+    if (current != null) return save(current.ref);
+    final pending = _creation;
+    if (pending != null) return save((await pending).ref);
+
+    final operation = createAndSave(snapshot);
+    final creation = operation.then((result) => result.annotation);
+    _creation = creation;
+    try {
+      final result = await operation;
+      _annotation = result.annotation;
+      return result.value;
+    } finally {
+      _creation = null;
+    }
   }
 }

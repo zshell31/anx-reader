@@ -403,21 +403,55 @@ At the end of every M4E session:
 
 ### M4E.7 — Canonical enrichment mutation API
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Semantic APIs accept `AnnotationRef`; creation
-  on first explicit save returns the UUID used by all subsequent session saves.
-- Tests run: —
-- Discovered limitations or follow-up work: Use only protocol-v2 enrichment
-  kinds: translation, dictionary, ai-analysis, personal-note, and ai-thread.
+- Status: COMPLETE
+- Commit SHA: pending in this implementation commit
+- Important files changed: `lib/service/sync/annotation_repository.dart`,
+  `lib/service/sync/annotation_projection_reconciler.dart`,
+  `lib/page/book_player/selection_persistence_session.dart`, context-menu
+  persistence consumers, the bookmark compatibility consumer, and focused
+  repository/mutation/renderer-refresh tests.
+- Architectural decisions made: `createAnnotation` returns a canonical
+  `AnnotationRef`; translation, dictionary, AI analysis, AI thread,
+  personal-note, tombstone, and presentation mutations take `AnnotationRef`.
+  `createAnnotationWithTranslation` and
+  `createAnnotationWithPersonalNote` commit the new selection and first
+  enrichment in one canonical revision. `SelectionPersistenceSession` owns no
+  native identity and its first-save gate serializes creation while ensuring a
+  concurrent later action targets the resulting ref. Material enrichments use
+  UUID identities; the owned personal note retains its deterministic
+  annotation-derived identity and tombstone semantics; AI threads/messages use
+  UUID identities and protocol-v2 fields. Repository mutations patch the
+  protocol-owned document in place, preserving unknown fields/selectors.
+  `AnnotationMutationResult` separates canonical success from the following
+  compatibility renderer/projection refresh and returns any refresh failure
+  without throwing or rolling back canonical data. Reconciliation invoked by
+  the canonical API suppresses legacy presentation migration so effective
+  defaults are not misclassified as explicit style. Presentation writes use
+  the sidecar only and preserve canonical bytes, revision, and semantic time.
+  Native-ID/BookNote mutation entrypoints are explicitly named/documented as
+  compatibility APIs; the active selection save workflow no longer uses them.
+- Tests run: Dart formatting on all touched Dart files; targeted `flutter
+  analyze` on 12 production/test files (no issues); focused canonical API,
+  selection-persistence, and mutation-boundary tests; final combined `flutter
+  test --no-pub test/page/book_player/selection_persistence_session_test.dart
+  test/page/book_player/selection_session_bridge_test.dart test/service/sync`
+  (190 passed). This includes protocol fixtures/conformance, deterministic
+  merge, unknown-field retention, synchronization/runtime, canonical-before-
+  refresh ordering, refresh failure durability, and WebDAV transport coverage.
+- Discovered limitations or follow-up work: BookNote projection remains the
+  temporary renderer payload until M4E.8, so resolving a tap on an existing
+  rendered annotation still performs a compatibility native-ID-to-ref read.
+  Bookmark and Notes-page consumers retain clearly named compatibility
+  deletion/edit APIs for M4E.9/M4E.10. Renderer refresh failure is returned and
+  logged; the current compact menu has no dedicated localized refresh-warning
+  banner. Only the established protocol-v2 enrichment kinds are used.
 - Acceptance checklist:
-  - [ ] Add canonical identity APIs for create, enrich, tombstone, and local
+  - [x] Add canonical identity APIs for create, enrich, tombstone, and Anx
     presentation update.
-  - [ ] Commit canonical data before renderer/UI refresh.
-  - [ ] Report post-commit refresh failure as renderer/presentation failure.
-  - [ ] Remove native BookNote-ID semantic APIs as consumers migrate.
-  - [ ] Add mutation, durability, and failure-boundary tests.
+  - [x] Commit canonical data before renderer/UI refresh.
+  - [x] Report post-commit refresh failure as renderer/presentation failure.
+  - [x] Remove native BookNote-ID semantic APIs as consumers migrate.
+  - [x] Add mutation, durability, and failure-boundary tests.
 
 ### M4E.7a — Cross-device Anx presentation sync
 
@@ -524,32 +558,34 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 6 of 12 implementation phases
+- Completed submilestones: 7 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.6 — Simplified transient lookup UX
+Last completed submilestone: M4E.7 — Canonical enrichment mutation API
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `d32f6afd feat: add transient annotation lookup workflow`
-Documentation checkpoint: The current commit records the completed M4E.6
-implementation SHA and handoff
-Repository state: Clean at the completed M4E.6 documentation checkpoint
-Next submilestone: M4E.7 — Canonical enrichment mutation API
-Next concrete tasks: Add canonical `AnnotationRef` create/enrichment/tombstone
-APIs, migrate the SelectionPersistenceSession and context menu off native IDs,
-cover every established enrichment kind, and prove canonical durability before
-renderer refresh including refresh failure.
+Last implementation commit: pending `refactor: use canonical annotation mutation identities`
+Documentation checkpoint: This implementation commit records M4E.7 COMPLETE;
+the following documentation checkpoint records its SHA
+Repository state: Implementation ready for its M4E.7 commit
+Next submilestone: M4E.7a — Cross-device Anx presentation sync
+Next concrete tasks: Inventory shared-state domain/path dispatch and WebDAV
+coordinator assumptions; add a separately serialized Anx presentation document
+with deterministic updated/reset convergence; migrate local M4E.2 sidecars;
+give it independent durable dirty/outbox behavior; prove two-instance, offline,
+tombstone, and protocol isolation behavior.
 Known failing tests: None
-Known limitations: External Android provider apps do not return a savable result;
-AI canonical Save remains M4E.7. Automated tests do not synthesize real Android
-WebView native-handle gestures. Paginated selection and sentence context remain
-limited to one live EPUB content document. Local `develop` still has the
-previously documented divergence from `origin/develop`.
-Important files to inspect next: `lib/service/sync/annotation_repository.dart`,
-`lib/page/book_player/selection_persistence_session.dart`, context-menu save
-callbacks, protocol enrichment validation/tests, projection reconciliation,
-and renderer-refresh integration tests.
+Known limitations: Existing rendered-annotation taps still resolve the native
+compatibility handle to canonical identity until M4E.8; Notes/bookmark callers
+retain named compatibility APIs for later phases. External provider apps do not
+return a savable result. Automated tests do not synthesize real Android WebView
+native-handle gestures. Local `develop` still has the previously documented
+divergence from `origin/develop`.
+Important files to inspect next: `lib/service/sync/shared_state_database.dart`,
+`lib/service/sync/annotation_sync_coordinator.dart`, conditional WebDAV path
+construction, `annotation_sync_runtime.dart`, M4E.2 presentation schema/tests,
+and protocol fixture isolation tests.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

@@ -122,6 +122,7 @@ class AnnotationProjectionReconciler {
     String fingerprint,
     String annotationId, {
     BookNote? localPresentation,
+    bool migrateLegacyPresentation = true,
   }) async {
     final result = AnnotationReconciliationResult();
     final canonicalFingerprint = canonicalMd5Fingerprint(fingerprint);
@@ -142,7 +143,8 @@ class AnnotationProjectionReconciler {
     try {
       await _reconcileOne(
           matches.single, canonicalFingerprint, localBooks, result,
-          localPresentation: localPresentation);
+          localPresentation: localPresentation,
+          migrateLegacyPresentation: migrateLegacyPresentation);
     } catch (error) {
       result.errors++;
       if (await sharedState.putAnnotationProjection(
@@ -165,6 +167,7 @@ class AnnotationProjectionReconciler {
     List<Book> localBooks,
     AnnotationReconciliationResult result, {
     BookNote? localPresentation,
+    bool migrateLegacyPresentation = true,
   }) async {
     final annotationId = annotation['id'] as String;
     final existing = await native.findBySharedAnnotationId(annotationId);
@@ -237,7 +240,7 @@ class AnnotationProjectionReconciler {
     final presentation = await _presentation(
       annotationId,
       annotation['motivation'] as String,
-      localPresentation ?? existing,
+      migrateLegacyPresentation ? localPresentation ?? existing : null,
     );
     final desired = _desiredNote(annotationId, annotation, projection,
         localBook.id, existing, localPresentation, presentation);

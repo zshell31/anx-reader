@@ -40,6 +40,46 @@ class AnnotationExcerptEditUnsupported implements Exception {
   String toString() => 'Selected source text cannot be edited independently';
 }
 
+class CanonicalSelectionCreation {
+  final Book book;
+  final String selectedText;
+  final String epubCfi;
+  final String chapter;
+  final String? context;
+
+  const CanonicalSelectionCreation({
+    required this.book,
+    required this.selectedText,
+    required this.epubCfi,
+    required this.chapter,
+    required this.context,
+  });
+}
+
+class AiThreadMessageInput {
+  final String role;
+  final String content;
+
+  const AiThreadMessageInput({required this.role, required this.content});
+}
+
+/// A successful canonical mutation and the independent compatibility refresh
+/// outcome that followed it. [rendererRefreshFailure] never means the
+/// canonical mutation failed or was rolled back.
+class AnnotationMutationResult {
+  final AnnotationRef ref;
+  final BookNote? compatibilityProjection;
+  final AnnotationProjectionException? rendererRefreshFailure;
+
+  const AnnotationMutationResult({
+    required this.ref,
+    required this.compatibilityProjection,
+    required this.rendererRefreshFailure,
+  });
+
+  bool get rendererRefreshSucceeded => rendererRefreshFailure == null;
+}
+
 class AnnotationCreation {
   final Book book;
   final String selectedText;
@@ -118,6 +158,51 @@ class AnnotationRepository {
     return next;
   }
 
+  Future<AnnotationMutationResult> createAnnotation(
+          CanonicalSelectionCreation input) =>
+      _enqueue(() => _createCanonicalAnnotation(input));
+
+  Future<AnnotationMutationResult> createAnnotationWithTranslation(
+          CanonicalSelectionCreation input, String content) =>
+      _enqueue(() => _createCanonicalAnnotation(input,
+          firstMaterialKind: 'translation', firstContent: content.trim()));
+
+  Future<AnnotationMutationResult> createAnnotationWithPersonalNote(
+          CanonicalSelectionCreation input, String content) =>
+      _enqueue(() =>
+          _createCanonicalAnnotation(input, firstPersonalNote: content.trim()));
+
+  Future<AnnotationMutationResult> saveTranslation(
+          AnnotationRef ref, String content) =>
+      _enqueue(() => _saveMaterial(ref, 'translation', content));
+
+  Future<AnnotationMutationResult> saveDictionaryResult(
+          AnnotationRef ref, String content) =>
+      _enqueue(() => _saveMaterial(ref, 'dictionary', content));
+
+  Future<AnnotationMutationResult> saveAiAnalysis(
+          AnnotationRef ref, String content) =>
+      _enqueue(() => _saveMaterial(ref, 'ai-analysis', content));
+
+  Future<AnnotationMutationResult> saveAiThread(
+          AnnotationRef ref, Iterable<AiThreadMessageInput> messages,
+          {Iterable<String> enrichmentIds = const []}) =>
+      _enqueue(
+          () => _saveAiThread(ref, messages, enrichmentIds: enrichmentIds));
+
+  Future<AnnotationMutationResult> setPersonalNote(
+          AnnotationRef ref, String value) =>
+      _enqueue(() => _setPersonalNoteByRef(ref, value.trim()));
+
+  Future<AnnotationMutationResult> tombstoneAnnotation(AnnotationRef ref) =>
+      _enqueue(() => _tombstoneByRef(ref));
+
+  Future<AnnotationMutationResult> updatePresentation(
+          AnnotationRef ref, String type, String color) =>
+      _enqueue(() => _updatePresentationByRef(ref, type, color));
+
+  /// Compatibility API for BookNote consumers not yet migrated to
+  /// [createAnnotation]. Do not add new callers.
   Future<BookNote> createSelectionAnnotation(AnnotationCreation input) =>
       _enqueue(() async {
         final fingerprint = _fingerprint(input.book);
@@ -186,7 +271,8 @@ class AnnotationRepository {
 
   /// M4E.6 compatibility entrypoint. M4E.7 replaces its native identity with
   /// a canonical AnnotationRef mutation API.
-  Future<BookNote> saveTranslation(int nativeNoteId, String content) =>
+  Future<BookNote> saveTranslationForNativeId(
+          int nativeNoteId, String content) =>
       _enqueue(() async {
         final existing = await native.readProjection(nativeNoteId);
         return _appendMaterialEnrichment(
@@ -230,7 +316,8 @@ class AnnotationRepository {
             localPresentation: presentation))!;
       });
 
-  Future<BookNote> setPersonalNote(int nativeNoteId, String value) =>
+  /// Compatibility API for remaining native-ID UI consumers.
+  Future<BookNote> setPersonalNoteForNativeId(int nativeNoteId, String value) =>
       _enqueue(() async {
         final existing = await native.readProjection(nativeNoteId);
         return _setPersonalNote(existing, value.trim());
@@ -238,6 +325,7 @@ class AnnotationRepository {
 
   /// Applies the notes-page edit. Selected text is immutable; personal-note
   /// changes are canonical-first, while type/color-only edits stay local.
+  /// Compatibility API for the pre-M4E Notes UI.
   Future<BookNote> updateNativeAnnotation(BookNote proposed) =>
       _enqueue(() async {
         final nativeId = proposed.id;
@@ -258,16 +346,19 @@ class AnnotationRepository {
         return _updatePresentation(existing, proposed.type, proposed.color);
       });
 
-  Future<BookNote> updatePresentation(
+  /// Compatibility API for remaining native-ID presentation consumers.
+  Future<BookNote> updatePresentationForNativeId(
           int nativeNoteId, String type, String color) =>
       _enqueue(() async {
         final existing = await native.readProjection(nativeNoteId);
         return _updatePresentation(existing, type, color);
       });
 
-  Future<void> tombstoneAnnotation(BookNote note) =>
+  /// Compatibility API for remaining BookNote deletion consumers.
+  Future<void> tombstoneAnnotationForBookNote(BookNote note) =>
       _enqueue(() => _tombstoneAnnotation(note));
 
+  /// Compatibility bulk API for the pre-M4E Notes UI.
   Future<void> tombstoneAnnotations(Iterable<BookNote> notes) =>
       _enqueue(() async {
         AnnotationProjectionException? projectionFailure;
@@ -280,6 +371,238 @@ class AnnotationRepository {
         }
         if (projectionFailure != null) throw projectionFailure;
       });
+
+  Future<AnnotationMutationResult> _createCanonicalAnnotation(
+      CanonicalSelectionCreation input,
+      {String? firstMaterialKind,
+      String? firstContent,
+      String? firstPersonalNote}) async {
+    final fingerprint = _fingerprint(input.book);
+    _epubCfi(input.epubCfi);
+    if (firstMaterialKind != null) {
+      _validateMaterial(firstMaterialKind, firstContent ?? '');
+    }
+    if (firstPersonalNote != null && firstPersonalNote.isEmpty) {
+      throw ArgumentError.value(
+          firstPersonalNote, 'firstPersonalNote', 'must not be empty');
+    }
+    final timestamp = canonicalWireTimestamp(now());
+    final annotationId = uuid.v4();
+    final annotation = <String, dynamic>{
+      'id': annotationId,
+      'motivation': 'selection',
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+      'target': <String, dynamic>{
+        'selectedText': input.selectedText,
+        'chapter': input.chapter,
+        if (input.context?.trim().isNotEmpty == true) 'context': input.context,
+        'selectors': [
+          {'type': 'epub-cfi', 'cfi': input.epubCfi.trim()}
+        ],
+      },
+      'enrichments': <Object>[
+        if (firstMaterialKind != null)
+          _materialEnrichment(
+              firstMaterialKind, firstContent!.trim(), timestamp),
+        if (firstPersonalNote?.isNotEmpty == true)
+          <String, dynamic>{
+            'id': 'personal-note:$annotationId',
+            'kind': 'personal-note',
+            'content': firstPersonalNote,
+            'createdAt': timestamp,
+            'updatedAt': timestamp,
+          },
+      ],
+    };
+    final document = await _document(input.book, fingerprint);
+    (document['annotations'] as List).add(annotation);
+    await _commit(fingerprint, document);
+    return _refreshCanonical(AnnotationRef(
+        bookFingerprint: fingerprint, annotationId: annotationId));
+  }
+
+  Future<AnnotationMutationResult> _saveMaterial(
+      AnnotationRef ref, String kind, String content) async {
+    final value = content.trim();
+    _validateMaterial(kind, value);
+    final binding = await _canonicalBindingByRef(ref);
+    _ensureAlive(binding.annotation);
+    final timestamp = _nextTimestamp(binding.annotation);
+    (binding.annotation['enrichments'] as List)
+        .add(_materialEnrichment(kind, value, timestamp));
+    binding.annotation['updatedAt'] = timestamp;
+    await _commit(binding.fingerprint, binding.document);
+    return _refreshCanonical(ref);
+  }
+
+  Map<String, dynamic> _materialEnrichment(
+          String kind, String content, String timestamp) =>
+      <String, dynamic>{
+        'id': '$kind:${uuid.v4()}',
+        'kind': kind,
+        'content': content,
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+
+  void _validateMaterial(String kind, String content) {
+    if (!const {'translation', 'dictionary', 'ai-analysis'}.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind', 'unsupported material kind');
+    }
+    if (content.trim().isEmpty) {
+      throw ArgumentError.value(content, 'content', 'must not be empty');
+    }
+  }
+
+  Future<AnnotationMutationResult> _saveAiThread(
+      AnnotationRef ref, Iterable<AiThreadMessageInput> input,
+      {required Iterable<String> enrichmentIds}) async {
+    final messages = input.toList(growable: false);
+    if (messages.isEmpty) {
+      throw ArgumentError.value(messages, 'messages', 'must not be empty');
+    }
+    final binding = await _canonicalBindingByRef(ref);
+    _ensureAlive(binding.annotation);
+    final timestamp = _nextTimestamp(binding.annotation);
+    final selectedText =
+        (binding.annotation['target'] as Map)['selectedText'] as String;
+    (binding.annotation['enrichments'] as List).add(<String, dynamic>{
+      'id': 'ai-thread:${uuid.v4()}',
+      'kind': 'ai-thread',
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+      'contextSnapshot': {
+        'selectedText': selectedText,
+        'enrichmentIds': enrichmentIds.toList(growable: false),
+      },
+      'messages': [
+        for (var index = 0; index < messages.length; index++)
+          <String, dynamic>{
+            'id': 'ai-message:${uuid.v4()}',
+            'role': messages[index].role,
+            'sequence': index,
+            'content': messages[index].content,
+            'createdAt': timestamp,
+            'updatedAt': timestamp,
+          },
+      ],
+    });
+    binding.annotation['updatedAt'] = timestamp;
+    await _commit(binding.fingerprint, binding.document);
+    return _refreshCanonical(ref);
+  }
+
+  Future<AnnotationMutationResult> _setPersonalNoteByRef(
+      AnnotationRef ref, String value) async {
+    final binding = await _canonicalBindingByRef(ref);
+    final annotation = binding.annotation;
+    _ensureAlive(annotation);
+    final enrichments =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    final personal = enrichments
+        .where((item) => item['kind'] == 'personal-note')
+        .toList()
+      ..sort(compareCanonicalEntityRecency);
+    final timestamp = _nextTimestamp(annotation, after: personal);
+    final deterministicId = 'personal-note:${binding.annotationId}';
+    final owned = personal
+        .where((item) =>
+            item['id'] == deterministicId ||
+            (item['id'] as String).startsWith('$deterministicId:'))
+        .toList()
+      ..sort(compareCanonicalEntityRecency);
+    var winner = owned.isEmpty ? null : owned.last;
+    if (value.isEmpty) {
+      winner ??= <String, dynamic>{
+        'id': deterministicId,
+        'kind': 'personal-note',
+        'content': '',
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+      if (!enrichments.contains(winner)) enrichments.add(winner);
+      winner['content'] = '';
+      winner['updatedAt'] = timestamp;
+      winner['deletedAt'] = timestamp;
+    } else if (winner == null || winner.containsKey('deletedAt')) {
+      final idAvailable =
+          !enrichments.any((item) => item['id'] == deterministicId);
+      enrichments.add(<String, dynamic>{
+        'id': idAvailable ? deterministicId : '$deterministicId:${uuid.v4()}',
+        'kind': 'personal-note',
+        'content': value,
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      });
+    } else {
+      winner['content'] = value;
+      winner['updatedAt'] = timestamp;
+    }
+    annotation['updatedAt'] = timestamp;
+    await _commit(binding.fingerprint, binding.document);
+    return _refreshCanonical(ref);
+  }
+
+  Future<AnnotationMutationResult> _tombstoneByRef(AnnotationRef ref) async {
+    final binding = await _canonicalBindingByRef(ref);
+    final annotation = binding.annotation;
+    if (!annotation.containsKey('deletedAt')) {
+      final timestamp = _nextTimestamp(annotation);
+      annotation['updatedAt'] = timestamp;
+      annotation['deletedAt'] = timestamp;
+      await _commit(binding.fingerprint, binding.document);
+    }
+    await sharedState.deleteAnnotationPresentation(ref.annotationId);
+    return _refreshCanonical(ref);
+  }
+
+  Future<AnnotationMutationResult> _updatePresentationByRef(
+      AnnotationRef ref, String type, String color) async {
+    final binding = await _canonicalBindingByRef(ref);
+    _ensureAlive(binding.annotation);
+    if (binding.annotation['motivation'] != 'selection') {
+      throw ArgumentError('Bookmark motivation is not presentation');
+    }
+    if (type != 'highlight' && type != 'underline') {
+      throw ArgumentError.value(type, 'type', 'must be highlight or underline');
+    }
+    await sharedState.putAnnotationPresentation(AnnotationPresentation(
+      annotationId: ref.annotationId,
+      style: type == 'underline'
+          ? AnnotationPresentationStyle.underline
+          : AnnotationPresentationStyle.highlight,
+      color: color,
+    ));
+    return _refreshCanonical(ref);
+  }
+
+  Future<AnnotationMutationResult> _refreshCanonical(AnnotationRef ref) async {
+    try {
+      final result = await _reconciler.reconcileAnnotation(
+          ref.bookFingerprint, ref.annotationId,
+          migrateLegacyPresentation: false);
+      if (result.errors != 0) {
+        throw AnnotationProjectionException(ref.annotationId);
+      }
+      return AnnotationMutationResult(
+        ref: ref,
+        compatibilityProjection:
+            await native.findBySharedAnnotationId(ref.annotationId),
+        rendererRefreshFailure: null,
+      );
+    } catch (error) {
+      final failure = error is AnnotationProjectionException
+          ? error
+          : AnnotationProjectionException(ref.annotationId, error);
+      AnxLog.warning(failure.toString());
+      return AnnotationMutationResult(
+        ref: ref,
+        compatibilityProjection: null,
+        rendererRefreshFailure: failure,
+      );
+    }
+  }
 
   Future<BookNote> _setPersonalNote(BookNote existing, String value,
       {BookNote? localPresentation}) async {
@@ -466,6 +789,23 @@ class AnnotationRepository {
     }
     return _CanonicalBinding(
         fingerprint, annotationId, document, matches.single);
+  }
+
+  Future<_CanonicalBinding> _canonicalBindingByRef(AnnotationRef ref) async {
+    final document = await sharedState.annotationDocument(ref.bookFingerprint);
+    if (document == null) {
+      throw StateError('Canonical annotation document was not found');
+    }
+    final annotations =
+        (document['annotations'] as List).cast<Map<String, dynamic>>();
+    final matches =
+        annotations.where((value) => value['id'] == ref.annotationId).toList();
+    if (matches.length != 1) {
+      throw StateError(
+          'Canonical annotation ${ref.annotationId} was not found');
+    }
+    return _CanonicalBinding(
+        ref.bookFingerprint, ref.annotationId, document, matches.single);
   }
 
   Future<Map<String, dynamic>> _document(Book book, String fingerprint) async {

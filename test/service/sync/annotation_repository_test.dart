@@ -162,6 +162,16 @@ void main() {
         ),
       );
 
+  CanonicalSelectionCreation canonicalCreation(
+          {String cfi = 'epubcfi(/6/2!/4/2,/1:0,/1:14)'}) =>
+      CanonicalSelectionCreation(
+        book: testBook(),
+        selectedText: 'selected words',
+        epubCfi: cfi,
+        chapter: 'Chapter 1',
+        context: 'real live context',
+      );
+
   test('canonical mutation is dirty and scheduler-notified before projection',
       () async {
     var notifications = 0;
@@ -238,6 +248,144 @@ void main() {
     expect(annotation['target'], isNot(contains('context')));
   });
 
+  group('canonical identity mutation API', () {
+    test('create returns AnnotationRef and same-CFI creates separate UUIDs',
+        () async {
+      final first = await repository.createAnnotation(canonicalCreation());
+      final second = await repository.createAnnotation(canonicalCreation());
+
+      expect(first.ref.bookFingerprint, fingerprint);
+      expect(first.ref.annotationId, isNot(second.ref.annotationId));
+      expect(first.compatibilityProjection?.sharedAnnotationId,
+          first.ref.annotationId);
+      final document = (await shared.annotationDocument(fingerprint))!;
+      expect(document['annotations'], hasLength(2));
+    });
+
+    test('first translation is one coherent canonical revision', () async {
+      final result = await repository.createAnnotationWithTranslation(
+          canonicalCreation(), 'перевод');
+      final document = (await shared.annotationDocument(fingerprint))!;
+      final annotation = annotationOf(document, result.ref.annotationId);
+
+      expect((await shared.pendingOutbox()).single.localRevision, 1);
+      expect(document['annotations'], hasLength(1));
+      expect(annotation['enrichments'], hasLength(1));
+      expect(annotation['enrichments'].single['kind'], 'translation');
+      expect(annotation['enrichments'].single['content'], 'перевод');
+    });
+
+    test('material, AI thread, and personal-note saves preserve each other',
+        () async {
+      final created = await repository.createAnnotation(canonicalCreation());
+      final ref = created.ref;
+      await repository.saveDictionaryResult(ref, 'definition');
+      await repository.saveAiAnalysis(ref, 'analysis');
+      await repository.saveTranslation(ref, 'translation');
+      await repository.saveAiThread(ref, const [
+        AiThreadMessageInput(role: 'user', content: 'why?'),
+        AiThreadMessageInput(role: 'assistant', content: 'because'),
+      ]);
+      await repository.setPersonalNote(ref, 'remember');
+      await repository.setPersonalNote(ref, 'edited');
+
+      final annotation = annotationOf(
+          (await shared.annotationDocument(fingerprint))!, ref.annotationId);
+      final enrichments =
+          (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+      expect(
+          enrichments.map((value) => value['kind']),
+          containsAll([
+            'dictionary',
+            'ai-analysis',
+            'translation',
+            'ai-thread',
+            'personal-note',
+          ]));
+      final personal =
+          enrichments.singleWhere((value) => value['kind'] == 'personal-note');
+      expect(personal['content'], 'edited');
+      final thread =
+          enrichments.singleWhere((value) => value['kind'] == 'ai-thread');
+      expect(thread['messages'], hasLength(2));
+    });
+
+    test('unknown remote fields survive canonical enrichment mutation',
+        () async {
+      final created = await repository.createAnnotation(canonicalCreation());
+      var document = (await shared.annotationDocument(fingerprint))!;
+      final annotation = annotationOf(document, created.ref.annotationId);
+      annotation['futureField'] = {
+        'nested': [true]
+      };
+      (annotation['target']['selectors'] as List).add({
+        'type': 'future-selector',
+        'future': {'kept': true},
+      });
+      await shared.putAnnotationDocument(document);
+
+      await repository.saveDictionaryResult(created.ref, 'definition');
+      document = (await shared.annotationDocument(fingerprint))!;
+      final updated = annotationOf(document, created.ref.annotationId);
+      expect(updated['futureField'], {
+        'nested': [true]
+      });
+      expect(updated['target']['selectors'], hasLength(2));
+    });
+
+    test('presentation mutation leaves canonical bytes and timestamps intact',
+        () async {
+      final created = await repository.createAnnotation(canonicalCreation());
+      final before = await shared.canonicalDocument('annotations', fingerprint);
+      final annotationBefore = annotationOf(
+          (await shared.annotationDocument(fingerprint))!,
+          created.ref.annotationId)['updatedAt'];
+
+      final result = await repository.updatePresentation(
+          created.ref, 'underline', 'ffff00');
+
+      expect(result.ref, created.ref);
+      expect(
+          await shared.canonicalDocument('annotations', fingerprint), before);
+      expect(
+          annotationOf((await shared.annotationDocument(fingerprint))!,
+              created.ref.annotationId)['updatedAt'],
+          annotationBefore);
+      expect(
+          (await shared.annotationPresentation(created.ref.annotationId))
+              ?.style,
+          AnnotationPresentationStyle.underline);
+    });
+
+    test('canonical success is retained and reported when refresh fails',
+        () async {
+      native.failInsert = true;
+      final result = await repository.createAnnotationWithTranslation(
+          canonicalCreation(), 'durable');
+
+      expect(result.rendererRefreshSucceeded, isFalse);
+      expect(result.rendererRefreshFailure, isNotNull);
+      final annotation = annotationOf(
+          (await shared.annotationDocument(fingerprint))!,
+          result.ref.annotationId);
+      expect(annotation['enrichments'].single['content'], 'durable');
+      expect(shared.events.first, 'canonical');
+      expect(native.events, ['insert']);
+    });
+
+    test('tombstone mutates by AnnotationRef and remains semantic', () async {
+      final created = await repository.createAnnotation(canonicalCreation());
+      final result = await repository.tombstoneAnnotation(created.ref);
+      final annotation = annotationOf(
+          (await shared.annotationDocument(fingerprint))!,
+          created.ref.annotationId);
+
+      expect(result.ref, created.ref);
+      expect(annotation['deletedAt'], isNotNull);
+      expect(native.notes, isEmpty);
+    });
+  });
+
   test('semantic first save can create without persisting default presentation',
       () async {
     final note = await repository.createSelectionAnnotation(
@@ -275,7 +423,8 @@ void main() {
     final ref = await repository.annotationRefForNativeId(note.id!);
 
     clock = clock.add(const Duration(minutes: 1));
-    final updated = await repository.saveTranslation(note.id!, 'перевод');
+    final updated =
+        await repository.saveTranslationForNativeId(note.id!, 'перевод');
     final annotation = annotationOf(
         (await shared.annotationDocument(fingerprint))!, ref.annotationId);
 
@@ -336,13 +485,13 @@ void main() {
     await shared.putAnnotationDocument(document);
 
     clock = clock.add(const Duration(minutes: 1));
-    await repository.setPersonalNote(note.id!, 'first');
+    await repository.setPersonalNoteForNativeId(note.id!, 'first');
     clock = clock.add(const Duration(minutes: 1));
-    await repository.setPersonalNote(note.id!, 'edited');
+    await repository.setPersonalNoteForNativeId(note.id!, 'edited');
     expect(native.notes.single.readerNote, 'edited');
 
     clock = clock.add(const Duration(minutes: 1));
-    await repository.setPersonalNote(note.id!, '');
+    await repository.setPersonalNoteForNativeId(note.id!, '');
     document = (await shared.annotationDocument(fingerprint))!;
     final result = annotationOf(document, id);
     final personal = (result['enrichments'] as List)
@@ -377,8 +526,8 @@ void main() {
     final before = await shared.canonicalDocument('annotations', fingerprint);
     final revision = (await shared.pendingOutbox()).single.localRevision;
 
-    final recolored =
-        await repository.updatePresentation(note.id!, 'underline', '00ff00');
+    final recolored = await repository.updatePresentationForNativeId(
+        note.id!, 'underline', '00ff00');
     expect(await shared.canonicalDocument('annotations', fingerprint),
         orderedEquals(before!));
     expect((await shared.pendingOutbox()).single.localRevision, revision);
@@ -388,8 +537,8 @@ void main() {
     expect(sidecar?.style, AnnotationPresentationStyle.underline);
     expect(sidecar?.color, '00ff00');
 
-    final retyped =
-        await repository.updatePresentation(note.id!, 'highlight', '00ff00');
+    final retyped = await repository.updatePresentationForNativeId(
+        note.id!, 'highlight', '00ff00');
     final after = await shared.canonicalDocument('annotations', fingerprint);
 
     expect(after, orderedEquals(before));
@@ -420,7 +569,7 @@ void main() {
     expect(note.color, '0.42');
 
     clock = clock.add(const Duration(minutes: 1));
-    await repository.tombstoneAnnotation(note);
+    await repository.tombstoneAnnotationForBookNote(note);
     final deleted = annotationOf(
         (await shared.annotationDocument(fingerprint))!,
         note.sharedAnnotationId!);
@@ -433,7 +582,7 @@ void main() {
   test('annotation delete persists tombstone before native removal', () async {
     final note = await createSelection();
     clock = clock.add(const Duration(minutes: 1));
-    await repository.tombstoneAnnotation(note);
+    await repository.tombstoneAnnotationForBookNote(note);
     final annotation = annotationOf(
         (await shared.annotationDocument(fingerprint))!,
         note.sharedAnnotationId!);
@@ -497,7 +646,7 @@ void main() {
     final note = await createSelection();
     native.failDelete = true;
     clock = clock.add(const Duration(minutes: 1));
-    await expectLater(repository.tombstoneAnnotation(note),
+    await expectLater(repository.tombstoneAnnotationForBookNote(note),
         throwsA(isA<AnnotationProjectionException>()));
     final annotation = annotationOf(
         (await shared.annotationDocument(fingerprint))!,
@@ -515,7 +664,8 @@ void main() {
     final note = await createSelection();
     native.failUpdate = true;
     clock = clock.add(const Duration(minutes: 1));
-    await expectLater(repository.setPersonalNote(note.id!, 'durable idea'),
+    await expectLater(
+        repository.setPersonalNoteForNativeId(note.id!, 'durable idea'),
         throwsA(isA<AnnotationProjectionException>()));
     final annotation = annotationOf(
         (await shared.annotationDocument(fingerprint))!,

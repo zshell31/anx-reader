@@ -18,7 +18,6 @@ SelectionSnapshot snapshot({String selector = 'epubcfi(/6/2!/4/2:1)'}) =>
 SelectionAnnotationHandle handle(String id, int nativeId) =>
     SelectionAnnotationHandle(
       ref: AnnotationRef(bookFingerprint: fingerprint, annotationId: id),
-      nativeCompatibilityId: nativeId,
     );
 
 void main() {

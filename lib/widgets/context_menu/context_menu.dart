@@ -551,11 +551,9 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   final note = await _excerptMenuKey
                                       .currentState
                                       ?.savePersonalNote(value);
-                                  if (note == null) {
-                                    throw StateError(
-                                        'Selection actions are unavailable');
+                                  if (note != null) {
+                                    _handleNoteCreated(note.id!);
                                   }
-                                  _handleNoteCreated(note.id!);
                                   return note;
                                 },
                               ),
@@ -576,11 +574,9 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   final note = await _excerptMenuKey
                                       .currentState
                                       ?.saveTranslation(translation);
-                                  if (note == null) {
-                                    throw StateError(
-                                        'Selection actions are unavailable');
+                                  if (note != null) {
+                                    _handleNoteCreated(note.id!);
                                   }
-                                  _handleNoteCreated(note.id!);
                                 },
                               ),
                             ],

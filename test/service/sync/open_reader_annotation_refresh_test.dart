@@ -17,7 +17,8 @@ void main() {
     expect(foliate, contains('this.view.addAnnotation(annotation, true)'));
   });
 
-  test('incremental renderer operations use native annotation identity', () {
+  test('incremental renderer compatibility uses native identity until M4E.8',
+      () {
     final player = source('lib/page/book_player/epub_player.dart');
     final foliate = source('assets/foliate-js/src/book.js');
     final excerpt = source('lib/widgets/context_menu/excerpt_menu.dart');
@@ -28,7 +29,9 @@ void main() {
     expect(foliate, contains('this.annotationsById.get(annotation.id)'));
     expect(foliate, contains('this.annotationsById.get(id)'));
     expect(player, contains("source: 'removeAnnotation(\${jsonEncode(cfi)},"));
-    expect(excerpt, contains('id: current.id'));
+    expect(excerpt, contains('id: current?.id'));
+    expect(excerpt,
+        contains('annotationRepository.tombstoneAnnotation(handle.ref)'));
     expect(notes, contains('id: note.id'));
     expect(bookmarks, contains('id: bookmark.id'));
   });

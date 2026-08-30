@@ -503,20 +503,54 @@ At the end of every M4E session:
 
 ### M4E.8 — Direct Foliate annotation renderer adapter
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: `FoliateAnnotationDto` is ephemeral and should
-  use the canonical UUID directly when the bridge accepts string IDs.
-- Tests run: —
-- Discovered limitations or follow-up work: If a renderer handle is necessary,
-  its UUID mapping remains ephemeral and is never domain identity.
+- Status: COMPLETE
+- Commit SHA: `30121b6e`
+- Important files changed:
+  `lib/page/book_player/foliate_annotation_adapter.dart`,
+  `lib/page/book_player/epub_player.dart`, the context-menu bridge and refresh
+  callers, `assets/foliate-js/src/annotation-renderer-identity.mjs`,
+  `assets/foliate-js/src/view.js`, `assets/foliate-js/src/book.js`, rebuilt
+  `assets/foliate-js/dist/bundle.js`, and focused Dart/JavaScript bridge tests.
+- Architectural decisions made: `EpubPlayer` now reads the canonical book
+  document and synchronized Anx presentations, creates one-way
+  `AnnotationUiModel` values, and maps only render-capable active annotations
+  through ephemeral `FoliateAnnotationDto`. The DTO uses
+  `SharedAnnotation.id` as both its string `id` and independent `renderKey`;
+  EPUB CFI remains navigation/range data and is never identity. Foliate's
+  overlayer now adds, removes, and hit-tests by `renderKey`, while its reader
+  resolves that key through the UUID map. Same-CFI annotations therefore remain
+  separately indexed instead of overwriting the overlayer solely by CFI.
+  Selection annotations combine explicit Anx presentation with current defaults
+  at adaptation time without persisting defaults; bookmark motivation maps to
+  Foliate's bookmark rendering separately. Renderer taps return the canonical
+  UUID, Flutter constructs `AnnotationRef` directly, and the context menu seeds
+  `SelectionPersistenceSession` with that ref. It never resolves a native ID or
+  searches by CFI. Rendered taps continue through `onAnnotationClick`, wholly
+  separate from DOM selection and `onSelectionActionsRequested`. Incremental
+  native payload writes/removes were replaced with a canonical snapshot refresh.
+- Tests run: Dart formatting on all touched Dart files; targeted `flutter
+  analyze` on the nine touched production/test files (no issues); combined
+  adapter, selection-session, bridge, and complete sync regression run via
+  `flutter test --no-pub ... test/service/sync` (201 passed); configured Foliate
+  `npm test` (40 passed, including same-CFI UUID render-key coverage); configured
+  `npm run build` succeeded and rebuilt `dist/bundle.js` with the same three
+  top-level-await target warnings. `package.json` still has no lint script, so
+  no unconfigured JavaScript lint command was invented.
+- Discovered limitations or follow-up work: Two annotations with identical
+  ranges are independently represented and never identity-collapsed, but their
+  visual geometry overlaps and Foliate hit testing returns the overlay entry at
+  the tapped paint position; there is not yet a chooser for coincident marks.
+  Unsupported selectors remain canonical and visible to future canonical Notes
+  UI but are intentionally absent from Foliate. Bookmark and existing personal-
+  note/editor UI still use named native compatibility paths until M4E.9/M4E.10,
+  though the renderer and renderer-tap identity no longer do. There is no
+  automated Android WebView gesture harness for a real overlay tap.
 - Acceptance checklist:
-  - [ ] Render canonical annotation plus effective Anx presentation without
+  - [x] Render canonical annotation plus effective Anx presentation without
     `BookNote`.
-  - [ ] Resolve renderer hit testing to `AnnotationRef`.
-  - [ ] Keep rendered-annotation taps distinct from DOM Range selections.
-  - [ ] Add adapter and bridge verification.
+  - [x] Resolve renderer hit testing to `AnnotationRef`.
+  - [x] Keep rendered-annotation taps distinct from DOM Range selections.
+  - [x] Add adapter and bridge verification.
 
 ### M4E.9 — Migrate Notes UI to canonical state
 
@@ -587,36 +621,37 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 8 of 12 implementation phases
+- Completed submilestones: 9 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.7a — Cross-device Anx presentation sync
+Last completed submilestone: M4E.8 — Direct Foliate annotation renderer adapter
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `5301d438 feat: sync Anx annotation presentation`
-Documentation checkpoint: The current commit records the completed M4E.7a
+Last implementation commit: `30121b6e refactor: render canonical annotations in Foliate`
+Documentation checkpoint: The current commit records the completed M4E.8
 implementation SHA and handoff
-Repository state: Clean at the completed M4E.7a documentation checkpoint
-Next submilestone: M4E.8 — Direct Foliate annotation renderer adapter
-Next concrete tasks: Inventory the Flutter/Foliate annotation bridge and
-`BookNote` renderer payload; add an ephemeral `FoliateAnnotationDto` built from
-canonical `AnnotationUiModel` plus effective Anx presentation; send canonical
-UUID string identities through render/hit-test callbacks; keep rendered taps
-separate from SelectionSession; remove the open-reader renderer's dependency on
-native note rows and verify adapter/bridge refresh behavior.
+Repository state: Clean at the completed M4E.8 documentation checkpoint
+Next submilestone: M4E.9 — Migrate Notes UI to canonical state
+Next concrete tasks: Inventory every Notes/bookmark provider, list/tile/detail,
+editor, multiselect, delete, navigation, export, statistics, and filtering
+consumer; replace `BookNote`/numeric identity with `AnnotationUiModel` and
+`AnnotationRef`; keep unsupported/unbound annotations visible with explicit
+capabilities; distinguish bookmark motivation from presentation filters; move
+personal-note reads/edits and reader-note opening to canonical enrichments; add
+provider/UI coverage before removing compatibility infrastructure in M4E.10.
 Known failing tests: None
 Known limitations: Presentation LWW uses wall-clock timestamps and retains
-reset records without compaction. Existing rendered-annotation taps still
-resolve the native compatibility handle to canonical identity until M4E.8;
-Notes/bookmark callers retain named compatibility APIs for later phases.
-External provider apps do not return a savable result. Automated tests do not
-synthesize real Android WebView native-handle gestures. Local `develop` still
-has the previously documented divergence from `origin/develop`.
-Important files to inspect next: `lib/page/book_player/epub_player.dart`,
-Foliate annotation bridge methods in `assets/foliate-js/src/book.js`,
-`lib/service/sync/annotation_read_model.dart`, open-reader refresh tests, native
-projection calls in the reader, and rendered-annotation click handling.
+reset records without compaction. Coincident renderer ranges have distinct UUID
+identity but no visual chooser. Notes/bookmark/editor callers retain named
+native compatibility APIs for M4E.9/M4E.10. External provider apps do not return
+a savable result. Automated tests do not synthesize real Android WebView native-
+handle or overlay-tap gestures. Local `develop` still has the previously
+documented divergence from `origin/develop`.
+Important files to inspect next: `lib/providers/book_notes.dart`,
+`lib/providers/bookmark.dart`, `lib/widgets/book_notes/`, reader-note/context
+menu widgets, export/statistics code, `lib/dao/book_note.dart`, and every
+remaining `BookNote`, numeric note ID, or compatibility repository API caller.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

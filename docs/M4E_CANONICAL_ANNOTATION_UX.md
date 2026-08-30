@@ -404,7 +404,7 @@ At the end of every M4E session:
 ### M4E.7 — Canonical enrichment mutation API
 
 - Status: COMPLETE
-- Commit SHA: pending in this implementation commit
+- Commit SHA: `486c62f0`
 - Important files changed: `lib/service/sync/annotation_repository.dart`,
   `lib/service/sync/annotation_projection_reconciler.dart`,
   `lib/page/book_player/selection_persistence_session.dart`, context-menu
@@ -565,10 +565,10 @@ At the end of every M4E session:
 
 Last completed submilestone: M4E.7 — Canonical enrichment mutation API
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: pending `refactor: use canonical annotation mutation identities`
-Documentation checkpoint: This implementation commit records M4E.7 COMPLETE;
-the following documentation checkpoint records its SHA
-Repository state: Implementation ready for its M4E.7 commit
+Last implementation commit: `486c62f0 refactor: use canonical annotation mutation identities`
+Documentation checkpoint: The current commit records the completed M4E.7
+implementation SHA and handoff
+Repository state: Clean at the completed M4E.7 documentation checkpoint
 Next submilestone: M4E.7a — Cross-device Anx presentation sync
 Next concrete tasks: Inventory shared-state domain/path dispatch and WebDAV
 coordinator assumptions; add a separately serialized Anx presentation document

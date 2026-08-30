@@ -605,23 +605,100 @@ At the end of every M4E session:
 
 ### M4E.10 — Remove BookNote and native projection infrastructure
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Retain only the migration/read compatibility
-  required to bootstrap existing installations into canonical state plus the
-  local sidecar; stop all legacy writes afterward.
-- Tests run: —
-- Discovered limitations or follow-up work: Audit every `BookNote`, numeric note
-  ID, `readerNote`, `sharedAnnotationId`, projection table/hash/status, and DAO
-  reference before removal.
+- Status: COMPLETE
+- Commit SHA: `e2d1e85b`
+- Important files changed: removed `lib/models/book_note.dart`,
+  `lib/dao/book_note.dart`, `annotation_projection_reconciler.dart`, and
+  `native_annotation_projection.dart`; added the read-only
+  `legacy_annotation_store.dart`; simplified `legacy_annotation_bootstrap.dart`,
+  `annotation_repository.dart`, `annotation_sync_coordinator.dart`,
+  `annotation_sync_runtime.dart`, `shared_state_database.dart`, startup/database
+  restore hooks, and canonical statistics; replaced projection tests with
+  `legacy_annotation_bootstrap_test.dart` and canonical repository/runtime
+  boundary coverage.
+- Architectural decisions made: `AnnotationRepository` now accepts explicit
+  creation data or `AnnotationRef` and returns `AnnotationRef`; it has no app
+  database, numeric annotation ID, native store, compatibility result, status,
+  hash, or reconciler dependency. Canonical and presentation commits notify the
+  direct UI/renderer paths only after durable writes. Sync invokes a generic
+  document-change listener after a local merge and treats listener failure as
+  independent from canonical/network convergence. Legacy `tb_notes` rows are
+  enumerated through a read-only migration interface with no mutation methods.
+  Durable receipts, a portable multi-field anchor, and an established canonical
+  ID hint make import idempotent without CFI identity inference. Bootstrap never
+  updates an existing canonical entity, honors canonical/receipt tombstones,
+  and writes style/color only when no synchronized presentation update or reset
+  already exists. Fresh shared-state schema v4 omits obsolete projection and
+  sidecar tables; an upgraded database retains them physically for migration
+  safety but exposes no active query/mutation API.
+- Tests run: Dart formatting on all touched files; full `flutter analyze` with
+  no errors and 42 pre-existing informational lints; combined complete
+  `test/service/sync`, app database migration, canonical Notes/provider,
+  SelectionPersistenceSession/SelectionSession, catalog, and Foliate adapter
+  run (187 passed); focused post-notification bootstrap/runtime audit run (23
+  passed); Foliate configured `npm test` (40 passed); and `npm run build`
+  succeeded with the same three documented top-level-await warnings.
+- Discovered limitations or follow-up work: Existing app databases deliberately
+  retain `tb_notes` as read-only migration input, and upgraded shared-state
+  databases may retain the obsolete physical projection and M4E.2 sidecar
+  tables. They can be dropped in a later destructive schema cleanup after the
+  legacy import horizon; no current repository, UI, renderer, or sync consumer
+  depends on them.
+- Pre-removal legacy-reference audit (2026-08-30):
+  - REMOVE: `lib/models/book_note.dart`, `lib/dao/book_note.dart`,
+    `native_annotation_projection.dart`,
+    `annotation_projection_reconciler.dart`, every repository compatibility
+    API/result/error that exposes a native row or numeric note ID, all startup,
+    book-open, canonical-sync, and presentation-sync reconciliation callbacks,
+    `AnnotationProjectionMetadata` plus its query/write APIs, projection status,
+    hash, native-ID mapping, and the projection-focused tests. The remaining
+    `ReadingTimeDao.selectTotalNumberOfNotes` query is also an active legacy
+    annotation-table read and must move to the canonical catalog.
+  - MIGRATION-ONLY: the physical app-database `tb_notes` table and its historical
+    `reader_note`/`shared_annotation_id` columns; a minimal read-only row/store
+    used by `LegacyAnnotationBootstrap`; durable import receipts including the
+    already-deployed `anx-booknote-anchor-v1` source string; and the physical
+    M4E.2 `annotation_presentations` table solely as schema-v3 migration input.
+    Existing databases may retain the obsolete physical projection/sidecar
+    tables for backward safety, but current-schema database creation and active
+    runtime APIs must not depend on them.
+  - UNRELATED / NOT AN ANNOTATION CONCERN: canonical UI names such as
+    `BookNotesState`, `BookNotesList`, `BookNoteTile`, `book_notes.dart`, and the
+    `book_notes_operations` hint; `ReaderNoteMenu` as the UI editor for canonical
+    `personal-note`; generic `unsupported` statuses in dictionary, translation,
+    file-import, PDF, and WebView code; `Set<int>` tag/group identities; and
+    historical planning/issue documentation. No annotation-related
+    `ValueKey(note.id)` remains.
 - Acceptance checklist:
-  - [ ] Complete any final legacy-row bootstrap/migration.
-  - [ ] Remove `BookNote`, annotation DAO paths, projection reconciler/store,
+  - [x] Complete any final legacy-row bootstrap/migration.
+  - [x] Remove `BookNote`, annotation DAO paths, projection reconciler/store,
     projection metadata, and native annotation identity.
-  - [ ] Remove dead compatibility-only APIs.
-  - [ ] Document anything intentionally retained.
-  - [ ] Run repository-wide legacy-reference audit and tests.
+  - [x] Remove dead compatibility-only APIs.
+  - [x] Document anything intentionally retained.
+  - [x] Run repository-wide legacy-reference audit and tests.
+
+#### M4E.10 final legacy-reference audit
+
+- Active exact `BookNote` model references: zero. Active legacy annotation-table
+  reads outside migration: zero. Active legacy annotation-table writes: zero.
+  Semantic native annotation IDs, projection reconciler/store, projection
+  status/hash/error concepts, and projection metadata APIs: zero.
+- Migration-only references: `legacy_annotation_store.dart` reads the physical
+  `tb_notes` columns `reader_note` and `shared_annotation_id`; the latter is only
+  a stable canonical-ID hint. `legacy_annotation_bootstrap.dart` retains the
+  deployed receipt source strings `anx-booknote-anchor-v1` and
+  `tb_notes-unsupported-v1`. `lib/dao/database.dart` retains the physical table,
+  historical columns, and index; `database_migration_test.dart` verifies the v7
+  to v8 migration. `shared_state_database.dart` can create
+  `annotation_projections` only when tests/opening historical schema versions
+  1–3 and can read `annotation_presentations` only during the v2-to-v3 schema
+  migration. Schema v4 creates neither table.
+- Non-runtime occurrences: boundary tests contain forbidden legacy spellings as
+  negative assertions. Canonical UI names (`BookNotesState`, `BookNotesList`,
+  `BookNoteTile`, and `book_notes.dart`) refer to the Notes feature/read model,
+  not the removed semantic model. `ReaderNoteMenu` is the editor widget for the
+  canonical `personal-note` enrichment. Historical milestone/issue documents
+  remain historical.
 
 ### M4E.11 — Final regression and architecture verification
 
@@ -653,40 +730,39 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 10 of 12 implementation phases
+- Completed submilestones: 11 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.9 — Migrate Notes UI to canonical state
+Last completed submilestone: M4E.10 — Remove BookNote and native projection
+infrastructure
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `b763440f refactor: drive notes UI from canonical annotations`
-Documentation checkpoint: The current commit records the completed M4E.9
+Last implementation commit: `e2d1e85b refactor: remove legacy BookNote annotation projection`
+Documentation checkpoint: The current commit records the completed M4E.10
 implementation SHA and handoff
-Repository state: Clean at the completed M4E.9 documentation checkpoint
-Next submilestone: M4E.10 — Remove BookNote and native projection infrastructure
-Next concrete tasks: Audit and classify every remaining `BookNote`, DAO,
-`readerNote`, `sharedAnnotationId`, native-note-ID, projection status/hash/table,
-reconciler/store, and compatibility mutation reference; preserve only an
-idempotent, restart-safe legacy-read bootstrap into canonical annotation plus
-synchronized Anx presentation; prove it cannot duplicate annotations or
-resurrect tombstones; then remove active legacy writes, the semantic model/DAO,
-runtime projection reconciliation and native identity bridges.
+Repository state: Clean at the completed M4E.10 documentation checkpoint
+Next submilestone: M4E.11 — Final regression and architecture verification
+Next concrete tasks: Verify the final semantic UI, direct Foliate, selection,
+presentation-sync, and read-only legacy-bootstrap architecture; run the complete
+acceptance matrix and full configured Flutter/Foliate suites; fix only cutover
+regressions; add the real-device manual checklist and deferred limitations; then
+mark M4E complete only if the final repository-wide legacy audit remains clean.
 Known failing tests: None
 Known limitations: Presentation LWW uses wall-clock timestamps and retains
 reset records without compaction. Coincident renderer ranges have distinct UUID
-identity but no visual chooser. The legacy bootstrap/projection stack still
-contains `BookNote` and native compatibility identities pending M4E.10, but no
-Notes/UI semantic consumer uses them. External provider apps do not return a
+identity but no visual chooser. Physical legacy tables remain only as read-only
+or schema-migration input; there is no active projection stack. External
+provider apps do not return a
 savable result. Automated tests do not synthesize real Android WebView native-
 handle or overlay-tap gestures. Local `develop` still has the previously
 documented divergence from `origin/develop`.
-Important files to inspect next: `lib/models/book_note.dart`,
-`lib/dao/book_note.dart`, `lib/service/sync/legacy_annotation_bootstrap.dart`,
-`lib/service/sync/annotation_projection_reconciler.dart`,
-`lib/service/sync/native_annotation_projection.dart`, compatibility portions of
-`lib/service/sync/annotation_repository.dart`, projection metadata in
-`lib/service/sync/shared_state_database.dart`, and their runtime/startup callers.
+Important files to inspect next: final acceptance coverage under
+`test/service/sync/`, selection/renderer tests under `test/page/book_player/`,
+canonical Notes/provider tests, `assets/foliate-js/test/`, and the final runtime
+paths in `annotation_catalog.dart`, `annotation_repository.dart`,
+`annotation_sync_runtime.dart`, `foliate_annotation_adapter.dart`, and
+`epub_player.dart`.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

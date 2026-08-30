@@ -984,6 +984,7 @@ Branch readiness: Ready for manual verification / merge review
 - Implementation commits:
   - `b663ea35 fix: reconcile bilingual translations on chapter load`
   - `072152c6 fix: bound translation reconciliation to visible pages`
+  - `525b327e feat: prefetch translations for the next page`
 - Scope: one post-review presentation/lifecycle fix. Translation request
   identity, previous-paragraph context, persistent cache schema, invalidation,
   and WebDAV synchronization semantics are unchanged.
@@ -1031,8 +1032,9 @@ successful result available elsewhere; it was never a rendering repair.
   not a fixed-delay heuristic. Reflowable content waits for the paginator's
   visible Range before this scheduled pass selects elements.
 - `View.#onRelocate` explicitly reconciles every document currently returned by
-  `renderer.getContents()`. Relocation is the paginator's layout/anchor-complete
-  boundary and also provides retry/convergence while paging within a chapter.
+  `renderer.getContents()` using the current visual Range plus one next-page
+  prefetch Range. Relocation is the paginator's layout/anchor-complete boundary
+  and also provides retry/convergence while paging within a chapter.
 - Reconciliation checks relevant elements whether or not an observer callback
   was received. Existing successful JS state rematerializes or repairs the
   wrapper without calling Flutter. New state calls Flutter and then converges
@@ -1050,14 +1052,15 @@ iframe layout viewport spans the entire columnized chapter, while the outer
 container scrolls between visual pages. Consequently, nearly every paragraph
 could pass the geometry test and start a bridge request plus DOM reflow at once.
 
-`072152c6` makes the paginator's relocated DOM `Range` authoritative for
-reflowable reconciliation. Before the first relocation, explicit
-reconciliation starts no geometry-derived bulk work; `IntersectionObserver`
-remains the lazy accelerator. Each later relocation reconciles only elements
-intersecting the current visual Range. Fixed-layout spreads continue using
+`072152c6` makes paginator DOM ranges authoritative for reflowable
+reconciliation. Before the first relocation, explicit reconciliation starts no
+geometry-derived bulk work; `IntersectionObserver` remains the lazy accelerator.
+`525b327e` adds a bounded prefetch Range for exactly the next visual page. Each
+relocation therefore reconciles the current page and one following page while
+leaving the third and later pages lazy. Fixed-layout spreads continue using
 geometry because their one- or two-document iframe viewport is meaningful.
-This retains missed-callback convergence while preventing chapter-wide request
-and re-layout storms during book open.
+This retains missed-callback convergence and smooth page turns while preventing
+chapter-wide request and re-layout storms during book open.
 
 ### In-flight, stale completion, cleanup, and retry strategy
 
@@ -1090,9 +1093,10 @@ and re-layout storms during book open.
   result, wrapper repair without a provider call, retired-chapter completion,
   transient retry, permanent-error quiescence, all four display modes, and
   renderer-driven cleanup. A dedicated opening-performance regression verifies
-  that reconciliation translates only the paginator's visible Range and does
-  not translate later visual pages prematurely. The chapter test also verifies that
-  previous-paragraph context resets per document and is preserved within it.
+  that reconciliation translates the current and next paginator Ranges, then
+  advances the prefetch window without translating the third page prematurely.
+  The chapter test also verifies that previous-paragraph context resets per
+  document and is preserved within it.
 - Configured `npm test` passed all five test files. Running the same suite with
   Node's process isolation disabled exposed the individual count: 54 of 54
   tests passed, including all 12 translator cases.
@@ -1155,7 +1159,7 @@ Branch readiness: Ready for manual verification / merge review
 Last completed work: Bilingual chapter-load translation stabilization
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`072152c6 fix: bound translation reconciliation to visible pages`
+`525b327e feat: prefetch translations for the next page`
 Documentation checkpoint: This section records the diagnosed presentation
 race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
 retry policy, automated evidence, and added manual-device checklist.

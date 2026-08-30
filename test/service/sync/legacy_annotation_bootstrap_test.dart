@@ -40,6 +40,7 @@ LegacyAnnotationRow row({
   String color = 'yellow',
   String? personalNote,
   String? canonicalIdHint,
+  double? bookmarkPercentage,
   DateTime? createTime,
   DateTime? updateTime,
 }) =>
@@ -53,6 +54,7 @@ LegacyAnnotationRow row({
       color: color,
       personalNote: personalNote,
       canonicalIdHint: canonicalIdHint,
+      bookmarkPercentage: bookmarkPercentage,
       createTime: createTime ?? created,
       updateTime: updateTime ?? updated,
     );
@@ -275,6 +277,50 @@ void main() {
     expect(
         annotations.map((value) => value['target']['selectors'].single['cfi']),
         everyElement(cfi));
+  });
+
+  test('legacy bookmark percentage migrates when valid', () async {
+    final legacy = FakeLegacyAnnotationStore(
+      books: [book()],
+      rows: [
+        row(type: 'bookmark', color: '0.42', bookmarkPercentage: 0.42),
+      ],
+    );
+
+    await LegacyAnnotationBootstrap(shared, legacy: legacy).run();
+
+    final annotation =
+        onlyAnnotation((await shared.annotationDocument(fingerprint))!);
+    expect(annotation['motivation'], 'bookmark');
+    expect(annotation['target']['progress']['fraction'], 0.42);
+    expect(await shared.annotationPresentation(annotation['id'] as String),
+        isNull);
+  });
+
+  test('invalid legacy bookmark percentage does not crash migration', () async {
+    final fromDatabase = LegacyAnnotationRow.fromDatabase({
+      'id': 1,
+      'book_id': 7,
+      'content': 'bookmark',
+      'cfi': cfi,
+      'chapter': 'Chapter 1',
+      'type': 'bookmark',
+      'color': 'not-a-percentage',
+      'create_time': created.toIso8601String(),
+      'update_time': updated.toIso8601String(),
+    });
+    final legacy = FakeLegacyAnnotationStore(
+      books: [book()],
+      rows: [fromDatabase],
+    );
+
+    final result =
+        await LegacyAnnotationBootstrap(shared, legacy: legacy).run();
+
+    expect(result.imported, 1);
+    final annotation =
+        onlyAnnotation((await shared.annotationDocument(fingerprint))!);
+    expect(annotation['target'], isNot(contains('progress')));
   });
 
   test('unsupported legacy rows are recognized without canonical creation',

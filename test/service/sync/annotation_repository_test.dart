@@ -261,8 +261,53 @@ void main() {
     final annotation = annotationOf(
         (await shared.annotationDocument(fingerprint))!, ref.annotationId);
     expect(annotation['motivation'], 'bookmark');
+    expect(annotation['target']['progress']['fraction'], 0.5);
+    expect(
+        const CanonicalAnnotationReadAdapter()
+            .read((await shared.annotationDocument(fingerprint))!)
+            .single
+            .bookmarkPercentage,
+        0.5);
     await expectLater(repository.updatePresentation(ref, 'highlight', 'red'),
         throwsA(isA<ArgumentError>()));
+  });
+
+  test('bookmark percentage validation rejects invalid canonical writes',
+      () async {
+    for (final percentage in [double.nan, -0.01, 1.01]) {
+      await expectLater(
+        repository.createBookmark(BookmarkCreation(
+          book: localBook(),
+          content: 'bookmark',
+          epubCfi: cfi,
+          chapter: 'Chapter 1',
+          percentage: percentage,
+        )),
+        throwsA(isA<ArgumentError>()),
+      );
+    }
+    expect(await shared.annotationDocument(fingerprint), isNull);
+  });
+
+  test('bookmark percentage survives database restart', () async {
+    final ref = await repository.createBookmark(BookmarkCreation(
+      book: localBook(),
+      content: 'bookmark',
+      epubCfi: cfi,
+      chapter: 'Chapter 1',
+      percentage: 0.73,
+    ));
+    await shared.close();
+    shared = SharedStateDatabase(
+      path: p.join(directory.path, 'shared_state.db'),
+      factory: databaseFactoryFfi,
+      now: () => instant,
+    );
+
+    final model = const CanonicalAnnotationReadAdapter()
+        .read((await shared.annotationDocument(fingerprint))!)
+        .singleWhere((annotation) => annotation.ref == ref);
+    expect(model.bookmarkPercentage, 0.73);
   });
 
   test('deletion creates sticky tombstone and resets presentation', () async {

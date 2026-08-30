@@ -290,6 +290,8 @@ class LegacyAnnotationBootstrap {
       'target': {
         'selectedText': row.selectedText,
         'chapter': row.chapter,
+        if (row.type == 'bookmark' && row.bookmarkPercentage != null)
+          'progress': {'fraction': row.bookmarkPercentage},
         'selectors': [
           {'type': 'epub-cfi', 'cfi': row.cfi.trim()}
         ],

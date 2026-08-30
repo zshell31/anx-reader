@@ -14,6 +14,7 @@ class LegacyAnnotationRow {
   final String chapter;
   final String type;
   final String color;
+  final double? bookmarkPercentage;
   final String? personalNote;
   final String? canonicalIdHint;
   final DateTime? createTime;
@@ -27,6 +28,7 @@ class LegacyAnnotationRow {
     required this.chapter,
     required this.type,
     required this.color,
+    this.bookmarkPercentage,
     required this.personalNote,
     required this.canonicalIdHint,
     required this.createTime,
@@ -46,12 +48,26 @@ class LegacyAnnotationRow {
       chapter: row['chapter'] as String? ?? '',
       type: row['type'] as String? ?? '',
       color: row['color'] as String? ?? '',
+      bookmarkPercentage: _legacyBookmarkPercentage(
+        row['type'] as String? ?? '',
+        row['color'],
+      ),
       personalNote: row['reader_note'] as String?,
       canonicalIdHint: row['shared_annotation_id'] as String?,
       createTime: created,
       updateTime: updated,
     );
   }
+}
+
+double? _legacyBookmarkPercentage(String type, Object? rawValue) {
+  if (type != 'bookmark') return null;
+  final value = rawValue is num
+      ? rawValue.toDouble()
+      : double.tryParse(rawValue?.toString() ?? '');
+  return value != null && value.isFinite && value >= 0 && value <= 1
+      ? value
+      : null;
 }
 
 abstract interface class LegacyAnnotationStore {

@@ -102,6 +102,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   String? textColor;
   Timer? styleTimer;
   String bookmarkCfi = '';
+  String? bookmarkId;
   bool bookmarkExists = false;
   WritingModeEnum writingMode = WritingModeEnum.horizontalTb;
   String? _lastSelectionAnnotationContext;
@@ -261,8 +262,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       ''');
   }
 
-  void removeAnnotation(String cfi) => webViewController.evaluateJavascript(
-      source: 'removeAnnotation(${jsonEncode(cfi)})');
+  void removeAnnotation(String annotationId) =>
+      webViewController.evaluateJavascript(
+          source: 'removeAnnotation(${jsonEncode(annotationId)})');
 
   void clearSearch() {
     ref.read(tocSearchProvider.notifier).clear();
@@ -641,6 +643,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
             chapterTotalPages = location['chapterTotalPages'] ?? 0;
             bookmarkExists = location['bookmark']['exists'] ?? false;
             bookmarkCfi = location['bookmark']['cfi'] ?? '';
+            bookmarkId = location['bookmark']['id'] as String?;
             writingMode =
                 WritingModeEnum.fromCode(location['writingMode'] ?? '');
           });
@@ -869,9 +872,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
                 ),
               );
           bookmarkCfi = '';
+          bookmarkId = null;
           bookmarkExists = false;
         } else {
-          await ref.read(BookmarkProvider(widget.book.id).notifier).addBookmark(
+          final created = await ref
+              .read(BookmarkProvider(widget.book.id).notifier)
+              .addBookmark(
                 BookmarkModel(
                   bookId: widget.book.id,
                   cfi: cfi,
@@ -883,6 +889,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
                 ),
               );
           bookmarkCfi = cfi;
+          bookmarkId = created.ref?.annotationId;
           bookmarkExists = true;
           await refreshAnnotations();
         }

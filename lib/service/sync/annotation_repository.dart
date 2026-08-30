@@ -177,6 +177,7 @@ class AnnotationRepository {
       _enqueue(() async {
         final fingerprint = _fingerprint(input.book);
         _epubCfi(input.epubCfi);
+        _bookmarkPercentage(input.percentage);
         final timestamp = canonicalWireTimestamp(now());
         final annotationId = uuid.v4();
         final document = await _document(input.book, fingerprint);
@@ -188,6 +189,7 @@ class AnnotationRepository {
           'target': {
             'selectedText': input.content,
             'chapter': input.chapter,
+            'progress': {'fraction': input.percentage},
             'selectors': [
               {'type': 'epub-cfi', 'cfi': input.epubCfi.trim()}
             ],
@@ -514,6 +516,12 @@ class AnnotationRepository {
     final cfi = value.trim();
     if (!cfi.startsWith('epubcfi(') || !cfi.endsWith(')') || cfi.length <= 9) {
       throw ArgumentError.value(value, 'epubCfi', 'must be a genuine EPUB CFI');
+    }
+  }
+
+  void _bookmarkPercentage(double value) {
+    if (!value.isFinite || value < 0 || value > 1) {
+      throw ArgumentError.value(value, 'percentage', 'must be between 0 and 1');
     }
   }
 

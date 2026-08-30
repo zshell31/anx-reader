@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   annotationForRenderKey,
+  annotationForRemoval,
   rendererAnnotationKey,
 } from '../src/annotation-renderer-identity.mjs'
 
@@ -15,6 +16,31 @@ test('same-CFI annotations keep independent canonical render keys', () => {
   assert.equal(rendererAnnotationKey(second), 'uuid-b')
   assert.equal(annotationForRenderKey(byId, 'uuid-a'), first)
   assert.equal(annotationForRenderKey(byId, 'uuid-b'), second)
+})
+
+test('same-CFI removal resolves only the requested canonical UUID', () => {
+  const bookmark = { id: 'bookmark-a', type: 'bookmark', value: 'same-cfi' }
+  const highlight = { id: 'highlight-b', type: 'highlight', value: 'same-cfi' }
+  const byId = new Map([[bookmark.id, bookmark], [highlight.id, highlight]])
+
+  const removed = annotationForRemoval(byId, bookmark.id)
+  byId.delete(removed.id)
+
+  assert.equal(removed, bookmark)
+  assert.equal(annotationForRemoval(byId, bookmark.id), undefined)
+  assert.equal(annotationForRemoval(byId, highlight.id), highlight)
+})
+
+test('inverse same-CFI removal leaves bookmark independently addressable', () => {
+  const bookmark = { id: 'bookmark-a', type: 'bookmark', value: 'same-cfi' }
+  const highlight = { id: 'highlight-b', type: 'highlight', value: 'same-cfi' }
+  const byId = new Map([[bookmark.id, bookmark], [highlight.id, highlight]])
+
+  const removed = annotationForRemoval(byId, highlight.id)
+  byId.delete(removed.id)
+
+  assert.equal(removed, highlight)
+  assert.equal(annotationForRemoval(byId, bookmark.id), bookmark)
 })
 
 test('legacy payloads fall back to their navigation value', () => {

@@ -5,7 +5,10 @@ import './view.js'
 import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
 import { buildRangeSentenceContext } from './sentence-context.mjs'
-import { annotationForRenderKey } from './annotation-renderer-identity.mjs'
+import {
+  annotationForRemoval,
+  annotationForRenderKey,
+} from './annotation-renderer-identity.mjs'
 import { FootnoteHandler } from './footnotes.js'
 import { Overlayer } from './overlayer.js'
 import { collapse, compare, fromRange, toRange } from './epubcfi.js'
@@ -1160,10 +1163,8 @@ class Reader {
     }
   }
 
-  async removeAnnotation(cfi, id) {
-    const annotation = id == null
-      ? this.annotationsByValue.get(cfi)
-      : this.annotationsById.get(id)
+  async removeAnnotation(id) {
+    const annotation = annotationForRemoval(this.annotationsById, id)
     if (!annotation) return
     const { value } = annotation
     const spineCode = (value.split('/')[2].split('!')[0] - 2) / 2
@@ -1773,7 +1774,7 @@ window.addAnnotation = (annotation) => reader.addAnnotation(annotation)
 
 window.addBookmarkHere = () => reader.handleBookmark(false)
 
-window.removeAnnotation = (cfi, id) => reader.removeAnnotation(cfi, id)
+window.removeAnnotation = id => reader.removeAnnotation(id)
 
 window.prevSection = () => reader.view.renderer.prevSection()
 

@@ -25,6 +25,7 @@ class Bookmark extends _$Bookmark {
             content: annotation.selectedText,
             cfi: annotation.epubCfi!,
             chapter: annotation.chapter ?? '',
+            percentage: annotation.bookmarkPercentage,
             createTime: annotation.createdAt,
             updateTime: annotation.updatedAt,
           ),

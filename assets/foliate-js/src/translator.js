@@ -79,8 +79,8 @@ export class Translator {
     }
 
     // Re-render annotations after translation mode change (and after translation completion)
-    if (window.reader && window.reader.annotationsByValue) {
-      const existingAnnotations = Array.from(window.reader.annotationsByValue.values())
+    if (window.reader && window.reader.annotationsById) {
+      const existingAnnotations = Array.from(window.reader.annotationsById.values())
       if (existingAnnotations.length > 0) {
         // console.log('Re-rendering annotations after translation mode change:', existingAnnotations.length)
         window.renderAnnotations(existingAnnotations)

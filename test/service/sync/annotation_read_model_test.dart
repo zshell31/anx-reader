@@ -129,6 +129,50 @@ void main() {
           ['epubcfi(/6/2)', 'epubcfi(/6/2)']);
     });
 
+    test('reads valid bookmark progress and ignores invalid remote progress',
+        () {
+      final valid = annotation('bookmark-valid', motivation: 'bookmark');
+      (valid['target'] as Map)['progress'] = {'fraction': 0.42};
+      final invalid = annotation('bookmark-invalid', motivation: 'bookmark');
+      (invalid['target'] as Map)['progress'] = {'fraction': 4.2};
+
+      final models = const CanonicalAnnotationReadAdapter()
+          .read(document([valid, invalid]));
+
+      expect(models[0].bookmarkPercentage, isNull);
+      expect(models[1].bookmarkPercentage, 0.42);
+      expect(models.every((model) => model.localPresentation == null), isTrue);
+    });
+
+    test('bookmark progress survives deterministic remote merge', () {
+      final local =
+          annotation('bookmark', motivation: 'bookmark', updatedAt: createdAt);
+      final remote = annotation(
+        'bookmark',
+        motivation: 'bookmark',
+        updatedAt: '2026-08-21T10:00:00.000Z',
+      );
+      (remote['target'] as Map)['progress'] = {'fraction': 0.61};
+
+      final merged = mergeAnnotationDocuments(
+        document([local]),
+        document([remote]),
+      );
+      final reverse = mergeAnnotationDocuments(
+        document([remote]),
+        document([local]),
+      );
+
+      expect(canonicalJson(merged), canonicalJson(reverse));
+      expect(
+          const CanonicalAnnotationReadAdapter()
+              .read(merged)
+              .single
+              .bookmarkPercentage,
+          0.61);
+      expect(merged['schemaVersion'], 2);
+    });
+
     test('filters annotation tombstones unless explicitly requested', () {
       final input = document([
         annotation('active'),

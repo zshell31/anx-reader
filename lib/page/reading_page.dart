@@ -751,9 +751,12 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                         tooltip: L10n.of(context).readingPageBookmark,
                         onPressed: () {
                           if (bookmarkExists) {
-                            epubPlayerKey.currentState!.removeAnnotation(
-                              epubPlayerKey.currentState!.bookmarkCfi,
-                            );
+                            final bookmarkId =
+                                epubPlayerKey.currentState!.bookmarkId;
+                            if (bookmarkId != null) {
+                              epubPlayerKey.currentState!
+                                  .removeAnnotation(bookmarkId);
+                            }
                           } else {
                             epubPlayerKey.currentState!.addBookmarkHere();
                           }

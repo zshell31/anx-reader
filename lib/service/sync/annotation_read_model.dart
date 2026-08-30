@@ -144,6 +144,7 @@ class AnnotationUiModel {
   final AnnotationCapability navigationCapability;
   final AnnotationCapability renderingCapability;
   final String? epubCfi;
+  final double? bookmarkPercentage;
   final AnnotationPresentation? localPresentation;
   final AnnotationTombstoneState tombstoneState;
 
@@ -160,6 +161,7 @@ class AnnotationUiModel {
     required this.navigationCapability,
     required this.renderingCapability,
     required this.epubCfi,
+    required this.bookmarkPercentage,
     required this.localPresentation,
     required this.tombstoneState,
   });
@@ -233,10 +235,22 @@ class CanonicalAnnotationReadAdapter {
       navigationCapability: capabilities.navigation,
       renderingCapability: capabilities.rendering,
       epubCfi: capabilities.epubCfi,
+      bookmarkPercentage: annotation['motivation'] == 'bookmark'
+          ? bookmarkProgressFraction(target)
+          : null,
       localPresentation: presentation,
       tombstoneState: annotationTombstoneState(annotation),
     );
   }
+}
+
+double? bookmarkProgressFraction(Map target) {
+  final progress = target['progress'];
+  if (progress is! Map) return null;
+  final fraction = progress['fraction'];
+  if (fraction is! num || !fraction.isFinite) return null;
+  final value = fraction.toDouble();
+  return value >= 0 && value <= 1 ? value : null;
 }
 
 bool _alwaysAvailable(String _) => true;

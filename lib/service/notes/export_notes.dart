@@ -89,7 +89,8 @@ List<List<dynamic>> canonicalNotesCsvRows(
         'Content',
         'Context',
         'Reader Note',
-        'Type',
+        'Motivation',
+        'Presentation',
         'Color',
         'Create Time',
         'Update Time'
@@ -103,6 +104,7 @@ List<List<dynamic>> canonicalNotesCsvRows(
           note.annotationContext,
           note.effectivePersonalNote?.content,
           note.motivation.name,
+          note.localPresentation?.style.name ?? '',
           note.localPresentation == null
               ? ''
               : '#${note.localPresentation!.color}',

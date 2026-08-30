@@ -113,5 +113,49 @@ void main() {
     expect(csv[1][3], 'Text same-cfi-a');
     expect(csv[1][4], 'Context for same-cfi-a.');
     expect(csv[1][5], 'Personal same-cfi-a');
+    expect(csv.first, [
+      'Book',
+      'Author',
+      'Chapter',
+      'Content',
+      'Context',
+      'Reader Note',
+      'Motivation',
+      'Presentation',
+      'Color',
+      'Create Time',
+      'Update Time',
+    ]);
+    expect(csv[1][6], 'selection');
+    expect(csv[1][7], 'underline');
+    expect(csv[1][8], '#FF00AA');
+    expect(csv[2][6], 'selection');
+    expect(csv[2][7], '', reason: 'implicit defaults stay implicit in export');
+    expect(csv[2][8], '');
+  });
+
+  test('CSV distinguishes motivation from explicit presentation', () {
+    final bookmark = annotation('bookmark')..['motivation'] = 'bookmark';
+    final notes = const CanonicalAnnotationReadAdapter().read({
+      'schemaVersion': 2,
+      'book': {
+        'fingerprintAlgorithm': 'md5',
+        'fingerprint': fingerprint,
+      },
+      'annotations': [bookmark],
+    });
+    final book = AnnotationBookUiModel(
+      fingerprint: fingerprint,
+      title: 'Book',
+      author: 'Author',
+      localBook: null,
+      annotations: notes,
+    );
+
+    final row = canonicalNotesCsvRows(book, notes)[1];
+
+    expect(row[6], 'bookmark');
+    expect(row[7], '');
+    expect(row[8], '');
   });
 }

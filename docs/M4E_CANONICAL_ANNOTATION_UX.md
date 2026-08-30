@@ -702,65 +702,197 @@ At the end of every M4E session:
 
 ### M4E.11 — Final regression and architecture verification
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: M4E is COMPLETE only when all earlier phases
-  and the complete cross-cutting verification matrix pass.
-- Tests run: —
-- Discovered limitations or follow-up work: —
+- Status: COMPLETE
+- Commit SHA: `cba0b2f6`
+- Important files changed:
+  `test/service/sync/final_annotation_architecture_test.dart`,
+  `test/service/sync/shared_state_database_test.dart`, and this document.
+- Architectural decisions made: The final guard verifies the canonical Notes
+  path, direct canonical renderer path, transient selection boundary,
+  independent synchronized Anx presentation domain, migration-only physical
+  legacy evidence, and reconciler-free document notification. Removed runtime
+  types/services and physical legacy evidence are checked separately so an
+  incidental import filename cannot broaden a migration allowlist. No final
+  architecture redesign or protocol change was required.
+- Schema-version anomaly: `currentSharedStateSchema.version` is 4. The only
+  repository creator of shared-state schema v5 is the intentional
+  `a newer unsupported schema fails without polluting a fresh open` test. It
+  creates `newer.db` under a unique `Directory.systemTemp.createTemp` directory,
+  closes the v5 handle, and asserts that opening that exact path through the v4
+  production schema throws `UnsupportedError`. `sqflite_common` unconditionally
+  prints `error ... during open, closing...` while closing that expected failed
+  open; the message is therefore visible even when the expectation passes and
+  Flutter exits zero. The strengthened test immediately opens a different fresh
+  path as schema v4 in the same process, and teardown deletes the unique
+  directory. Focused, focused-plus-schema, and two full-suite runs all behaved
+  identically. There is no v5 production constant, stale fixture, shared test
+  database, singleton/static schema state, order pollution, or persisted test
+  state involved.
+- Tests run:
+  - Dart formatting check on both M4E.11 test files: 2 files, no changes.
+  - Targeted `flutter analyze` on 24 core M4E production/test files: no issues.
+  - Full `flutter analyze --no-pub`: 42 informational issues, zero errors and
+    zero warnings. This is the same repository-wide count recorded at M4E.10;
+    none is introduced by M4E.11. The reported lines in M4E-touched
+    `reading_page.dart` and `settings_page/sync.dart` are pre-existing lines
+    outside the M4E diffs.
+  - Architecture plus shared-state schema tests: 25 passed.
+  - Focused canonical sync/protocol/presentation/repository/catalog/bootstrap,
+    Notes/provider, selection/session, Foliate adapter/bridge, and app database
+    migration set: 194 passed.
+  - Full `flutter test --no-pub`, twice from isolated test paths: 264 passed on
+    each run.
+  - Foliate configured `npm test`: 40 passed.
+  - Foliate configured `npm run build`: succeeded; Webpack 5.99.7 emitted the
+    same three known top-level-await target warnings (two for `src/book.js`, one
+    for `src/view.js`). No JavaScript lint script exists, so none was invented.
+- Discovered limitations or follow-up work: Physical legacy database tables
+  remain migration-only input. Presentation ordering uses wall-clock
+  timestamps, and presentation update/reset records have no compaction.
+  Coincident annotation ranges have no chooser UI. External provider apps
+  cannot return savable result payloads. Selection cannot span separate EPUB
+  spine DOM documents. There is no automated Android native-handle gesture
+  harness. These do not block M4E completion.
 - Acceptance checklist:
-  - [ ] Selecting/changing text creates no annotation and never auto-opens
+  - [x] Selecting/changing text creates no annotation and never auto-opens
     actions; inside/outside taps and stale callbacks obey the session model.
-  - [ ] Transient translation/dictionary/AI create no annotation.
-  - [ ] First save creates exactly one UUID and later session saves reuse it.
-  - [ ] Personal notes and remote enrichments are canonical and visible.
-  - [ ] Presentation is local, defaults correctly, and never dirties canonical
+  - [x] Transient translation/dictionary/AI create no annotation.
+  - [x] First save creates exactly one UUID and later session saves reuse it.
+  - [x] Personal notes and remote enrichments are canonical and visible.
+  - [x] Presentation is local, defaults correctly, and never dirties canonical
     bytes.
-  - [ ] Same-CFI annotations remain distinct; unsupported/unbound annotations
+  - [x] Same-CFI annotations remain distinct; unsupported/unbound annotations
     remain visible; tombstones remain sticky.
-  - [ ] Canonical mutation survives renderer refresh failure.
-  - [ ] Persisted and lookup sentence contexts have the required behavior.
-  - [ ] Paginated auto-page selection and renderer UUID hit testing work.
-  - [ ] Protocol-v2 conformance and existing sync/WebDAV behavior pass.
-  - [ ] Run applicable Dart formatting, Flutter analysis/tests, Foliate JS
+  - [x] Canonical mutation survives renderer refresh failure.
+  - [x] Persisted and lookup sentence contexts have the required behavior.
+  - [x] Paginated auto-page selection and renderer UUID hit testing work.
+  - [x] Protocol-v2 conformance and existing sync/WebDAV behavior pass.
+  - [x] Run applicable Dart formatting, Flutter analysis/tests, Foliate JS
     tests/lint/build, protocol/conformance tests, and sync tests using configured
     repository commands.
 
+#### M4E.11 final architecture verification
+
+The verified runtime flows are:
+
+```text
+AnnotationBookDocument
+        ↓
+SharedAnnotation
+        ↓
+AnnotationUiModel
+        ↓
+Notes / editor / export / statistics
+```
+
+```text
+SharedAnnotation + AnxAnnotationPresentation
+        ↓
+FoliateAnnotationAdapter
+        ↓
+Foliate
+```
+
+```text
+DOM Range
+        ↓
+SelectionSession
+        ↓
+transient lookup
+        ↓ explicit persistence
+SharedAnnotation
+```
+
+There is no active `SharedAnnotation -> BookNote -> runtime consumer` path and
+no runtime dependency on `AnnotationProjectionReconciler` or a native
+annotation projection store. Notes and renderer identity use the canonical
+annotation UUID. Presentation remains an independently serialized and
+synchronized Anx domain, outside protocol-v2 annotation bytes.
+
+#### M4E.11 exact legacy-reference audit
+
+- MIGRATION-ONLY: `lib/dao/database.dart` retains the physical `tb_notes`
+  definition, historical `reader_note` and `shared_annotation_id` columns, and
+  the v8 index/migration for installed databases.
+- MIGRATION-ONLY: `legacy_annotation_store.dart` is the sole read-only adapter
+  for those physical fields. Its API has no insert, update, delete, binding, or
+  projection operation. `legacy_annotation_bootstrap.dart` retains the deployed
+  `anx-booknote-anchor-v1` and `tb_notes-unsupported-v1` receipt sources and
+  imports only into canonical/presentation state.
+- MIGRATION-ONLY: `shared_state_database.dart` can create
+  `annotation_projections` only when explicitly constructing historical schema
+  versions 1–3 and reads `annotation_presentations` only while migrating schema
+  v2 to the synchronized presentation document. Fresh schema v4 creates
+  neither table and exposes no active API for either physical table.
+- MIGRATION-ONLY TEST EVIDENCE: `database_migration_test.dart`,
+  `legacy_annotation_bootstrap_test.dart`, and
+  `shared_state_database_test.dart` construct historical fixtures. Boundary and
+  architecture tests contain legacy spellings only as negative assertions.
+- UNRELATED: `BookNotesState`, `BookNotesList`, `BookNoteTile`,
+  `_editBookNote`, and `book_notes.dart` name the canonical Notes UI feature;
+  `ReaderNoteMenu`/`reader_note_menu.dart` edit canonical `personal-note`;
+  `Set<int>` occurrences are tag/group identities. Historical planning and
+  milestone documentation describes the retired architecture.
+- BUG / ACTIVE LEGACY DEPENDENCY: none. Exact searches found no active
+  `BookNote`, `readerNote`, `sharedAnnotationId`, `nativeNoteId`, `bookNoteDao`,
+  `AnnotationProjectionReconciler`, `NativeAnnotationProjectionStore`,
+  `int noteId`, annotation-related `Set<int>`, or `ValueKey(note.id)` flow.
+
+#### Manual Android/device verification checklist
+
+Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
+
+1. Select a word; actions must stay hidden.
+2. Adjust selection handles.
+3. Extend selection across a visual paginated-page boundary.
+4. Tap the selection to show actions.
+5. Tap it again to hide actions without clearing the selection.
+6. Tap outside to clear it.
+7. Translate without Save; no annotation should appear.
+8. Save a personal note or savable translation.
+9. Change highlight/underline and color.
+10. Restart the app and verify the annotation and presentation.
+11. Sync to another Anx device and verify style/color.
+12. Sync an annotation from Lingua Reader.
+13. Verify it appears in Notes.
+14. Open/tap an existing rendered annotation.
+15. Edit its personal note.
+16. Delete the annotation.
+17. Perform an offline edit, reconnect, and sync.
+18. Inspect an unbound/unsupported annotation where practical.
+
 ## Overall milestone status
 
-- Status: IN PROGRESS
-- Completed submilestones: 11 of 12 implementation phases
-- Branch readiness: Not ready to merge
+- Status: COMPLETE
+- Completed submilestones: 12 of 12 implementation phases
+- Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.10 — Remove BookNote and native projection
-infrastructure
+Last completed submilestone: M4E.11 — Final regression and architecture
+verification
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `e2d1e85b refactor: remove legacy BookNote annotation projection`
-Documentation checkpoint: The current commit records the completed M4E.10
-implementation SHA and handoff
-Repository state: Clean at the completed M4E.10 documentation checkpoint
-Next submilestone: M4E.11 — Final regression and architecture verification
-Next concrete tasks: Verify the final semantic UI, direct Foliate, selection,
-presentation-sync, and read-only legacy-bootstrap architecture; run the complete
-acceptance matrix and full configured Flutter/Foliate suites; fix only cutover
-regressions; add the real-device manual checklist and deferred limitations; then
-mark M4E complete only if the final repository-wide legacy audit remains clean.
+Last implementation commit: `cba0b2f6 test: complete M4E annotation UX regression coverage`
+Documentation checkpoint: The current commit records completed M4E.11 evidence
+and the final handoff
+Repository state: Clean at the completed M4E.11 documentation checkpoint
+Next submilestone: None; M4E implementation and automated verification are
+complete
+Next concrete tasks: Execute the manual Android/device checklist, then perform
+merge review. Do not claim device verification until those checks are run.
 Known failing tests: None
-Known limitations: Presentation LWW uses wall-clock timestamps and retains
-reset records without compaction. Coincident renderer ranges have distinct UUID
-identity but no visual chooser. Physical legacy tables remain only as read-only
-or schema-migration input; there is no active projection stack. External
-provider apps do not return a
-savable result. Automated tests do not synthesize real Android WebView native-
-handle or overlay-tap gestures. Local `develop` still has the previously
-documented divergence from `origin/develop`.
-Important files to inspect next: final acceptance coverage under
-`test/service/sync/`, selection/renderer tests under `test/page/book_player/`,
-canonical Notes/provider tests, `assets/foliate-js/test/`, and the final runtime
-paths in `annotation_catalog.dart`, `annotation_repository.dart`,
+Known limitations: Presentation LWW uses wall-clock timestamps; presentation
+document/reset records have no compaction; coincident annotation ranges have no
+chooser UI; external provider apps cannot return savable result payloads;
+selection cannot span separate EPUB spine DOM documents; there is no automated
+Android native-handle gesture harness; and physical legacy tables may remain as
+migration-only input. Local `develop` still has the previously documented
+divergence from `origin/develop`.
+Important files for review: final architecture coverage under
+`test/service/sync/final_annotation_architecture_test.dart`, the acceptance
+coverage under `test/service/sync/` and `test/page/book_player/`, the Foliate
+tests under `assets/foliate-js/test/`, and the runtime paths in
+`annotation_catalog.dart`, `annotation_repository.dart`,
 `annotation_sync_runtime.dart`, `foliate_annotation_adapter.dart`, and
 `epub_player.dart`.
 

@@ -978,6 +978,150 @@ Overall milestone status: COMPLETE
 
 Branch readiness: Ready for manual verification / merge review
 
+## Additional stabilization: bilingual chapter-load reconciliation
+
+- Status: AUTOMATED VERIFICATION COMPLETE; MANUAL DEVICE VERIFICATION REQUIRED
+- Implementation commit:
+  `b663ea35 fix: reconcile bilingual translations on chapter load`
+- Scope: one post-review presentation/lifecycle fix. Translation request
+  identity, previous-paragraph context, persistent cache schema, invalidation,
+  and WebDAV synchronization semantics are unchanged.
+
+### Diagnosed root cause
+
+The failure was in current-document JavaScript presentation, not in cache
+fingerprinting or synchronization:
+
+1. `View.#onLoad` called `Translator.observeDocument(doc)`, which only walked
+   the new document and registered eligible elements with the shared
+   `IntersectionObserver`.
+2. Forced visible-element translation ran for the transition from `OFF` to an
+   enabled mode. A document loaded while `BILINGUAL` (or another enabled mode)
+   was already active had no equivalent convergence pass.
+3. If WebView did not deliver an initial intersecting transition for one
+   already-visible element after iframe load/layout, that element could remain
+   untranslated indefinitely. Remaining visible did not itself create another
+   observer transition.
+4. The Flutter coordinator can satisfy and persist a request before returning
+   its result to JavaScript. The former JavaScript path then recorded the
+   element as translated before applying its wrapper. A DOM-application failure
+   at that point left successful state/cache with no wrapper, and later events
+   returned early because the element was already marked translated.
+5. A late chapter-A request could persist normally and finish against its old
+   element after chapter B replaced the iframe. The B paragraph is a different
+   element; without B reconciliation, A's success could not materialize B.
+6. The global strong `observedElements` set retained every observed element
+   until all translations were cleared or the view was destroyed, so replaced
+   chapter documents accumulated for the lifetime of the open book.
+
+This explains how a translation could exist in the local/synchronized cache
+while the current DOM lacked `.translated-text`: cache completion precedes the
+JavaScript DOM mutation, and cached request identity is independent of a
+particular iframe element. WebDAV synchronization merely made the already
+successful result available elsewhere; it was never a rendering repair.
+
+### Lifecycle and convergence model
+
+- `observeDocument(doc)` still registers eligible elements lazily with
+  `IntersectionObserver`, preserving the 1280px near-viewport margin.
+- It also schedules a document reconciliation after two
+  `requestAnimationFrame` boundaries. The iframe load callback occurs before
+  paginator rendering, so this is a deterministic post-render/layout boundary,
+  not a fixed-delay heuristic.
+- `View.#onRelocate` explicitly reconciles every document currently returned by
+  `renderer.getContents()`. Relocation is the paginator's layout/anchor-complete
+  boundary and also provides retry/convergence while paging within a chapter.
+- Reconciliation checks relevant elements whether or not an observer callback
+  was received. Existing successful JS state rematerializes or repairs the
+  wrapper without calling Flutter. New state calls Flutter and then converges
+  to exactly one direct `.translated-text` child with display semantics for
+  `OFF`, `ORIGINAL_ONLY`, `TRANSLATION_ONLY`, or `BILINGUAL`.
+- Translation input remains the frozen source text plus previous eligible
+  paragraph text. No second cache key or alternate fingerprint was introduced.
+
+### In-flight, stale completion, cleanup, and retry strategy
+
+- A `WeakMap<Element, Promise>` owns element-scoped in-flight work. Observer,
+  load reconciliation, relocation reconciliation, and explicit mode enable all
+  join the same operation, so one logical element has at most one concurrent
+  bridge request. Dart's complete-request in-flight map remains a separate
+  lower-level guarantee.
+- Each observed document owns a strong set only of its current elements;
+  element-to-document ownership is weak. On every renderer load, documents not
+  present in `renderer.getContents()` are retired, their elements are
+  unobserved, their strong set is cleared, and their document entry is removed.
+  Fixed-layout spreads retain every document still owned by the renderer.
+- A completion captures its starting document owner. If that owner was retired
+  or the element was reassigned, the completion is discarded before changing
+  JS success state or DOM. The underlying Flutter future is not cancellable,
+  but chapter A cannot satisfy, block, or modify chapter B.
+- Bridge throws, empty results, and error-shaped results do not become
+  translated state. Transient failures can retry at a later lifecycle
+  reconciliation. Authentication/configuration failures are quiescent for the
+  current document so relocation cannot produce a tight retry loop; explicitly
+  disabling/re-enabling translation or loading a new document permits retry
+  after settings change.
+
+### Automated verification
+
+- Added `assets/foliate-js/test/translator.test.mjs` with 11 deterministic
+  cases: already-enabled bilingual mode across new chapters, missed observer
+  callback, element in-flight deduplication, immediate cached result, slow
+  result, wrapper repair without a provider call, retired-chapter completion,
+  transient retry, permanent-error quiescence, all four display modes, and
+  renderer-driven cleanup. The chapter test also verifies that
+  previous-paragraph context resets per document and is preserved within it.
+- Configured `npm test` passed all five test files. Running the same suite with
+  Node's process isolation disabled exposed the individual count: 53 of 53
+  tests passed, including all 11 new translator cases.
+- `npm run build` succeeded and regenerated `assets/foliate-js/dist/bundle.js`.
+  Webpack emitted the same three known top-level-await target warnings.
+- The focused cache and WebDAV merge run passed 22 tests. It reconfirmed cache
+  hits bypass providers, successful results persist, non-cacheable failures do
+  not persist, identical Dart requests share one computation, and book/global
+  invalidation and merge semantics are unchanged. No Dart cache code or tests
+  required modification because no cache-layer defect was found.
+- Full `flutter test --no-pub` passed 284 tests. Full
+  `flutter analyze --no-pub` reported zero errors and zero warnings plus the
+  same 42 repository informational lints documented above.
+- Final staged and worktree diff checks passed.
+
+### Bilingual translation Android/device checklist
+
+Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
+
+1. Enable bilingual mode.
+2. Open a chapter and wait for visible translations.
+3. Navigate forward through at least 5–10 chapter transitions.
+4. On every newly opened chapter, verify every visible translatable paragraph
+   receives its translation.
+5. Page forward several visual pages without changing chapters.
+6. Navigate chapter A to B to A.
+7. Test with translations already in local cache.
+8. Test with translations not yet cached.
+9. Navigate to the next chapter while translations are still arriving.
+10. Verify no duplicate translated paragraphs appear.
+11. Verify no paragraph requires leaving/reopening the book to display its
+    already-successful translation.
+
+### Remaining limitations
+
+- Real Android WebView/paginator timing, cached and uncached providers, and
+  rapid chapter navigation still require the checklist above; no device result
+  is claimed.
+- An already-dispatched Flutter translation request cannot be cancelled. Its
+  retired-document completion is ignored by presentation state, while normal
+  provider/cache completion may still finish.
+- Automatic retries are lifecycle-triggered rather than timer-driven.
+  Permanent authentication/configuration output intentionally waits for an
+  explicit mode cycle, corrected settings plus a new document, or book reopen.
+- IntersectionObserver remains the lazy-loading accelerator. Explicit
+  reconciliation is the correctness mechanism for currently relevant elements;
+  offscreen content converges as it enters the near viewport or relocation
+  makes it relevant.
+
+Branch readiness: Ready for manual verification / merge review
+
 ## Overall milestone status
 
 - Status: COMPLETE
@@ -986,13 +1130,15 @@ Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed work: Post-M4E stabilization review
+Last completed work: Bilingual chapter-load translation stabilization
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `6d9c6038 test: verify stabilization renderer identity`
-Documentation checkpoint: This section records the completed post-M4E review,
-cross-client reference, focused commits, and final automated verification
-Repository state: Clean after the stabilization documentation commit
-Next submilestone: None; M4E and post-M4E stabilization are complete
+Last implementation commit:
+`b663ea35 fix: reconcile bilingual translations on chapter load`
+Documentation checkpoint: This section records the diagnosed presentation
+race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
+retry policy, automated evidence, and added manual-device checklist.
+Repository state: Clean after the bilingual stabilization documentation commit
+Next submilestone: Manual bilingual/device verification and merge review
 Next concrete tasks: Execute the manual Android/device checklist, then perform
 merge review. Do not claim device verification until those checks are run.
 Known failing tests: None

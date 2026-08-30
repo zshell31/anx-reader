@@ -48,6 +48,7 @@ class AnnotationCreation {
   final String? context;
   final String type;
   final String color;
+  final bool persistPresentation;
 
   const AnnotationCreation({
     required this.book,
@@ -57,6 +58,7 @@ class AnnotationCreation {
     required this.context,
     required this.type,
     required this.color,
+    this.persistPresentation = true,
   });
 }
 
@@ -154,15 +156,41 @@ class AnnotationRepository {
           updateTime: DateTime.parse(timestamp),
         );
         await _commit(fingerprint, document);
-        await sharedState.putAnnotationPresentation(AnnotationPresentation(
-          annotationId: annotationId,
-          style: input.type == 'underline'
-              ? AnnotationPresentationStyle.underline
-              : AnnotationPresentationStyle.highlight,
-          color: input.color,
-        ));
+        if (input.persistPresentation) {
+          await sharedState.putAnnotationPresentation(AnnotationPresentation(
+            annotationId: annotationId,
+            style: input.type == 'underline'
+                ? AnnotationPresentationStyle.underline
+                : AnnotationPresentationStyle.highlight,
+            color: input.color,
+          ));
+        }
         return (await _project(fingerprint, annotationId,
-            localPresentation: presentation))!;
+            localPresentation:
+                input.persistPresentation ? presentation : null))!;
+      });
+
+  /// Resolves the canonical identity of a legacy renderer/UI handle.
+  ///
+  /// This compatibility read exists only while remaining consumers still
+  /// receive native BookNote IDs. New semantic mutations must retain the
+  /// returned [AnnotationRef] instead of searching by selector/CFI.
+  Future<AnnotationRef> annotationRefForNativeId(int nativeNoteId) async {
+    final existing = await native.readProjection(nativeNoteId);
+    final binding = await _canonicalBinding(existing);
+    return AnnotationRef(
+      bookFingerprint: binding.fingerprint,
+      annotationId: binding.annotationId,
+    );
+  }
+
+  /// M4E.6 compatibility entrypoint. M4E.7 replaces its native identity with
+  /// a canonical AnnotationRef mutation API.
+  Future<BookNote> saveTranslation(int nativeNoteId, String content) =>
+      _enqueue(() async {
+        final existing = await native.readProjection(nativeNoteId);
+        return _appendMaterialEnrichment(
+            existing, 'translation', content.trim());
       });
 
   Future<BookNote> createBookmark(BookmarkCreation input) => _enqueue(() async {
@@ -309,8 +337,59 @@ class AnnotationRepository {
     }
     annotation['updatedAt'] = timestamp;
     await _commit(binding.fingerprint, binding.document);
+    if (localPresentation == null) {
+      final updated = BookNote(
+        id: existing.id,
+        bookId: existing.bookId,
+        content: existing.content,
+        cfi: existing.cfi,
+        chapter: existing.chapter,
+        type: existing.type,
+        color: existing.color,
+        readerNote: value.isEmpty ? null : value,
+        sharedAnnotationId: existing.sharedAnnotationId,
+        createTime: existing.createTime,
+        updateTime: DateTime.parse(timestamp),
+      );
+      try {
+        await native.updateProjection(updated);
+        return updated;
+      } catch (error) {
+        final failure =
+            AnnotationProjectionException(binding.annotationId, error);
+        AnxLog.warning(failure.toString());
+        throw failure;
+      }
+    }
     return (await _project(binding.fingerprint, binding.annotationId,
         localPresentation: localPresentation))!;
+  }
+
+  Future<BookNote> _appendMaterialEnrichment(
+      BookNote existing, String kind, String content) async {
+    if (!const {'translation', 'dictionary', 'ai-analysis'}.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind', 'unsupported material kind');
+    }
+    if (content.isEmpty) {
+      throw ArgumentError.value(content, 'content', 'must not be empty');
+    }
+    final binding = await _canonicalBinding(existing);
+    final annotation = binding.annotation;
+    _ensureAlive(annotation);
+    final timestamp = _nextTimestamp(annotation);
+    (annotation['enrichments'] as List).add(<String, dynamic>{
+      'id': '$kind:${uuid.v4()}',
+      'kind': kind,
+      'content': content,
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+    });
+    annotation['updatedAt'] = timestamp;
+    await _commit(binding.fingerprint, binding.document);
+    // Material enrichments do not change the legacy BookNote projection.
+    // Returning it directly also avoids mistaking its effective default style
+    // for an explicitly chosen presentation during compatibility migration.
+    return existing;
   }
 
   Future<BookNote> _updatePresentation(

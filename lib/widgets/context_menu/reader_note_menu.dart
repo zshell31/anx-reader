@@ -1,7 +1,6 @@
 import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book_note.dart';
-import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -14,6 +13,7 @@ class ReaderNoteMenu extends StatefulWidget {
     required this.axis,
     required this.onVisibilityChange,
     required this.onSizeChanged,
+    required this.onSave,
   });
 
   final int? noteId;
@@ -21,6 +21,7 @@ class ReaderNoteMenu extends StatefulWidget {
   final Axis axis;
   final ValueChanged<bool> onVisibilityChange;
   final VoidCallback onSizeChanged;
+  final Future<BookNote> Function(String value) onSave;
 
   @override
   State<ReaderNoteMenu> createState() => ReaderNoteMenuState();
@@ -105,11 +106,7 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
 
   Future<void> saveNote() async {
     textFieldController.text = textFieldController.text.trim();
-    final nativeId = note?.id;
-    if (nativeId != null) {
-      note = await annotationRepository.setPersonalNote(
-          nativeId, textFieldController.text);
-    }
+    note = await widget.onSave(textFieldController.text);
     _notifySizeChange();
   }
 

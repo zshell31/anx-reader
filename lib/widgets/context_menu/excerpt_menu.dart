@@ -7,6 +7,7 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
@@ -21,11 +22,15 @@ import 'package:flutter/services.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+enum _SecondarySelectionAction { copy, search, narrate, share }
+
 class ExcerptMenu extends StatefulWidget {
   final String annoCfi;
   final String annoContent;
   final String? chapter;
   final String? annotationContext;
+  final String? lookupContext;
+  final SelectionPersistenceSession persistenceSession;
   final int? id;
   final Function() onClose;
   final bool footnote;
@@ -43,6 +48,8 @@ class ExcerptMenu extends StatefulWidget {
     required this.annoContent,
     this.chapter,
     this.annotationContext,
+    this.lookupContext,
+    required this.persistenceSession,
     this.id,
     required this.onClose,
     required this.footnote,
@@ -114,31 +121,87 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     }
   }
 
+  Future<SelectionAnnotationHandle> _createOrResolve(SelectionSnapshot snapshot,
+      {required bool persistPresentation}) async {
+    final existingId = noteId ?? widget.id;
+    if (existingId != null) {
+      return SelectionAnnotationHandle(
+        ref: await annotationRepository.annotationRefForNativeId(existingId),
+        nativeCompatibilityId: existingId,
+      );
+    }
+
+    final player = epubPlayerKey.currentState!;
+    final created = await annotationRepository.createSelectionAnnotation(
+      AnnotationCreation(
+        book: player.book,
+        selectedText: snapshot.selectedText,
+        epubCfi: snapshot.selector,
+        chapter:
+            snapshot.chapter.isEmpty ? player.chapterTitle : snapshot.chapter,
+        context: snapshot.annotationContext,
+        type: annoType,
+        color: annoColor,
+        persistPresentation: persistPresentation,
+      ),
+    );
+    final id = created.id!;
+    _recordNote(created);
+    return SelectionAnnotationHandle(
+      ref: await annotationRepository.annotationRefForNativeId(id),
+      nativeCompatibilityId: id,
+    );
+  }
+
+  void _recordNote(BookNote note) {
+    final id = note.id!;
+    widget.onNoteCreated(id);
+    if (mounted) {
+      setState(() {
+        _currentNote = note;
+        noteId = id;
+      });
+    } else {
+      _currentNote = note;
+      noteId = id;
+    }
+  }
+
+  Future<BookNote> savePersonalNote(String value) async {
+    final note = await widget.persistenceSession.persist(
+      create: (snapshot) =>
+          _createOrResolve(snapshot, persistPresentation: false),
+      save: (annotation) => annotationRepository.setPersonalNote(
+          annotation.nativeCompatibilityId, value),
+    );
+    _recordNote(note);
+    epubPlayerKey.currentState!.addAnnotation(note);
+    return note;
+  }
+
+  Future<BookNote> saveTranslation(String value) async {
+    final note = await widget.persistenceSession.persist(
+      create: (snapshot) =>
+          _createOrResolve(snapshot, persistPresentation: false),
+      save: (annotation) => annotationRepository.saveTranslation(
+          annotation.nativeCompatibilityId, value),
+    );
+    _recordNote(note);
+    epubPlayerKey.currentState!.addAnnotation(note);
+    return note;
+  }
+
   Future<BookNote> _persistNote({String? color, String? type}) async {
     final existingNote = await _fetchLatestNote() ?? _currentNote;
     final resolvedType = type ?? existingNote?.type ?? annoType;
     final resolvedColor = color ?? existingNote?.color ?? annoColor;
 
-    final BookNote bookNote;
-    if (existingNote != null) {
-      bookNote = await annotationRepository.updatePresentation(
-          existingNote.id!, resolvedType, resolvedColor);
-    } else {
-      final player = epubPlayerKey.currentState!;
-      bookNote = await annotationRepository.createSelectionAnnotation(
-        AnnotationCreation(
-          book: player.book,
-          selectedText: widget.annoContent,
-          epubCfi: widget.annoCfi,
-          chapter: widget.chapter ?? player.chapterTitle,
-          context: widget.annotationContext,
-          type: resolvedType,
-          color: resolvedColor,
-        ),
-      );
-    }
+    final handle = await widget.persistenceSession.ensureAnnotation(
+      (snapshot) => _createOrResolve(snapshot, persistPresentation: true),
+    );
+    final BookNote bookNote = await annotationRepository.updatePresentation(
+        handle.nativeCompatibilityId, resolvedType, resolvedColor);
     final id = bookNote.id!;
-    widget.onNoteCreated(id);
 
     if (mounted) {
       setState(() {
@@ -245,6 +308,46 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     );
   }
 
+  Future<void> _runSecondaryAction(
+      BuildContext context, _SecondarySelectionAction action) async {
+    switch (action) {
+      case _SecondarySelectionAction.copy:
+        await Clipboard.setData(ClipboardData(text: widget.annoContent));
+        if (context.mounted) {
+          AnxToast.show(L10n.of(context).notesPageCopied);
+        }
+        break;
+      case _SecondarySelectionAction.search:
+        await launchUrl(
+          Uri.parse('https://www.bing.com/search?q=${widget.annoContent}'),
+          mode: LaunchMode.externalApplication,
+        );
+        break;
+      case _SecondarySelectionAction.narrate:
+        final playerState = epubPlayerKey.currentState;
+        if (playerState == null) return;
+        await audioHandler.stop();
+        await TtsHandler().init(
+          () => playerState.initTts(fromCfi: widget.annoCfi),
+          playerState.ttsNext,
+          playerState.ttsPrev,
+        );
+        await audioHandler.play();
+        break;
+      case _SecondarySelectionAction.share:
+        if (!context.mounted) return;
+        ExcerptShareService.showShareExcerpt(
+          context: context,
+          bookTitle: epubPlayerKey.currentState!.book.title,
+          author: epubPlayerKey.currentState!.book.author,
+          excerpt: widget.annoContent,
+          chapter: epubPlayerKey.currentState!.chapterTitle,
+        );
+        break;
+    }
+    widget.onClose();
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget annotationMenu = Container(
@@ -271,31 +374,24 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         axis: widget.axis,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // copy
-          IconAndText(
-            compact: true,
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: widget.annoContent));
-              AnxToast.show(L10n.of(context).notesPageCopied);
-              widget.onClose();
-            },
-            icon: const Icon(EvaIcons.copy),
-            text: L10n.of(context).contextMenuCopy,
-          ),
-          // Web search
-          IconAndText(
-            compact: true,
-            onTap: () {
-              widget.onClose();
-              launchUrl(
-                Uri.parse(
-                    'https://www.bing.com/search?q=${widget.annoContent}'),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-            icon: const Icon(EvaIcons.globe),
-            text: L10n.of(context).contextMenuSearch,
-          ),
+          if (EnvVar.enableAIFeature)
+            IconAndText(
+              compact: true,
+              onTap: () {
+                widget.onClose();
+                final key = readingPageKey.currentState;
+                if (key != null) {
+                  key.showAiChat(
+                    content: widget.annoContent,
+                    sendImmediate: false,
+                  );
+                  key.aiChatKey.currentState?.inputController.text =
+                      widget.annoContent;
+                }
+              },
+              icon: const Icon(EvaIcons.message_circle_outline),
+              text: L10n.of(context).navBarAI,
+            ),
           // External Android dictionary
           if (Platform.isAndroid)
             IconAndText(
@@ -347,43 +443,16 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(Icons.g_translate),
               text: L10n.of(context).contextMenuGoogleTranslate,
             ),
-          // toggle translation menu
           IconAndText(
             compact: true,
             onTap: widget.toggleTranslationMenu,
             icon: const Icon(Icons.translate),
             text: L10n.of(context).contextMenuTranslate,
           ),
-          // narrate
-          IconAndText(
-            compact: true,
-            onTap: () async {
-              widget.onClose();
-              final playerState = epubPlayerKey.currentState;
-              if (playerState == null) return;
-
-              // Stop existing TTS playback if any
-              await audioHandler.stop();
-
-              // Now initialize TTS - it will use the current (updated) position
-              await TtsHandler().init(
-                () => playerState.initTts(fromCfi: widget.annoCfi),
-                playerState.ttsNext,
-                playerState.ttsPrev,
-              );
-
-              // Start TTS - audioHandler.play() will call TTS speak
-              await audioHandler.play();
-            },
-            icon: const Icon(Icons.headphones),
-            text: L10n.of(context).contextMenuNarrate,
-          ),
-          // edit note
           if (!widget.footnote)
             IconAndText(
               compact: true,
               onTap: () async {
-                await onColorSelected(annoColor, close: false);
                 final targetId = noteId ?? widget.id;
                 if (targetId != null) {
                   await widget.openReaderNoteMenu(targetId);
@@ -394,40 +463,28 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(EvaIcons.edit_2_outline),
               text: L10n.of(context).contextMenuWriteIdea,
             ),
-          // AI chat
-          if (EnvVar.enableAIFeature)
-            IconAndText(
-              compact: true,
-              onTap: () {
-                widget.onClose();
-                final key = readingPageKey.currentState;
-                if (key != null) {
-                  key.showAiChat(
-                    content: widget.annoContent,
-                    sendImmediate: false,
-                  );
-                  key.aiChatKey.currentState?.inputController.text =
-                      widget.annoContent;
-                }
-              },
-              icon: const Icon(EvaIcons.message_circle_outline),
-              text: L10n.of(context).navBarAI,
-            ),
-          // share
-          IconAndText(
-            compact: true,
-            onTap: () {
-              widget.onClose();
-              ExcerptShareService.showShareExcerpt(
-                context: context,
-                bookTitle: epubPlayerKey.currentState!.book.title,
-                author: epubPlayerKey.currentState!.book.author,
-                excerpt: widget.annoContent,
-                chapter: epubPlayerKey.currentState!.chapterTitle,
-              );
-            },
-            icon: const Icon(EvaIcons.share_outline),
-            text: L10n.of(context).contextMenuShare,
+          PopupMenuButton<_SecondarySelectionAction>(
+            tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
+            icon: const Icon(Icons.more_horiz),
+            onSelected: (action) => _runSecondaryAction(context, action),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _SecondarySelectionAction.copy,
+                child: Text(L10n.of(context).contextMenuCopy),
+              ),
+              PopupMenuItem(
+                value: _SecondarySelectionAction.search,
+                child: Text(L10n.of(context).contextMenuSearch),
+              ),
+              PopupMenuItem(
+                value: _SecondarySelectionAction.narrate,
+                child: Text(L10n.of(context).contextMenuNarrate),
+              ),
+              PopupMenuItem(
+                value: _SecondarySelectionAction.share,
+                child: Text(L10n.of(context).contextMenuShare),
+              ),
+            ],
           ),
         ],
       ),

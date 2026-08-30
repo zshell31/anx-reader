@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
 import 'package:anx_reader/widgets/context_menu/reader_note_menu.dart';
@@ -283,6 +284,8 @@ class _ContextMenuOverlay extends StatefulWidget {
 class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     with WidgetsBindingObserver {
   final GlobalKey _menuKey = GlobalKey();
+  final GlobalKey<ExcerptMenuState> _excerptMenuKey =
+      GlobalKey<ExcerptMenuState>();
   final GlobalKey<ReaderNoteMenuState> _readerNoteMenuKey =
       GlobalKey<ReaderNoteMenuState>();
 
@@ -294,6 +297,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   late BoxConstraints _menuConstraints;
   late double _bottomInset;
   int? _noteId;
+  late final SelectionPersistenceSession _persistenceSession;
 
   @override
   void initState() {
@@ -303,6 +307,13 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     _reverse = widget.initialPlacement.shouldReverse;
     _showTranslationMenu = widget.showTranslationDefault;
     _noteId = widget.annoId;
+    _persistenceSession = SelectionPersistenceSession(SelectionSnapshot(
+      selectedText: widget.annoContent,
+      annotationContext: widget.annotationContext,
+      lookupContext: widget.lookupContext,
+      chapter: widget.chapter ?? '',
+      selector: widget.annoCfi,
+    ));
     _bottomInset = widget.initialBottomInset;
     _menuConstraints = _buildConstraints(widget.initialBottomInset);
     _scheduleRecalculate();
@@ -501,10 +512,13 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                               axis: widget.axis,
                               children: [
                                 ExcerptMenu(
+                                  key: _excerptMenuKey,
                                   annoCfi: widget.annoCfi,
                                   annoContent: widget.annoContent,
                                   chapter: widget.chapter,
                                   annotationContext: widget.annotationContext,
+                                  lookupContext: widget.lookupContext,
+                                  persistenceSession: _persistenceSession,
                                   id: widget.annoId,
                                   onClose: widget.onClose,
                                   footnote: widget.footnote,
@@ -533,6 +547,17 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 onVisibilityChange:
                                     _handleReaderNoteVisibilityChange,
                                 onSizeChanged: _handleReaderNoteSizeChanged,
+                                onSave: (value) async {
+                                  final note = await _excerptMenuKey
+                                      .currentState
+                                      ?.savePersonalNote(value);
+                                  if (note == null) {
+                                    throw StateError(
+                                        'Selection actions are unavailable');
+                                  }
+                                  _handleNoteCreated(note.id!);
+                                  return note;
+                                },
                               ),
                             ],
                           ),
@@ -547,6 +572,16 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 decoration: widget.decoration,
                                 axis: widget.axis,
                                 lookupContext: widget.lookupContext,
+                                onSave: (translation) async {
+                                  final note = await _excerptMenuKey
+                                      .currentState
+                                      ?.saveTranslation(translation);
+                                  if (note == null) {
+                                    throw StateError(
+                                        'Selection actions are unavailable');
+                                  }
+                                  _handleNoteCreated(note.id!);
+                                },
                               ),
                             ],
                           ),

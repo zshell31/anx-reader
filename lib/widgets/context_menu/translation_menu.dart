@@ -2,6 +2,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/lang_list.dart';
 import 'package:anx_reader/service/translate/index.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
+import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:flutter/material.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'dart:async';
@@ -13,18 +14,21 @@ class TranslationMenu extends StatefulWidget {
     required this.decoration,
     required this.axis,
     this.lookupContext,
+    required this.onSave,
   });
   final String content;
   final BoxDecoration decoration;
   final Axis axis;
   final String? lookupContext;
+  final Future<void> Function(String translation) onSave;
 
   @override
   State<TranslationMenu> createState() => _TranslationMenuState();
 }
 
 class _TranslationMenuState extends State<TranslationMenu> {
-  Widget? _translationWidget;
+  String? _translation;
+  Object? _translationError;
   Timer? _debounceTimer;
   bool _translationInitialized = false;
 
@@ -44,19 +48,26 @@ class _TranslationMenuState extends State<TranslationMenu> {
       _debounceTimer = Timer(const Duration(milliseconds: 300), () {
         if (!mounted || _translationInitialized) return;
 
-        setState(() {
-          final effectiveContextText =
-              (widget.lookupContext?.trim().isEmpty ?? true)
-                  ? null
-                  : widget.lookupContext;
-          _translationWidget = translateText(
-            widget.content,
-            contextText: effectiveContextText,
-          );
-          _translationInitialized = true;
-        });
+        _loadTranslation();
       });
     });
+  }
+
+  Future<void> _loadTranslation() async {
+    if (_translationInitialized) return;
+    _translationInitialized = true;
+    final effectiveContextText = (widget.lookupContext?.trim().isEmpty ?? true)
+        ? null
+        : widget.lookupContext;
+    try {
+      final result = await translateTextOnly(widget.content,
+          contextText: effectiveContextText);
+      if (!mounted) return;
+      setState(() => _translation = result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _translationError = error);
+    }
   }
 
   @override
@@ -142,11 +153,23 @@ class _TranslationMenuState extends State<TranslationMenu> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Show translation widget if initialized, otherwise show loading placeholder
-                    _translationWidget ??
-                        const SizedBox(
-                          height: 20,
-                          child: Center(child: Text('...')),
+                    if (_translation != null) ...[
+                      SelectableText(_translation!),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => widget.onSave(_translation!),
+                          icon: const Icon(Icons.save_outlined),
+                          label: Text(L10n.of(context).commonSave),
                         ),
+                      ),
+                    ] else if (_translationError != null)
+                      Text(_translationError.toString())
+                    else
+                      const SizedBox(
+                        height: 20,
+                        child: Center(child: Text('...')),
+                      ),
                     const Divider(),
                     AxisFlex(
                       mainAxisSize: MainAxisSize.min,

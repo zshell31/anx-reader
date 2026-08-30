@@ -12,8 +12,8 @@ M4E makes canonical shared annotation state the only semantic annotation model:
 SharedAnnotation
     = canonical semantic annotation state
 
-AnnotationPresentationSidecar
-    = local Anx-only style/color state
+AnxAnnotationPresentation
+    = Anx-specific style/color state synchronized between Anx installations
 
 SelectionSession
     = transient current-selection interaction state
@@ -41,7 +41,7 @@ The final data flow is:
                     ▼                     ▼
            Annotation UI           Renderer Adapter
                     │                     │
-                    │               + local presentation
+                    │               + effective Anx presentation
                     │                     │
                     ▼                     ▼
              Notes / Editor             Foliate
@@ -69,7 +69,8 @@ SelectionSession
 - Semantic mutations go through canonical repository APIs.
 - Selection != annotation creation.
 - Lookup != annotation creation.
-- Presentation is client-local.
+- Presentation is client-specific and synchronizable between Anx Reader
+  installations, but remains outside protocol-v2 annotation bytes.
 - Presentation mutation does not dirty canonical state.
 - Same CFI != same annotation.
 - Missing renderer representation != missing annotation.
@@ -358,22 +359,47 @@ At the end of every M4E session:
 
 ### M4E.6 — Simplified transient lookup UX
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: AI, Google Translate, and Dictionary are
-  transient; only explicit save may create or mutate a canonical annotation.
-- Tests run: —
-- Discovered limitations or follow-up work: Share may remain only in secondary
-  UI if useful; it is removed from primary annotation actions.
+- Status: COMPLETE
+- Commit SHA: pending in this implementation commit
+- Important files changed: `lib/page/book_player/selection_persistence_session.dart`,
+  the context/excerpt/translation/personal-note menu widgets,
+  `lib/service/sync/annotation_repository.dart`,
+  `test/page/book_player/selection_persistence_session_test.dart`,
+  `test/service/sync/annotation_repository_test.dart`, and
+  `test/service/sync/annotation_mutation_boundary_test.dart`.
+- Architectural decisions made: One `SelectionPersistenceSession` owns the
+  immutable selection snapshot, transient translation/dictionary/AI state,
+  and a nullable canonical `AnnotationRef`. Its serialized `ensureAnnotation`
+  gate creates at most once, including concurrent explicit actions, and never
+  searches by CFI. Existing rendered annotations resolve their temporary
+  native compatibility handle to their exact canonical identity. AI, the
+  official Google Translate app, external Dictionary, and internal translation
+  are primary transient actions; internal translation renders an explicit Save
+  affordance. Personal-note editor opening is read-only and only its Save
+  callback creates/updates canonical state. Explicit highlight/underline/color
+  remains persistent intent. Copy, web search, narration, and Share moved to a
+  compact overflow. Semantic first saves do not persist effective presentation
+  defaults. `lookupContext` is passed to translation only; annotation creation
+  receives the compact `annotationContext`.
+- Tests run: Dart formatting on all touched Dart files; targeted `flutter
+  analyze` on all touched production/test files (no issues); focused selection
+  persistence/session/repository/mutation-boundary tests; full `flutter test
+  test/service/sync` (167 passed), including protocol conformance, deterministic
+  merge, synchronization, runtime, renderer-refresh, and WebDAV coverage.
+- Discovered limitations or follow-up work: External Android Dictionary and
+  Google Translate app integrations cannot return provider payloads to Anx, so
+  they remain transient launch actions without an in-app Save result. AI chat
+  remains transient from the annotation repository's perspective; canonical
+  AI analysis/thread Save APIs are introduced in M4E.7. The live menu retains a
+  native BookNote ID only as a documented compatibility handle until M4E.7.
 - Acceptance checklist:
-  - [ ] Present AI, Translate, Dictionary, Personal note, and presentation as
+  - [x] Present AI, Translate, Dictionary, Personal note, and presentation as
     primary selection actions.
-  - [ ] Keep provider results/errors transient until explicit save.
-  - [ ] Store an `AnnotationRef` in the session after first save and reuse it
+  - [x] Keep provider results/errors transient until explicit save.
+  - [x] Store an `AnnotationRef` in the session after first save and reuse it
     for later saves in that session.
-  - [ ] Never find/reuse annotations by CFI.
-  - [ ] Add lookup/no-write and save/reuse tests.
+  - [x] Never find/reuse annotations by CFI.
+  - [x] Add lookup/no-write and save/reuse tests.
 
 ### M4E.7 — Canonical enrichment mutation API
 
@@ -393,6 +419,25 @@ At the end of every M4E session:
   - [ ] Remove native BookNote-ID semantic APIs as consumers migrate.
   - [ ] Add mutation, durability, and failure-boundary tests.
 
+### M4E.7a — Cross-device Anx presentation sync
+
+- Status: NOT STARTED
+- Commit SHA: —
+- Important files changed: —
+- Architectural decisions made: Anx presentation remains outside
+  `AnnotationBookDocument` and protocol v2, but gains its own client-specific
+  WebDAV document, deterministic merge, tombstones/reset behavior, and durable
+  outbox lifecycle.
+- Tests run: —
+- Discovered limitations or follow-up work: Lingua Reader is not required to
+  understand or mutate this domain. Missing explicit presentation continues to
+  mean current Anx defaults and must not be persisted merely by rendering.
+- Acceptance checklist:
+  - [ ] Migrate the M4E.2 local sidecar into a synchronizable Anx domain.
+  - [ ] Add deterministic update/reset convergence and tombstone safety.
+  - [ ] Keep presentation dirty/outbox state independent from canonical state.
+  - [ ] Cover restart, two-device, offline, convergence, and protocol isolation.
+
 ### M4E.8 — Direct Foliate annotation renderer adapter
 
 - Status: NOT STARTED
@@ -404,7 +449,8 @@ At the end of every M4E session:
 - Discovered limitations or follow-up work: If a renderer handle is necessary,
   its UUID mapping remains ephemeral and is never domain identity.
 - Acceptance checklist:
-  - [ ] Render canonical annotation plus local presentation without `BookNote`.
+  - [ ] Render canonical annotation plus effective Anx presentation without
+    `BookNote`.
   - [ ] Resolve renderer hit testing to `AnnotationRef`.
   - [ ] Keep rendered-annotation taps distinct from DOM Range selections.
   - [ ] Add adapter and bridge verification.
@@ -478,21 +524,32 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 5 of 11 implementation phases
+- Completed submilestones: 6 of 12 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.5 — Sentence-aware annotation context
+Last completed submilestone: M4E.6 — Simplified transient lookup UX
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `247ee365 feat: add sentence-aware annotation context`
-Documentation checkpoint: The current commit records the completed M4E.5 implementation SHA and handoff
-Repository state: Clean at the completed M4E.5 documentation checkpoint
-Next submilestone: M4E.6 — Simplified transient lookup UX
-Next concrete tasks: Inventory the current primary selection actions and transient provider result flows; present AI, Translate, Dictionary, Personal note, and presentation actions without creating an annotation; introduce session-scoped `AnnotationRef` reuse only after the first explicit save; add lookup/no-write and explicit-save/reuse tests
+Last implementation commit: pending `feat: add transient annotation lookup workflow`
+Documentation checkpoint: This implementation commit records M4E.6 COMPLETE;
+the following documentation checkpoint records its SHA
+Repository state: Implementation ready for its M4E.6 commit
+Next submilestone: M4E.7 — Canonical enrichment mutation API
+Next concrete tasks: Add canonical `AnnotationRef` create/enrichment/tombstone
+APIs, migrate the SelectionPersistenceSession and context menu off native IDs,
+cover every established enrichment kind, and prove canonical durability before
+renderer refresh including refresh failure.
 Known failing tests: None
-Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. Paginated auto-page selection and sentence context are limited to one live content `Document`/EPUB section; a spine-document replacement ends the session rather than claiming a cross-document DOM `Range` or sentence neighbor. The deterministic sentence fallback is punctuation-based and may differ from `Intl.Segmenter` for unusual abbreviations. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `lib/widgets/context_menu/context_menu.dart`, `lib/widgets/context_menu/excerpt_menu.dart`, `lib/widgets/context_menu/translation_menu.dart`, AI and dictionary provider entry points, `lib/page/book_player/selection_session_bridge.dart`, `lib/page/book_player/epub_player.dart`, and canonical enrichment mutation APIs in `lib/service/sync/annotation_repository.dart`
+Known limitations: External Android provider apps do not return a savable result;
+AI canonical Save remains M4E.7. Automated tests do not synthesize real Android
+WebView native-handle gestures. Paginated selection and sentence context remain
+limited to one live EPUB content document. Local `develop` still has the
+previously documented divergence from `origin/develop`.
+Important files to inspect next: `lib/service/sync/annotation_repository.dart`,
+`lib/page/book_player/selection_persistence_session.dart`, context-menu save
+callbacks, protocol enrichment validation/tests, projection reconciliation,
+and renderer-refresh integration tests.
 
 ### M4E.3 discovered pre-implementation lifecycle
 

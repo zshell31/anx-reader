@@ -238,6 +238,54 @@ void main() {
     expect(annotation['target'], isNot(contains('context')));
   });
 
+  test('semantic first save can create without persisting default presentation',
+      () async {
+    final note = await repository.createSelectionAnnotation(
+      AnnotationCreation(
+        book: testBook(),
+        selectedText: 'selected words',
+        epubCfi: 'epubcfi(/6/2!/4/2,/1:0,/1:14)',
+        chapter: 'Chapter 1',
+        context: 'real live context',
+        type: 'highlight',
+        color: 'default',
+        persistPresentation: false,
+      ),
+    );
+
+    expect(
+        await shared.annotationPresentation(note.sharedAnnotationId!), isNull);
+    expect((await shared.pendingOutbox()).single.localRevision, 1);
+  });
+
+  test('translation is written only by explicit save and retains identity',
+      () async {
+    final note = await repository.createSelectionAnnotation(
+      AnnotationCreation(
+        book: testBook(),
+        selectedText: 'selected words',
+        epubCfi: 'epubcfi(/6/2!/4/2,/1:0,/1:14)',
+        chapter: 'Chapter 1',
+        context: 'real live context',
+        type: 'highlight',
+        color: 'default',
+        persistPresentation: false,
+      ),
+    );
+    final ref = await repository.annotationRefForNativeId(note.id!);
+
+    clock = clock.add(const Duration(minutes: 1));
+    final updated = await repository.saveTranslation(note.id!, 'перевод');
+    final annotation = annotationOf(
+        (await shared.annotationDocument(fingerprint))!, ref.annotationId);
+
+    expect(updated.sharedAnnotationId, ref.annotationId);
+    expect(annotation['enrichments'], hasLength(1));
+    expect(annotation['enrichments'].single['kind'], 'translation');
+    expect(annotation['enrichments'].single['content'], 'перевод');
+    expect(await shared.annotationPresentation(ref.annotationId), isNull);
+  });
+
   test('personal note create/edit/clear tombstones and preserves unknown data',
       () async {
     final note = await createSelection();

@@ -6,7 +6,6 @@ void main() {
   test('production semantic mutation call sites do not bypass repository', () {
     const semanticCallSites = [
       'lib/widgets/context_menu/excerpt_menu.dart',
-      'lib/widgets/context_menu/reader_note_menu.dart',
       'lib/providers/book_notes.dart',
       'lib/providers/bookmark.dart',
     ];
@@ -19,6 +18,10 @@ void main() {
       expect(forbidden.hasMatch(source), isFalse, reason: path);
       expect(source, contains('annotationRepository'), reason: path);
     }
+    final editor = File('lib/widgets/context_menu/reader_note_menu.dart')
+        .readAsStringSync();
+    expect(forbidden.hasMatch(editor), isFalse);
+    expect(editor, contains('widget.onSave'));
   });
 
   test('transient selection lifecycle has no annotation mutation dependency',
@@ -53,8 +56,8 @@ void main() {
         playerSource, contains("_selectionContext(location, 'lookupContext')"));
     expect(menuSource, contains('annotationContext: widget.annotationContext'));
     expect(menuSource, contains('lookupContext: widget.lookupContext'));
-    expect(excerptSource, contains('context: widget.annotationContext'));
-    expect(excerptSource, isNot(contains('context: widget.lookupContext')));
+    expect(excerptSource, contains('context: snapshot.annotationContext'));
+    expect(excerptSource, isNot(contains('context: snapshot.lookupContext')));
   });
 
   test('rendered annotation taps use a bridge path distinct from selections',

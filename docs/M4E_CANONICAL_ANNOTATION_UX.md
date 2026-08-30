@@ -261,7 +261,7 @@ At the end of every M4E session:
 ### M4E.4 — Preserve cross-page selection
 
 - Status: COMPLETE
-- Commit SHA: pending follow-up documentation checkpoint
+- Commit SHA: `df3bf5c5`
 - Important files changed: `assets/foliate-js/src/auto-page-selection.mjs`,
   `assets/foliate-js/src/selection-session.mjs`,
   `assets/foliate-js/src/book.js`, `assets/foliate-js/dist/bundle.js`, and
@@ -450,9 +450,9 @@ At the end of every M4E session:
 
 Last completed submilestone: M4E.4 — Preserve cross-page selection
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: pending M4E.4 implementation commit
-Documentation checkpoint: pending follow-up commit recording the M4E.4 implementation SHA
-Repository state: M4E.4 implementation and documentation complete and validated; commits pending
+Last implementation commit: `df3bf5c5 fix: stabilize paginated selection lifecycle`
+Documentation checkpoint: The current commit records the completed M4E.4 implementation SHA and handoff
+Repository state: Clean at the completed M4E.4 documentation checkpoint
 Next submilestone: M4E.5 — Sentence-aware annotation context
 Next concrete tasks: Inventory the current persisted character-window context and transient provider-context consumers; introduce sentence-aware persisted `annotationContext` with normalization/fallback while keeping wider `lookupContext` transient; add focused word, phrase, clause, sentence, punctuation, multi-sentence, and whitespace tests
 Known failing tests: None

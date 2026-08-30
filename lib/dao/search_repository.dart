@@ -33,7 +33,7 @@ class SearchRepository {
           annotation.annotationContext ?? '',
           personalNote,
           ...annotation.activeEnrichments
-              .map((enrichment) => enrichment.content ?? ''),
+              .expand((enrichment) => enrichment.searchableText),
         ].join('\n').toLowerCase();
         if (!haystack.contains(query.toLowerCase())) return false;
         remaining--;

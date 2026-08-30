@@ -121,7 +121,9 @@ void main() {
         annotationOf(document, translation.annotationId)['enrichments'],
         contains(predicate<Map>((value) =>
             value['kind'] == 'translation' &&
-            value['content'] == 'translated')));
+            value['translation'] == 'translated' &&
+            value['providerId'] == 'anx-reader' &&
+            !value.containsKey('content'))));
     expect(
         annotationOf(document, personal.annotationId)['enrichments'],
         contains(predicate<Map>((value) =>
@@ -132,8 +134,27 @@ void main() {
   test('canonical enrichment APIs retain AnnotationRef identity', () async {
     final ref = await repository.createAnnotation(creation());
 
-    expect(await repository.saveDictionaryResult(ref, 'definition'), ref);
-    expect(await repository.saveAiAnalysis(ref, 'analysis'), ref);
+    expect(
+        await repository.saveDictionaryResult(
+          ref,
+          '**full definition**',
+          translation: 'definition',
+          providerId: 'dictionary-provider',
+          providerName: 'Dictionary Provider',
+          metadata: const {'source': 'test'},
+        ),
+        ref);
+    expect(
+        await repository.saveAiAnalysis(
+          ref,
+          'analysis',
+          translation: 'перевод',
+          grammar: 'grammar',
+          usage: 'usage',
+          providerId: 'ai-provider',
+          providerName: 'AI Provider',
+        ),
+        ref);
     expect(await repository.saveTranslation(ref, 'translation'), ref);
     expect(
         await repository.saveAiThread(
@@ -150,6 +171,28 @@ void main() {
         (await shared.annotationDocument(fingerprint))!, ref.annotationId);
     expect((annotation['enrichments'] as List).map((value) => value['kind']),
         containsAll(['dictionary', 'ai-analysis', 'translation', 'ai-thread']));
+    final materials =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    final dictionary =
+        materials.singleWhere((value) => value['kind'] == 'dictionary');
+    expect(dictionary['translation'], 'definition');
+    expect(dictionary['markdown'], '**full definition**');
+    expect(dictionary['metadata'], {'source': 'test'});
+    expect(dictionary, isNot(contains('content')));
+    final analysis =
+        materials.singleWhere((value) => value['kind'] == 'ai-analysis');
+    expect(analysis['translation'], 'перевод');
+    expect(analysis['commentary'], {
+      'translation': 'перевод',
+      'translationNotes': 'analysis',
+      'grammar': 'grammar',
+      'usage': 'usage',
+    });
+    expect(analysis, isNot(contains('content')));
+    final savedTranslation =
+        materials.singleWhere((value) => value['kind'] == 'translation');
+    expect(savedTranslation['translation'], 'translation');
+    expect(savedTranslation, isNot(contains('content')));
     final thread = (annotation['enrichments'] as List)
         .cast<Map<String, dynamic>>()
         .singleWhere((value) => value['kind'] == 'ai-thread');

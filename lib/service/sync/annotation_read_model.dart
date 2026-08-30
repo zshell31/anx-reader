@@ -77,6 +77,42 @@ class AnnotationEnrichmentView {
 
   String? get content =>
       data['content'] is String ? data['content'] as String : null;
+
+  String? get translation =>
+      data['translation'] is String ? data['translation'] as String : null;
+
+  String? get markdown =>
+      data['markdown'] is String ? data['markdown'] as String : null;
+
+  String? get providerId =>
+      data['providerId'] is String ? data['providerId'] as String : null;
+
+  String? get providerName =>
+      data['providerName'] is String ? data['providerName'] as String : null;
+
+  Map<String, Object?>? get commentary => data['commentary'] is Map
+      ? (data['commentary'] as Map).cast<String, Object?>()
+      : null;
+
+  String? commentaryValue(String field) {
+    final value = commentary?[field];
+    return value is String ? value : null;
+  }
+
+  /// Known human-readable material fields, without stringifying arbitrary JSON.
+  Iterable<String> get searchableText sync* {
+    for (final value in <String?>[
+      content,
+      translation,
+      markdown,
+      commentaryValue('translation'),
+      commentaryValue('translationNotes'),
+      commentaryValue('grammar'),
+      commentaryValue('usage'),
+    ]) {
+      if (value?.isNotEmpty == true) yield value!;
+    }
+  }
 }
 
 class AnnotationCapabilities {

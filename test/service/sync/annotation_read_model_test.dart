@@ -193,6 +193,49 @@ void main() {
       expect(() => list.add(false), throwsUnsupportedError);
     });
 
+    test('exposes Lingua-compatible semantic material fields', () {
+      final model = const CanonicalAnnotationReadAdapter()
+          .read(document([
+            annotation('annotation-a', enrichments: [
+              {
+                'id': 'dictionary-a',
+                'kind': 'dictionary',
+                'providerId': 'ldoce',
+                'providerName': 'LDOCE',
+                'translation': 'short definition',
+                'markdown': '**full article**',
+                'commentary': {
+                  'translation': 'commentary translation',
+                  'translationNotes': 'notes',
+                  'grammar': 'grammar',
+                  'usage': 'usage',
+                },
+                'createdAt': createdAt,
+                'updatedAt': createdAt,
+              },
+            ]),
+          ]))
+          .single
+          .activeEnrichments
+          .single;
+
+      expect(model.content, isNull);
+      expect(model.translation, 'short definition');
+      expect(model.markdown, '**full article**');
+      expect(model.providerId, 'ldoce');
+      expect(model.providerName, 'LDOCE');
+      expect(model.commentaryValue('grammar'), 'grammar');
+      expect(model.searchableText, [
+        'short definition',
+        '**full article**',
+        'commentary translation',
+        'notes',
+        'grammar',
+        'usage',
+      ]);
+      expect(() => model.commentary!['new'] = 'value', throwsUnsupportedError);
+    });
+
     test('distinguishes navigation and rendering capability without hiding',
         () {
       final unavailable = CanonicalAnnotationReadAdapter(

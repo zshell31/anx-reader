@@ -52,7 +52,7 @@ class NotesRepository {
             note.chapter ?? '',
             note.annotationContext ?? '',
             note.effectivePersonalNote?.content ?? '',
-            ...note.activeEnrichments.map((item) => item.content ?? ''),
+            ...note.activeEnrichments.expand((item) => item.searchableText),
           ].join('\n').toLowerCase();
           if (!text.contains(query!)) continue;
         }

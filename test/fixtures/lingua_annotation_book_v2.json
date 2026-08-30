@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "book": {
+    "fingerprintAlgorithm": "md5",
+    "fingerprint": "0123456789abcdef0123456789abcdef",
+    "title": "Lingua fixture"
+  },
+  "annotations": [
+    {
+      "id": "lingua-materials",
+      "motivation": "selection",
+      "createdAt": "2026-08-20T10:00:00.000Z",
+      "updatedAt": "2026-08-20T10:03:00.000Z",
+      "target": {
+        "selectedText": "came across",
+        "selectors": [
+          {"type": "epub-cfi", "cfi": "epubcfi(/6/4!/4/2:3)"}
+        ]
+      },
+      "enrichments": [
+        {
+          "id": "lingua-translation",
+          "kind": "translation",
+          "providerId": "google-translate",
+          "providerName": "Google Translate",
+          "translation": "случайно встретил",
+          "createdAt": "2026-08-20T10:01:00.000Z",
+          "updatedAt": "2026-08-20T10:01:00.000Z",
+          "futureMaterialField": {"preserve": true}
+        },
+        {
+          "id": "lingua-dictionary",
+          "kind": "dictionary",
+          "providerId": "ldoce",
+          "providerName": "LDOCE",
+          "translation": "meet unexpectedly",
+          "markdown": "**come across somebody** — to meet by chance",
+          "metadata": {"url": "https://example.invalid/dictionary"},
+          "createdAt": "2026-08-20T10:02:00.000Z",
+          "updatedAt": "2026-08-20T10:02:00.000Z"
+        },
+        {
+          "id": "lingua-ai",
+          "kind": "ai-analysis",
+          "providerId": "openai",
+          "providerName": "OpenAI",
+          "translation": "случайно встретил",
+          "commentary": {
+            "translation": "случайно встретил",
+            "translationNotes": "Фразовый глагол.",
+            "grammar": "Past simple.",
+            "usage": "Neutral."
+          },
+          "createdAt": "2026-08-20T10:03:00.000Z",
+          "updatedAt": "2026-08-20T10:03:00.000Z"
+        }
+      ],
+      "futureAnnotationField": ["preserve"]
+    }
+  ],
+  "futureDocumentField": {"preserve": true}
+}

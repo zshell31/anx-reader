@@ -29,6 +29,9 @@ class AiThreadMessageInput {
   const AiThreadMessageInput({required this.role, required this.content});
 }
 
+const _anxProviderId = 'anx-reader';
+const _anxProviderName = 'Anx Reader';
+
 class BookmarkCreation {
   final Book book;
   final String content;
@@ -77,24 +80,82 @@ class AnnotationRepository {
       _enqueue(() => _createCanonicalAnnotation(input));
 
   Future<AnnotationRef> createAnnotationWithTranslation(
-          CanonicalSelectionCreation input, String content) =>
-      _enqueue(() => _createCanonicalAnnotation(input,
-          firstMaterialKind: 'translation', firstContent: content.trim()));
+    CanonicalSelectionCreation input,
+    String content, {
+    String providerId = _anxProviderId,
+    String providerName = _anxProviderName,
+  }) =>
+      _enqueue(() => _createCanonicalAnnotation(
+            input,
+            firstMaterial: (timestamp) => _translationEnrichment(
+                content.trim(), timestamp,
+                providerId: providerId, providerName: providerName),
+          ));
 
   Future<AnnotationRef> createAnnotationWithPersonalNote(
           CanonicalSelectionCreation input, String content) =>
       _enqueue(() =>
           _createCanonicalAnnotation(input, firstPersonalNote: content.trim()));
 
-  Future<AnnotationRef> saveTranslation(AnnotationRef ref, String content) =>
-      _enqueue(() => _saveMaterial(ref, 'translation', content));
+  Future<AnnotationRef> saveTranslation(
+    AnnotationRef ref,
+    String content, {
+    String providerId = _anxProviderId,
+    String providerName = _anxProviderName,
+  }) =>
+      _enqueue(() => _saveMaterial(
+            ref,
+            (timestamp) => _translationEnrichment(
+              content.trim(),
+              timestamp,
+              providerId: providerId,
+              providerName: providerName,
+            ),
+          ));
 
   Future<AnnotationRef> saveDictionaryResult(
-          AnnotationRef ref, String content) =>
-      _enqueue(() => _saveMaterial(ref, 'dictionary', content));
+    AnnotationRef ref,
+    String markdown, {
+    String? translation,
+    String providerId = _anxProviderId,
+    String providerName = _anxProviderName,
+    Map<String, String> metadata = const {},
+  }) =>
+      _enqueue(() => _saveMaterial(
+            ref,
+            (timestamp) => _dictionaryEnrichment(
+              markdown.trim(),
+              timestamp,
+              translation: translation?.trim(),
+              providerId: providerId,
+              providerName: providerName,
+              metadata: metadata,
+            ),
+          ));
 
-  Future<AnnotationRef> saveAiAnalysis(AnnotationRef ref, String content) =>
-      _enqueue(() => _saveMaterial(ref, 'ai-analysis', content));
+  Future<AnnotationRef> saveAiAnalysis(
+    AnnotationRef ref,
+    String analysis, {
+    String? translation,
+    String? translationNotes,
+    String? grammar,
+    String? usage,
+    String providerId = _anxProviderId,
+    String providerName = _anxProviderName,
+  }) =>
+      _enqueue(() => _saveMaterial(
+            ref,
+            (timestamp) => _aiAnalysisEnrichment(
+              analysis.trim(),
+              timestamp,
+              translation: translation?.trim(),
+              translationNotes: translationNotes?.trim(),
+              grammar: grammar?.trim(),
+              usage: usage?.trim(),
+              providerId: providerId,
+              providerName: providerName,
+            ),
+          ));
 
   Future<AnnotationRef> saveAiThread(
           AnnotationRef ref, Iterable<AiThreadMessageInput> messages,
@@ -142,19 +203,17 @@ class AnnotationRepository {
 
   Future<AnnotationRef> _createCanonicalAnnotation(
       CanonicalSelectionCreation input,
-      {String? firstMaterialKind,
-      String? firstContent,
+      {Map<String, dynamic> Function(String timestamp)? firstMaterial,
       String? firstPersonalNote}) async {
     final fingerprint = _fingerprint(input.book);
     _epubCfi(input.epubCfi);
-    if (firstMaterialKind != null) {
-      _validateMaterial(firstMaterialKind, firstContent ?? '');
-    }
     if (firstPersonalNote != null && firstPersonalNote.isEmpty) {
       throw ArgumentError.value(
           firstPersonalNote, 'firstPersonalNote', 'must not be empty');
     }
     final timestamp = canonicalWireTimestamp(now());
+    final material = firstMaterial?.call(timestamp);
+    if (material != null) _validateMaterial(material);
     final annotationId = uuid.v4();
     final annotation = <String, dynamic>{
       'id': annotationId,
@@ -170,9 +229,7 @@ class AnnotationRepository {
         ],
       },
       'enrichments': <Object>[
-        if (firstMaterialKind != null)
-          _materialEnrichment(
-              firstMaterialKind, firstContent!.trim(), timestamp),
+        if (material != null) material,
         if (firstPersonalNote?.isNotEmpty == true)
           <String, dynamic>{
             'id': 'personal-note:$annotationId',
@@ -190,36 +247,99 @@ class AnnotationRepository {
         bookFingerprint: fingerprint, annotationId: annotationId);
   }
 
-  Future<AnnotationRef> _saveMaterial(
-      AnnotationRef ref, String kind, String content) async {
-    final value = content.trim();
-    _validateMaterial(kind, value);
+  Future<AnnotationRef> _saveMaterial(AnnotationRef ref,
+      Map<String, dynamic> Function(String timestamp) create) async {
     final binding = await _canonicalBindingByRef(ref);
     _ensureAlive(binding.annotation);
     final timestamp = _nextTimestamp(binding.annotation);
-    (binding.annotation['enrichments'] as List)
-        .add(_materialEnrichment(kind, value, timestamp));
+    final enrichment = create(timestamp);
+    _validateMaterial(enrichment);
+    (binding.annotation['enrichments'] as List).add(enrichment);
     binding.annotation['updatedAt'] = timestamp;
     await _commit(binding.fingerprint, binding.document);
     return ref;
   }
 
-  Map<String, dynamic> _materialEnrichment(
-          String kind, String content, String timestamp) =>
+  Map<String, dynamic> _translationEnrichment(
+    String translation,
+    String timestamp, {
+    required String providerId,
+    required String providerName,
+  }) =>
       <String, dynamic>{
-        'id': '$kind:${uuid.v4()}',
-        'kind': kind,
-        'content': content,
+        'id': 'translation:${uuid.v4()}',
+        'kind': 'translation',
+        'providerId': providerId,
+        'providerName': providerName,
+        'translation': translation,
         'createdAt': timestamp,
         'updatedAt': timestamp,
       };
 
-  void _validateMaterial(String kind, String content) {
+  Map<String, dynamic> _dictionaryEnrichment(
+    String markdown,
+    String timestamp, {
+    String? translation,
+    required String providerId,
+    required String providerName,
+    required Map<String, String> metadata,
+  }) =>
+      <String, dynamic>{
+        'id': 'dictionary:${uuid.v4()}',
+        'kind': 'dictionary',
+        'providerId': providerId,
+        'providerName': providerName,
+        if (translation?.isNotEmpty == true) 'translation': translation,
+        'markdown': markdown,
+        if (metadata.isNotEmpty) 'metadata': Map<String, String>.from(metadata),
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+
+  Map<String, dynamic> _aiAnalysisEnrichment(
+    String analysis,
+    String timestamp, {
+    String? translation,
+    String? translationNotes,
+    String? grammar,
+    String? usage,
+    required String providerId,
+    required String providerName,
+  }) {
+    final notes =
+        translationNotes?.isNotEmpty == true ? translationNotes! : analysis;
+    return <String, dynamic>{
+      'id': 'ai-analysis:${uuid.v4()}',
+      'kind': 'ai-analysis',
+      'providerId': providerId,
+      'providerName': providerName,
+      if (translation?.isNotEmpty == true) 'translation': translation,
+      'commentary': <String, dynamic>{
+        if (translation?.isNotEmpty == true) 'translation': translation,
+        if (notes.isNotEmpty) 'translationNotes': notes,
+        if (grammar?.isNotEmpty == true) 'grammar': grammar,
+        if (usage?.isNotEmpty == true) 'usage': usage,
+      },
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+    };
+  }
+
+  void _validateMaterial(Map<String, dynamic> enrichment) {
+    final kind = enrichment['kind'];
     if (!const {'translation', 'dictionary', 'ai-analysis'}.contains(kind)) {
       throw ArgumentError.value(kind, 'kind', 'unsupported material kind');
     }
-    if (content.trim().isEmpty) {
-      throw ArgumentError.value(content, 'content', 'must not be empty');
+    final hasPayload = <Object?>[
+      enrichment['content'],
+      enrichment['translation'],
+      enrichment['markdown'],
+      ...(enrichment['commentary'] is Map
+          ? (enrichment['commentary'] as Map).values
+          : const <Object?>[]),
+    ].any((value) => value is String && value.trim().isNotEmpty);
+    if (!hasPayload) {
+      throw ArgumentError('material enrichment must contain semantic content');
     }
   }
 

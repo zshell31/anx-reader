@@ -1140,14 +1140,15 @@ Promises that never settled. They were absent from success and failure state.
 Repeated relocation and an `off -> bilingual` mode cycle therefore joined the
 same Promises instead of starting replacement work.
 
-The underlying Dart request chain had no liveness bound. The global
-`FullTextTranslationCacheService._inFlight` correctly removed requests in
-`finally`, but `TranslateServiceProvider.translateTextOnly` could wait forever
-when a provider stream neither emitted, failed, nor closed. Because the cache
-service and coordinator are process-wide singletons, reopening the WebView
-could join the same never-completing request. This was the exact cause of the
-two permanently pending paragraph translations; it was not a missed Range,
-stale DOM ownership, cached error, or permanent-failure suppression.
+The underlying Dart request chain first exposed that it had no liveness bound.
+The global `FullTextTranslationCacheService._inFlight` correctly removed
+requests in `finally`, but `TranslateServiceProvider.translateTextOnly` could
+wait forever when a provider stream neither emitted, failed, nor closed.
+Because the cache service and coordinator are process-wide singletons,
+reopening the WebView could join the same never-completing request. This located
+the defect below the bridge and ruled out a missed Range, stale DOM ownership,
+cached error, or permanent-failure suppression; later live verification found
+the final runner ownership cause described below.
 
 `af60c5db` adds a 30-second per-attempt stream-inactivity contract. Timeout is
 applied to the stream subscription, so leaving the `await for` cancels the
@@ -1168,6 +1169,26 @@ completions remain harmless under the existing owner check. A browser `online`
 event reconciles stored current/prefetch Ranges, allowing settled transient
 network failures to retry without reopening the book, while permanent
 authentication/configuration failures remain quiescent.
+
+Live verification of those two commits exposed the final ownership defect.
+The visible italic paragraph beginning `Reward: You can now gain experience`
+intersected the current Range and had valid frozen text/context, no wrapper,
+no failure, no queued entry, and a running Promise. The queue itself was empty
+with two active slots. `CancelableLangchainRunner`, however, was a global
+singleton with one `_subscription` field. Each of the up to three legitimate
+concurrent AI streams overwrote that field. Cancelling or timing out one stream
+could therefore cancel another stream and await the wrong subscription while
+leaving its own provider subscription alive. The stream-level inactivity
+contract could not provide reliable liveness with incorrect transport
+ownership.
+
+`33de3e13` gives every normal and agent runner invocation its own local model
+subscription. The runner separately tracks all active subscriptions only for
+the explicit global-cancel operation. Per-stream timeout/cancel now removes and
+cancels exactly that stream; completion also removes exactly its own entry.
+The regression starts two controlled model streams and proves that cancelling
+the first increments only the first model's cancellation count, then cancelling
+the second independently increments the second.
 
 ### Automated verification
 
@@ -1216,6 +1237,19 @@ authentication/configuration failures remain quiescent.
   app with data retained, and launched on `A3DE65C3`; PID 8230 was alive with
   `MainActivity` resumed, visible, and drawn, with no crash or ANR in the
   process smoke log. This launch smoke check is not the bilingual checklist.
+- After `33de3e13`, the focused runner test passed, targeted analysis reported
+  no issues, and the full Flutter suite passed 288 of 288 tests. Full analysis
+  again reported no errors or warnings and the same 42 informational lints.
+  The 76.7 MB release APK rebuilt and installed with app data retained.
+- Device/WebView before/after validation used the exact reported paragraph.
+  Before the runner fix, `Reward: You can now gain experience...` intersected
+  the current Range but remained in `#inFlightElements` with no translated or
+  failed state, no queue entry, and no wrapper. After installing and reopening
+  the same saved CFI, it had left in-flight state, had successful translated
+  state, and contained exactly one wrapper: `Награда: теперь вы можете получать
+  опыт. Наберите достаточно, и, возможно, даже повысите уровень.` Active slots
+  and the queue were both zero. This confirms the concrete reported paragraph;
+  it still does not replace the 5–10 chapter checklist.
 
 ### Bilingual translation Android/device checklist
 
@@ -1240,9 +1274,8 @@ DevTools smoke check described above, not the following bilingual checklist.
 
 - Real Android WebView/paginator timing, cached and uncached providers, and
   rapid chapter navigation still require the checklist above. The strict-MIME
-  repair received device-side before/after confirmation and the pending-Promise
-  defect received device-side diagnosis, but the new liveness/queue fix has
-  only the launch smoke check described above.
+  repair and the exact reported pending paragraph received device-side
+  before/after confirmation, but the full navigation matrix remains manual.
 - Retiring a document does not actively cancel an already-dispatched Flutter
   bridge request. Its completion is ignored by presentation state. A silent
   provider attempt is now subscription-cancelled by the inactivity contract;
@@ -1270,11 +1303,12 @@ Last completed work: Bilingual translation provider liveness and bounded
 current-page/next-page scheduling stabilization
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`4c57d7b7 fix: bound and prioritize paragraph translations`
+`33de3e13 fix: isolate concurrent AI stream subscriptions`
 Documentation checkpoint: This section records the diagnosed presentation
 race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
 retry policy, strict-MIME opening failure, never-settling provider root cause,
-bounded queue, automated/device-smoke evidence, and manual-device checklist.
+bounded queue, concurrent runner ownership, exact paragraph before/after
+evidence, and manual-device checklist.
 Repository state: Clean after the stabilization documentation commit
 Next submilestone: Manual bilingual/device verification and merge review
 Next concrete tasks: Execute the manual Android/device checklist, then perform

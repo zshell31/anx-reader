@@ -166,7 +166,7 @@ At the end of every M4E session:
 ### M4E.2 — Local annotation presentation sidecar
 
 - Status: COMPLETE
-- Commit SHA: Pending this phase commit
+- Commit SHA: `45a4255b`
 - Important files changed: `lib/service/sync/shared_state_database.dart`,
   `lib/service/sync/annotation_repository.dart`,
   `lib/service/sync/annotation_projection_reconciler.dart`,
@@ -388,12 +388,12 @@ At the end of every M4E session:
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.2 — Local annotation presentation sidecar (pending its phase commit)
+Last completed submilestone: M4E.2 — Local annotation presentation sidecar
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last commit: `ff25b491 feat: add canonical annotation read model`
-Repository state: M4E.2 implementation, migration, tests, and this progress update are ready for their independent commit
+Last commit: `45a4255b feat: add local annotation presentation sidecar`
+Repository state: Clean at the completed M4E.2 boundary; this documentation-only SHA checkpoint is the sole pending change
 Next submilestone: M4E.3 — Explicit SelectionSession state machine
-Next concrete tasks: Commit M4E.2, then map every selection event/message and overlay lifecycle transition in `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `lib/page/book_player/epub_player.dart`, and the context-menu widgets; identify configured Foliate JS test commands; introduce generation-scoped IDLE/SELECTED/ACTIONS_VISIBLE transitions without disrupting Android native handles
+Next concrete tasks: Map every selection event/message and overlay lifecycle transition in `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `lib/page/book_player/epub_player.dart`, and the context-menu widgets; identify configured Foliate JS test commands; introduce generation-scoped IDLE/SELECTED/ACTIONS_VISIBLE transitions without disrupting Android native handles
 Known failing tests: None
 Known limitations: Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
 Important files to inspect next: `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `assets/foliate-js/package.json`, `lib/page/book_player/epub_player.dart`, `lib/widgets/context_menu/context_menu.dart`, `lib/widgets/context_menu/excerpt_menu.dart`, and any existing reader bridge/selection tests

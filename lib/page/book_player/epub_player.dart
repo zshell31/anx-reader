@@ -20,6 +20,7 @@ import 'package:anx_reader/models/reading_rules.dart';
 import 'package:anx_reader/models/search_result_model.dart';
 import 'package:anx_reader/models/toc_item.dart';
 import 'package:anx_reader/page/book_player/image_viewer.dart';
+import 'package:anx_reader/page/book_player/selection_session_bridge.dart';
 import 'package:anx_reader/page/home_page.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/providers/book_list.dart';
@@ -89,6 +90,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   int chapterCurrentPage = 0;
   int chapterTotalPages = 0;
   OverlayEntry? contextMenuEntry;
+  int? contextMenuSelectionSessionGeneration;
   AnimationController? _animationController;
   Animation<double>? _animation;
   bool showHistory = false;
@@ -102,8 +104,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   bool bookmarkExists = false;
   WritingModeEnum writingMode = WritingModeEnum.horizontalTb;
   String? _lastSelectionContextText;
-  bool _selectionClearLocked = false;
-  bool _selectionClearPending = false;
+  final SelectionSessionBridgeState _selectionSession =
+      SelectionSessionBridgeState();
 
   // Scroll wheel debounce
   Timer? _scrollDebounceTimer;
@@ -146,15 +148,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     await webViewController.evaluateJavascript(source: '''
       goToPercent($value); 
       ''');
-  }
-
-  void setSelectionClearLocked(bool locked) {
-    _selectionClearLocked = locked;
-    if (!locked && _selectionClearPending) {
-      _selectionClearPending = false;
-      _lastSelectionContextText = null;
-      removeOverlay();
-    }
   }
 
   void changeTheme(ReadTheme readTheme) {
@@ -539,7 +532,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void onClick(Map<String, dynamic> location) {
     readingPageKey.currentState?.resetAwakeTimer();
     if (contextMenuEntry != null) {
-      removeOverlay();
+      dismissContextMenu();
       return;
     }
     final x = location['x'];
@@ -619,6 +612,11 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
   }
 
+  String? _selectionContextText(Map<String, dynamic> location) {
+    final rawContextText = location['contextText']?.toString();
+    return (rawContextText?.trim().isEmpty ?? true) ? null : rawContextText;
+  }
+
   Future<void> setHandler(InAppWebViewController controller) async {
     controller.addJavaScriptHandler(
         handlerName: 'onLoadEnd',
@@ -681,44 +679,59 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           ref.read(bookTocProvider.notifier).setToc(toc);
         });
     controller.addJavaScriptHandler(
-        handlerName: 'onSelectionEnd',
-        callback: (args) {
-          removeOverlay();
-          Map<String, dynamic> location = args[0];
-          String cfi = location['cfi'];
-          String text = location['text'];
-          bool footnote = location['footnote'];
-          final rawContextText = location['contextText']?.toString();
-          _lastSelectionContextText =
-              (rawContextText?.trim().isEmpty ?? true) ? null : rawContextText;
-          double left = (location['pos']['left'] as num).toDouble();
-          double top = (location['pos']['top'] as num).toDouble();
-          double right = (location['pos']['right'] as num).toDouble();
-          double bottom = (location['pos']['bottom'] as num).toDouble();
-          showContextMenu(
-            context,
-            left,
-            top,
-            right,
-            bottom,
-            text,
-            cfi,
-            null,
-            footnote,
-            writingMode.isVertical ? Axis.vertical : Axis.horizontal,
-            contextText: _lastSelectionContextText,
-          );
-        });
+      handlerName: 'onSelectionChanged',
+      callback: (args) {
+        final location = Map<String, dynamic>.from(args[0] as Map);
+        if (!_selectionSession.selectionChanged(location)) return;
+
+        _lastSelectionContextText = _selectionContextText(location);
+        removeOverlay();
+      },
+    );
     controller.addJavaScriptHandler(
-        handlerName: 'onSelectionCleared',
-        callback: (args) {
-          if (_selectionClearLocked) {
-            _selectionClearPending = true;
-            return;
-          }
-          _lastSelectionContextText = null;
-          removeOverlay();
-        });
+      handlerName: 'onSelectionActionsRequested',
+      callback: (args) {
+        final location = Map<String, dynamic>.from(args[0] as Map);
+        if (!_selectionSession.actionsRequested(location)) return;
+
+        final generation = _selectionSession.generation!;
+        _lastSelectionContextText = _selectionContextText(location);
+        final position = Map<String, dynamic>.from(location['pos'] as Map);
+        showContextMenu(
+          context,
+          (position['left'] as num).toDouble(),
+          (position['top'] as num).toDouble(),
+          (position['right'] as num).toDouble(),
+          (position['bottom'] as num).toDouble(),
+          location['text'] as String,
+          location['cfi'] as String,
+          null,
+          location['footnote'] as bool,
+          writingMode.isVertical ? Axis.vertical : Axis.horizontal,
+          contextText: _lastSelectionContextText,
+          selectionSessionGeneration: generation,
+        );
+      },
+    );
+    controller.addJavaScriptHandler(
+      handlerName: 'onSelectionActionsHidden',
+      callback: (args) {
+        final payload = Map<String, dynamic>.from(args[0] as Map);
+        final generation = (payload['sessionId'] as num).toInt();
+        if (!_selectionSession.actionsHidden(generation)) return;
+        removeOverlay(selectionSessionGeneration: generation);
+      },
+    );
+    controller.addJavaScriptHandler(
+      handlerName: 'onSelectionCleared',
+      callback: (args) {
+        final payload = Map<String, dynamic>.from(args[0] as Map);
+        final generation = (payload['sessionId'] as num).toInt();
+        if (!_selectionSession.selectionCleared(generation)) return;
+        _lastSelectionContextText = null;
+        removeOverlay(selectionSessionGeneration: generation);
+      },
+    );
     controller.addJavaScriptHandler(
         handlerName: 'onAnnotationClick',
         callback: (args) {
@@ -811,7 +824,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     controller.addJavaScriptHandler(
       handlerName: 'onFootnoteClose',
       callback: (args) {
-        removeOverlay();
+        dismissContextMenu();
       },
     );
     controller.addJavaScriptHandler(
@@ -886,6 +899,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> onWebViewCreated(InAppWebViewController controller) async {
+    _selectionSession.reset();
+    removeOverlay();
     if (AnxPlatform.isAndroid) {
       await InAppWebViewController.setWebContentsDebuggingEnabled(true);
     }
@@ -899,29 +914,36 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     });
   }
 
-  void removeOverlay() {
-    _selectionClearLocked = false;
-    _selectionClearPending = false;
-    if (contextMenuEntry == null || contextMenuEntry?.mounted == false) return;
-    contextMenuEntry?.remove();
+  bool isSelectionSessionCurrent(int generation) =>
+      _selectionSession.matches(generation) &&
+      _selectionSession.phase == SelectionSessionBridgePhase.actionsVisible;
+
+  void removeOverlay({int? selectionSessionGeneration}) {
+    if (selectionSessionGeneration != null &&
+        contextMenuSelectionSessionGeneration != selectionSessionGeneration) {
+      return;
+    }
+    if (contextMenuEntry?.mounted == true) {
+      contextMenuEntry?.remove();
+    }
     contextMenuEntry = null;
+    contextMenuSelectionSessionGeneration = null;
   }
 
-  Future<void> _showSelectionContextMenuFromWebView() async {
-    if (!AnxPlatform.isAndroid) return;
+  void hideSelectionActions(int generation) {
+    if (!_selectionSession.actionsHidden(generation)) return;
+    removeOverlay(selectionSessionGeneration: generation);
+    webViewController.evaluateJavascript(
+      source: 'hideSelectionActions($generation)',
+    );
+  }
 
-    try {
-      await webViewController.evaluateJavascript(source: '''
-        (function() {
-          if (typeof window.showContextMenu !== 'function') return;
-          if (window.showContextMenu()) return;
-          window.setTimeout(function() {
-            window.showContextMenu();
-          }, 250);
-        })();
-      ''');
-    } catch (e) {
-      AnxLog.warning('Failed to show Android selection context menu: $e');
+  void dismissContextMenu() {
+    final generation = contextMenuSelectionSessionGeneration;
+    if (generation != null) {
+      hideSelectionActions(generation);
+    } else {
+      removeOverlay();
     }
   }
 
@@ -957,12 +979,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
     contextMenu = ContextMenu(
       settings: ContextMenuSettings(hideDefaultSystemContextMenuItems: true),
-      onCreateContextMenu: (hitTestResult) async {
-        await _showSelectionContextMenuFromWebView();
-      },
-      onHideContextMenu: () {
-        // removeOverlay();
-      },
     );
     if (Prefs().openBookAnimation) {
       _animationController = AnimationController(
@@ -999,6 +1015,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     _scrollDebounceTimer?.cancel();
     _animationController?.dispose();
     saveReadingProgress();
+    _selectionSession.reset();
     removeOverlay();
     super.dispose();
   }

@@ -207,22 +207,56 @@ At the end of every M4E session:
 
 ### M4E.3 — Explicit SelectionSession state machine
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: The explicit states are `IDLE`, `SELECTED`, and
-  `ACTIONS_VISIBLE`; session/generation identity invalidates stale callbacks.
-- Tests run: —
-- Discovered limitations or follow-up work: Preserve Android native selection
-  handles and avoid blanket pointer/touch `preventDefault()` behavior.
+- Status: COMPLETE
+- Commit SHA: pending follow-up documentation checkpoint
+- Important files changed: `assets/foliate-js/src/selection-session.mjs`,
+  `assets/foliate-js/src/book.js`, `assets/foliate-js/dist/bundle.js`,
+  `assets/foliate-js/test/selection-session.test.mjs`,
+  `assets/foliate-js/package.json`,
+  `lib/page/book_player/selection_session_bridge.dart`,
+  `lib/page/book_player/epub_player.dart`,
+  `lib/widgets/context_menu/context_menu.dart`,
+  `lib/widgets/context_menu/excerpt_menu.dart`,
+  `test/page/book_player/selection_session_bridge_test.dart`, and
+  `test/service/sync/annotation_mutation_boundary_test.dart`.
+- Architectural decisions made: JavaScript owns one reader-wide
+  `SelectionSessionMachine` with explicit `IDLE`, `SELECTED`, and
+  `ACTIONS_VISIBLE` states, a monotonic generation, content-document ownership,
+  and a stable DOM Range key. `selectionchange` only creates or updates the
+  session and sends `onSelectionChanged`; it never requests actions. A
+  capture-phase `pointerdown` records generation, Range, and client-rect hit
+  testing before native selection processing, while an unchanged matching
+  `pointerup` toggles actions. Flutter mirrors only the current generation to
+  reject stale bridge work and tags each transient `OverlayEntry` with its
+  generation. Selection overlays and rendered-annotation overlays therefore
+  use separate lifetimes. Menu dismissal sends `hideSelectionActions` and does
+  not clear the DOM Range. `autoMarkSelection` no longer creates an annotation
+  merely by opening transient actions; annotation creation remains behind an
+  explicit menu mutation. Existing paginated auto-page behavior remains in
+  place; stopping a selection now minimally increments its existing auto-page
+  session counter so an already-running continuation is invalidated.
+- Tests run: `npm test` in `assets/foliate-js` (7 passed); configured `npm run
+  build` (Webpack succeeded and rebuilt `dist/bundle.js`, with the same three
+  top-level-await target warnings); Dart formatting on all touched Dart files;
+  targeted `flutter analyze` on the player, menu, bridge, and tests (no issues);
+  `flutter test test/page/book_player/selection_session_bridge_test.dart
+  test/service/sync` (168 passed). `package.json` has no configured lint script,
+  so no unconfigured JS lint command was invented.
+- Discovered limitations or follow-up work: The repository has no DOM/WebView
+  integration-test harness, so Android pointer ordering is covered by the pure
+  state-machine/bridge tests plus the built integration, not an automated
+  device gesture test. Capture-phase hit testing is deliberately narrow and no
+  pointer/touch event is blanket-prevented; if an inside tap collapses the Range
+  before `pointerup`, only that saved matching Range is restored. Full
+  cross-page auto-page timer/race regression remains M4E.4.
 - Acceptance checklist:
-  - [ ] New/changed selections leave actions hidden.
-  - [ ] Tapping inside the selection toggles actions.
-  - [ ] Tapping outside clears selection and ends the session.
-  - [ ] Hiding actions does not clear selection.
-  - [ ] No Flutter overlay or timer can outlive its session.
-  - [ ] Remove obsolete selection clear lock/pending mechanisms.
-  - [ ] Add practical state-machine and bridge tests.
+  - [x] New/changed selections leave actions hidden.
+  - [x] Tapping inside the selection toggles actions.
+  - [x] Tapping outside clears selection and ends the session.
+  - [x] Hiding actions does not clear selection.
+  - [x] No Flutter overlay or timer can outlive its session.
+  - [x] Remove obsolete selection clear lock/pending mechanisms.
+  - [x] Add practical state-machine and bridge tests.
 
 ### M4E.4 — Preserve cross-page selection
 
@@ -383,17 +417,44 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 2 of 11 implementation phases
+- Completed submilestones: 3 of 11 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.2 — Local annotation presentation sidecar
+Last completed submilestone: M4E.3 — Explicit SelectionSession state machine
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last commit: `45a4255b feat: add local annotation presentation sidecar`
-Repository state: Clean at the completed M4E.2 boundary; this documentation-only SHA checkpoint is the sole pending change
-Next submilestone: M4E.3 — Explicit SelectionSession state machine
-Next concrete tasks: Map every selection event/message and overlay lifecycle transition in `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `lib/page/book_player/epub_player.dart`, and the context-menu widgets; identify configured Foliate JS test commands; introduce generation-scoped IDLE/SELECTED/ACTIONS_VISIBLE transitions without disrupting Android native handles
+Last commit: pending M4E.3 implementation commit
+Repository state: M4E.3 implementation and documentation complete and validated; commits pending
+Next submilestone: M4E.4 — Preserve cross-page selection
+Next concrete tasks: Add focused auto-page race coverage around `view.next()`, post-next selection rechecks, clear/new-selection invalidation, and page/document replacement; bind every remaining auto-page callback explicitly to the active selection generation without redesigning Foliate's cross-document Range capabilities
 Known failing tests: None
-Known limitations: Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `assets/foliate-js/src/book.js`, `assets/foliate-js/src/view.js`, `assets/foliate-js/package.json`, `lib/page/book_player/epub_player.dart`, `lib/widgets/context_menu/context_menu.dart`, `lib/widgets/context_menu/excerpt_menu.dart`, and any existing reader bridge/selection tests
+Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. M4E.3 preserves the existing paginated auto-page implementation and only invalidates its in-flight continuation on stop; complete timer/page-replacement race coverage is intentionally deferred to M4E.4. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
+Important files to inspect next: `assets/foliate-js/src/book.js`, especially the existing auto-page state/timers and selection recheck dispatches; `assets/foliate-js/src/selection-session.mjs`; `assets/foliate-js/test/selection-session.test.mjs`; and any feasible Foliate bridge/DOM harness additions for cross-page selection
+
+### M4E.3 discovered pre-implementation lifecycle
+
+- Every loaded Foliate content document installs independent selection listeners.
+  `selectionchange`, platform-specific `pointerup`/`pointercancel`, and
+  `contextmenu` debounce paths eventually call `handleSelection`, which builds
+  the Range/CFI/text payload and sends `onSelectionEnd`.
+- Flutter treats every `onSelectionEnd` as a menu request: it removes the
+  current `OverlayEntry` and immediately calls `showContextMenu`. On Android,
+  the native context-menu callback additionally invokes `window.showContextMenu`
+  immediately and once more after 250 ms.
+- A collapsed DOM selection sends unscoped `onSelectionCleared`. Flutter may
+  defer it behind `_selectionClearLocked`/`_selectionClearPending`; overlay
+  disposal, reader-note visibility, and excerpt editing manipulate that lock.
+  Closing the overlay calls `clearSelection()`, so hiding actions and clearing
+  selection are currently the same operation.
+- Android intentionally relies on native selection handles: `pointercancel`
+  marks entry into native selection mode, `selectionchange` is debounced because
+  native handles may swallow terminal pointer events, and `contextmenu` is
+  narrowly prevented to suppress the WebView menu. Paginated auto-page
+  selection has a separate numeric session and several timers.
+- Rendered annotation interaction is distinct: overlayer capture-phase hit
+  testing emits `show-annotation`, then `onAnnotationClick`; it does not use the
+  transient DOM-selection bridge.
+- `showContextMenu` can currently auto-create a canonical annotation when
+  `autoMarkSelection` is enabled, meaning merely opening transient selection UI
+  can mutate the annotation repository.

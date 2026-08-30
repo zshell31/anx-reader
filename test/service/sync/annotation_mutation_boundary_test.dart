@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('production semantic mutation call sites do not bypass repository', () {
     const semanticCallSites = [
-      'lib/widgets/context_menu/context_menu.dart',
       'lib/widgets/context_menu/excerpt_menu.dart',
       'lib/widgets/context_menu/reader_note_menu.dart',
       'lib/providers/book_notes.dart',
@@ -20,5 +19,36 @@ void main() {
       expect(forbidden.hasMatch(source), isFalse, reason: path);
       expect(source, contains('annotationRepository'), reason: path);
     }
+  });
+
+  test('transient selection lifecycle has no annotation mutation dependency',
+      () {
+    const transientSelectionSites = [
+      'lib/page/book_player/selection_session_bridge.dart',
+      'lib/page/book_player/epub_player.dart',
+      'lib/widgets/context_menu/context_menu.dart',
+    ];
+
+    for (final path in transientSelectionSites) {
+      final source = File(path).readAsStringSync();
+      expect(source, isNot(contains('annotationRepository')), reason: path);
+      expect(source, isNot(contains('createSelectionAnnotation')),
+          reason: path);
+    }
+  });
+
+  test('rendered annotation taps use a bridge path distinct from selections',
+      () {
+    final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();
+    final viewSource = File('assets/foliate-js/src/view.js').readAsStringSync();
+
+    expect(viewSource, contains("this.#emit('show-annotation'"));
+    expect(bookSource, contains("addEventListener('show-annotation'"));
+    expect(bookSource, contains("callFlutter('onAnnotationClick'"));
+    expect(bookSource, contains("callFlutter('onSelectionActionsRequested'"));
+    expect(
+        bookSource,
+        isNot(
+            contains("callFlutter('onSelectionActionsRequested', annotation")));
   });
 }

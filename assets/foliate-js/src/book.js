@@ -2,6 +2,7 @@ console.log('book.js')
 console.log('AnxUA', navigator.userAgent)
 
 import './view.js'
+import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
 import { FootnoteHandler } from './footnotes.js'
 import { Overlayer } from './overlayer.js'
 import { collapse, compare, fromRange, toRange } from './epubcfi.js'
@@ -140,11 +141,10 @@ const buildRangeContextText = (range) => {
   return contextText;
 };
 
-const handleSelection = (view, doc, index) => {
+const buildSelectionPayload = (view, doc, index, range = getSelectionRange(doc.getSelection())) => {
   const selection = doc.getSelection();
-  const range = getSelectionRange(selection);
 
-  if (!range) return false;
+  if (!range) return null;
 
   const position = getPosition(range);
   const cfi = view.getCFI(index, range);
@@ -160,15 +160,101 @@ const handleSelection = (view, doc, index) => {
 
   const contextText = buildRangeContextText(range);
 
-  onSelectionEnd({
+  return {
     index,
-    range,
     lang,
     cfi,
     pos: position,
     text,
-    contextText
-  });
+    contextText,
+    footnote: Boolean(doc.__isFootNote || window.isFootNoteOpen() || isPdf),
+  };
+};
+
+const selectionCoordinator = {
+  machine: new SelectionSessionMachine(),
+  nodeIds: new WeakMap(),
+  nextNodeId: 0,
+  payload: null,
+  pendingPointer: null,
+  interactionOwner: null,
+  activeView: null,
+};
+
+const getSelectionCoordinator = () => selectionCoordinator;
+
+const getRangeKey = (coordinator, range) => {
+  const nodeId = node => {
+    let id = coordinator.nodeIds.get(node);
+    if (id == null) {
+      id = ++coordinator.nextNodeId;
+      coordinator.nodeIds.set(node, id);
+    }
+    return id;
+  };
+  return `${nodeId(range.startContainer)}:${range.startOffset}`
+    + `-${nodeId(range.endContainer)}:${range.endOffset}`;
+};
+
+const pointIsInsideRange = (range, x, y) => Array.from(range.getClientRects())
+  .some(rect => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+
+const publishSelection = (view, doc, index, range) => {
+  const coordinator = getSelectionCoordinator(view);
+  const current = coordinator.machine.current;
+  if (current && current.owner !== doc && coordinator.interactionOwner !== doc) {
+    return null;
+  }
+  if (current?.owner !== doc && coordinator.activeView && coordinator.activeView !== view) {
+    stopAutoPageSession(coordinator.activeView);
+  }
+  const rangeKey = getRangeKey(coordinator, range);
+  let payload;
+  try {
+    payload = buildSelectionPayload(view, doc, index, range);
+  } catch (error) {
+    console.warn('Could not serialize selection session', error);
+    return null;
+  }
+  if (!payload?.text?.trim()) return null;
+
+  const transition = coordinator.machine.select(doc, rangeKey);
+  if (!transition) return coordinator.machine.current;
+
+  coordinator.payload = { ...payload, sessionId: transition.session.generation };
+  coordinator.activeView = view;
+  globalThis.__anxActiveSelectionView = view;
+  callFlutter('onSelectionChanged', coordinator.payload);
+  return transition.session;
+};
+
+const endSelectionSession = (view, doc, generation) => {
+  const coordinator = getSelectionCoordinator(view);
+  const ended = coordinator.machine.clear(doc, generation);
+  if (!ended) return false;
+
+  coordinator.payload = null;
+  coordinator.pendingPointer = null;
+  coordinator.activeView = null;
+  if (globalThis.__anxActiveSelectionView === view) {
+    globalThis.__anxActiveSelectionView = null;
+  }
+  stopAutoPageSession(view);
+  callFlutter('onSelectionCleared', { sessionId: ended.generation });
+  return true;
+};
+
+const toggleSelectionActions = (view, doc, generation, rangeKey) => {
+  const coordinator = getSelectionCoordinator(view);
+  if (!coordinator.payload || coordinator.payload.sessionId !== generation) return false;
+  const session = coordinator.machine.toggleActions(doc, generation, rangeKey);
+  if (!session) return false;
+
+  if (session.state === SelectionSessionState.actionsVisible) {
+    callFlutter('onSelectionActionsRequested', coordinator.payload);
+  } else {
+    callFlutter('onSelectionActionsHidden', { sessionId: generation });
+  }
   return true;
 };
 
@@ -227,6 +313,8 @@ const stopAutoPageSession = (view) => {
   const state = getAutoPageState(view);
   clearAutoPageTimer(state);
   clearAutoPagePostNextRecheck(state);
+  // Invalidate a view.next() continuation that may already be in flight.
+  state.sessionId += 1;
   resetAutoPageSessionState(state);
 };
 
@@ -239,212 +327,119 @@ const getAutoPageLocationKey = (lastLocation, index) => {
 };
 
 const setSelectionHandler = (view, doc, index) => {
-  let hasActiveSelection = false;
-  let lastPointerUpRange = null;
-  doc.__anxSelectionClearedAt = 0;
-  doc.__anxSuppressClick = false;
+  const coordinator = getSelectionCoordinator(view);
 
-  // Notify Flutter when the selection collapses so it can hide the context menu.
+  doc.addEventListener('selectstart', () => {
+    coordinator.interactionOwner = doc;
+  });
+
   const handleSelectionStateChange = () => {
     const selectionRange = getSelectionRange(doc.getSelection());
     if (selectionRange) {
-      hasActiveSelection = true;
-      doc.__anxSelectionClearedAt = 0;
-      doc.__anxSuppressClick = false;
+      publishSelection(view, doc, index, selectionRange);
       return;
     }
 
-    if (!hasActiveSelection) return;
-    hasActiveSelection = false;
-    lastPointerUpRange = null;
-    doc.__anxSelectionClearedAt = Date.now();
-    doc.__anxSuppressClick = true;
-    stopAutoPageSession(view);
-    callFlutter('onSelectionCleared');
+    const pending = coordinator.pendingPointer;
+    if (pending?.doc === doc && pending.inside && !pending.cancelled) {
+      pending.collapsedDuringTap = true;
+      return;
+    }
+    endSelectionSession(view, doc);
   };
 
   doc.addEventListener('selectionchange', handleSelectionStateChange);
 
-  const rangesEqual = (a, b) => (
-    a.startContainer === b.startContainer
-    && a.startOffset === b.startOffset
-    && a.endContainer === b.endContainer
-    && a.endOffset === b.endOffset
-  );
-
-  const shouldSkipPointerUp = () => {
-    const selectionRange = getSelectionRange(doc.getSelection());
-    if (!selectionRange) return false;
-
-    if (lastPointerUpRange && rangesEqual(lastPointerUpRange, selectionRange)) {
-      return true;
+  // Capture the hit before Android/native selection processing can collapse or
+  // replace the DOM Range. We do not prevent the event, so native handles keep
+  // their normal behavior.
+  doc.addEventListener('pointerdown', e => {
+    coordinator.interactionOwner = doc;
+    const range = getSelectionRange(doc.getSelection());
+    const session = coordinator.machine.current;
+    if (!range || session?.owner !== doc) {
+      coordinator.pendingPointer = {
+        doc,
+        pointerId: e.pointerId,
+        generation: null,
+        cancelled: false,
+      };
+      return;
     }
 
-    lastPointerUpRange = selectionRange.cloneRange();
-    return false;
-  };
-
-  //    doc.addEventListener('pointerdown', () => isSelecting = true);
-  // if macos or iOS
-  if (navigator.platform.includes('Mac')
-    || navigator.platform.includes('iPhone')
-    || navigator.platform.includes('iPad')
-  ) {
-    doc.addEventListener('pointerup', () => {
-      if (shouldSkipPointerUp()) return;
-      handleSelection(view, doc, index);
-    });
-  }
-  else if (navigator.platform.includes('Win')) {
-    // Prevent the default WebView2 context menu (back, reload, save as, print)
-    // from appearing on right-click inside the book content frame.
-    doc.addEventListener('contextmenu', e => {
-      e.preventDefault();
-    });
-
-    if (navigator.maxTouchPoints > 0) {
-      // In Edge, the longpress by touch generates following touch event sequence:
-      // pointerover -> enter -> down -> move(n) -> cancel -> out -> leave
-      // While on the flutter webview, it generates:
-      // pointerover -> enter -> down -> move(n) -> up -> out -> leave
-      // Besides above event difference (cancle/up),
-      // the touch event is not triggered when change text selection range.
-      // Thus cannot use pointerup to detect the end of touch selection.
-      // Instead, we use selectionchange event to detect the end of touch selection
-      // for Edge and flutter webview.
-
-      // for mouse pointerup, handle selection directly
-      doc.addEventListener('pointerup', (e) => {
-        if (e.pointerType === 'touch') return;
-        if (shouldSkipPointerUp()) return;
-        handleSelection(view, doc, index);
-      });
-
-      // filter out selectionchange event cause by mouse
-      var isMouseSelecting = false;
-      doc.addEventListener('pointerdown', (e) => {
-        if (e.pointerType !== 'mouse') return;
-        isMouseSelecting = true;
-      });
-      doc.addEventListener('pointerup', (e) => {
-        if (e.pointerType !== 'mouse') return;
-        isMouseSelecting = false;
-      });
-
-      var debounceTimerId = undefined;
-      doc.addEventListener('selectionchange', () => {
-        if (isMouseSelecting) return;
-
-        const selRange = getSelectionRange(doc.getSelection())
-        if (!selRange) return;
-
-        clearTimeout(debounceTimerId);
-        let delay = 500;
-        debounceTimerId = setTimeout(() => {
-          handleSelection(view, doc, index);
-        }, delay);
-      });
-
-    } else {
-      doc.addEventListener('pointerup', () => {
-        if (shouldSkipPointerUp()) return;
-        handleSelection(view, doc, index);
-      });
-    }
-  }
-
-  else if (navigator.userAgent.includes('Phone; OpenHarmony')) {
-    doc.addEventListener('contextmenu', e => {
-      e.preventDefault();
-    });
-
-    var debounceTimerId = undefined;
-    doc.addEventListener('selectionchange', () => {
-      const selRange = getSelectionRange(doc.getSelection());
-      if (!selRange) return;
-
-      clearTimeout(debounceTimerId);
-      // Wait for selection to settle (e.g. 600ms after last change)
-      // This handles the case where pointerup/touchend is swallowed by native handles
-      debounceTimerId = setTimeout(() => {
-        handleSelection(view, doc, index);
-      }, 600);
-    });
-  } else { // Android
-    let hasNativeSelectionStarted = false;
-    var androidDebounceTimerId = undefined;
-
-    const scheduleAndroidSelection = (delay = 600) => {
-      const selRange = getSelectionRange(doc.getSelection());
-      if (!selRange || selRange.toString().trim().length === 0) return;
-
-      clearTimeout(androidDebounceTimerId);
-      androidDebounceTimerId = setTimeout(() => {
-        const currentRange = getSelectionRange(doc.getSelection());
-        if (currentRange && currentRange.toString().trim().length > 0) {
-          handleSelection(view, doc, index);
-        }
-      }, delay);
+    const rangeKey = getRangeKey(coordinator, range);
+    coordinator.pendingPointer = {
+      doc,
+      pointerId: e.pointerId,
+      generation: session.generation,
+      rangeKey,
+      range: range.cloneRange(),
+      inside: pointIsInsideRange(range, e.clientX, e.clientY),
+      collapsedDuringTap: false,
+      cancelled: false,
     };
+  }, true);
 
-    doc.addEventListener('pointerdown', () => {
-      hasNativeSelectionStarted = false;
-    });
+  doc.addEventListener('pointercancel', e => {
+    const pending = coordinator.pendingPointer;
+    if (pending?.doc !== doc || pending.pointerId !== e.pointerId) return;
+    pending.cancelled = true;
+    coordinator.pendingPointer = null;
 
-    // When the native selection handles appear, the browser loses control of the pointer
-    // This event signals that the user has started dragging handles
-    doc.addEventListener('pointercancel', () => {
-      hasNativeSelectionStarted = true;
-      scheduleAndroidSelection(700);
-    });
+    const range = getSelectionRange(doc.getSelection());
+    if (range) publishSelection(view, doc, index, range);
+    else endSelectionSession(view, doc, pending.generation);
+  });
 
-    doc.addEventListener('pointerup', (e) => {
-      if (e.pointerType === 'mouse') {
-        if (shouldSkipPointerUp()) return;
-        handleSelection(view, doc, index);
+  doc.addEventListener('pointerup', e => {
+    const pending = coordinator.pendingPointer;
+    if (pending?.doc !== doc || pending.pointerId !== e.pointerId) return;
+    coordinator.pendingPointer = null;
+    if (pending.cancelled || pending.generation == null) return;
+
+    let range = getSelectionRange(doc.getSelection());
+    if (!range && pending.inside && pending.collapsedDuringTap) {
+      try {
+        const selection = doc.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(pending.range);
+        range = getSelectionRange(selection);
+      } catch {
+        endSelectionSession(view, doc, pending.generation);
         return;
       }
+    }
 
-      scheduleAndroidSelection(200);
-    });
+    if (!range) {
+      endSelectionSession(view, doc, pending.generation);
+      return;
+    }
 
-    doc.addEventListener('contextmenu', e => {
-      // Allow mouse context menu (if any)
-      if (e.pointerType === 'mouse') {
-        handleSelection(view, doc, index);
-        return;
-      }
+    const rangeKey = getRangeKey(coordinator, range);
+    if (!coordinator.machine.matches(doc, pending.generation, rangeKey)) {
+      publishSelection(view, doc, index, range);
+      return;
+    }
 
-      // If there's an active text selection, always handle it
-      const selRange = getSelectionRange(doc.getSelection());
-      if (selRange && selRange.toString().trim().length > 0) {
-        e.preventDefault();
-        scheduleAndroidSelection(0);
-        return;
-      }
+    if (pending.inside) {
+      toggleSelectionActions(view, doc, pending.generation, rangeKey);
+      return;
+    }
 
-      // If we haven't lost pointer control yet (no pointercancel),
-      // this is the "early" long-press event during drag start.
-      // We block it to prevent the custom menu from interfering with the drag.
-      if (!hasNativeSelectionStarted) {
-        e.preventDefault();
-        return;
-      }
+    doc.getSelection().removeAllRanges();
+    endSelectionSession(view, doc, pending.generation);
+  });
 
-      // If we have entered native selection mode (pointercancel happened),
-      // this contextmenu event is likely triggered by the system or user interaction
-      // after the selection phase (e.g. on release). We handle it.
-      e.preventDefault();
-      scheduleAndroidSelection(0);
-    });
-
-    // Android WebView may swallow touchend/contextmenu once native handles appear.
-    // A debounced selectionchange is the most reliable signal for long-press word selection.
-    doc.addEventListener('selectionchange', () => {
-      scheduleAndroidSelection(hasNativeSelectionStarted ? 700 : 500);
-    });
+  // Suppress only the platform context menu. Selection creation/update remains
+  // driven by selectionchange and never becomes an action-menu request.
+  if (navigator.platform.includes('Win')
+    || navigator.userAgent.includes('Phone; OpenHarmony')
+    || (!navigator.platform.includes('Mac')
+      && !navigator.platform.includes('iPhone')
+      && !navigator.platform.includes('iPad'))
+  ) {
+    doc.addEventListener('contextmenu', e => e.preventDefault());
   }
-  // doc.addEventListener('selectionchange', () => handleSelection(view, doc, index));
 
   if (!view.isFixedLayout) {
     // go to the next page when selecting to the end of a page
@@ -1028,7 +1023,6 @@ const replaceFootnote = (view) => {
 
   view.addEventListener('load', (e) => {
     const { doc, index } = e.detail
-    globalThis.footnoteSelection = () => handleSelection(view, doc, index)
     setSelectionHandler(view, doc, index)
     // convertChineseHandler(convertChineseMode, doc)
     readingFeaturesDocHandler(doc)
@@ -1233,10 +1227,6 @@ class Reader {
     this.#checkCurrentPageBookmark()
   }
 
-  showContextMenu() {
-    return handleSelection(this.view, this.#doc, this.#index)
-  }
-
   async addAnnotation(annotation) {
     const previous = this.annotationsById.get(annotation.id)
     if (previous) {
@@ -1402,17 +1392,6 @@ class Reader {
   #onClickView({ detail: { x, y } }) {
     const selection = this.#doc?.getSelection?.()
     if (selection && getSelectionRange(selection)) {
-      return
-    }
-
-    if (this.#doc?.__anxSuppressClick) {
-      this.#doc.__anxSuppressClick = false;
-      return
-    }
-
-    // debounce for 200ms after selection cleared
-    const lastClearedAt = this.#doc?.__anxSelectionClearedAt ?? 0
-    if (lastClearedAt && Date.now() - lastClearedAt < 200) {
       return
     }
 
@@ -1906,25 +1885,18 @@ window.setNoAnimation = () => {
   setStyle()
 }
 
-const onSelectionEnd = (selection) => {
-  if (window.isFootNoteOpen() || isPdf) {
-    callFlutter('onSelectionEnd', { ...selection, footnote: true })
-  } else {
-    callFlutter('onSelectionEnd', { ...selection, footnote: false })
-  }
-}
-
-window.showContextMenu = () => {
-  if (window.isFootNoteOpen()) {
-    return footnoteSelection()
-  } else {
-    return reader.showContextMenu()
-  }
-}
-
 window.getSelection = () => reader.getSelection()
 
-window.clearSelection = () => reader.view.deselect()
+window.hideSelectionActions = sessionId => {
+  const view = globalThis.__anxActiveSelectionView
+  if (!view) return false
+  return Boolean(getSelectionCoordinator(view).machine.hideActions(Number(sessionId)))
+}
+
+window.clearSelection = () => {
+  const view = globalThis.__anxActiveSelectionView ?? reader.view
+  view.deselect()
+}
 
 window.addAnnotation = (annotation) => reader.addAnnotation(annotation)
 

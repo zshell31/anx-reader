@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/page/reading_page.dart';
-import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
 import 'package:anx_reader/widgets/context_menu/reader_note_menu.dart';
@@ -21,31 +20,13 @@ Future<void> showContextMenu(
     int? annoId,
     bool footnote,
     Axis axis,
-    {String? contextText}) async {
+    {String? contextText,
+    int? selectionSessionGeneration}) async {
   final playerKey = epubPlayerKey.currentState;
   if (playerKey == null) return;
-  bool isNewNote = false;
-
-  if (Prefs().autoMarkSelection && annoId == null) {
-    // Auto-highlight logic
-    final String type = Prefs().annotationType;
-    final String color = Prefs().annotationColor;
-
-    final bookNote = await annotationRepository.createSelectionAnnotation(
-      AnnotationCreation(
-        book: playerKey.book,
-        selectedText: annoContent,
-        epubCfi: annoCfi,
-        chapter: playerKey.chapterTitle,
-        context: contextText,
-        type: type,
-        color: color,
-      ),
-    );
-    final id = bookNote.id!;
-    playerKey.addAnnotation(bookNote);
-    annoId = id;
-    isNewNote = true;
+  if (selectionSessionGeneration != null &&
+      !playerKey.isSelectionSessionCurrent(selectionSessionGeneration)) {
+    return;
   }
 
   if (!context.mounted) return;
@@ -110,10 +91,17 @@ Future<void> showContextMenu(
   );
 
   playerKey.removeOverlay();
+  if (selectionSessionGeneration != null &&
+      !playerKey.isSelectionSessionCurrent(selectionSessionGeneration)) {
+    return;
+  }
 
   void onClose() {
-    playerKey.webViewController.evaluateJavascript(source: 'clearSelection()');
-    playerKey.removeOverlay();
+    if (selectionSessionGeneration != null) {
+      playerKey.hideSelectionActions(selectionSessionGeneration);
+    } else {
+      playerKey.removeOverlay();
+    }
   }
 
   final decoration = BoxDecoration(
@@ -124,7 +112,7 @@ Future<void> showContextMenu(
     boxShadow: [
       if (!Prefs().eInkMode)
         BoxShadow(
-          color: Colors.black.withOpacity(0.1),
+          color: Colors.black.withValues(alpha: 0.1),
           spreadRadius: 5,
           blurRadius: 7,
           offset: const Offset(0, 3),
@@ -152,7 +140,7 @@ Future<void> showContextMenu(
       onClose: onClose,
       menuConstraints: menuConstraints,
       initialPlacement: initialPlacement,
-      showTranslationDefault: !isNewNote && Prefs().autoTranslateSelection,
+      showTranslationDefault: Prefs().autoTranslateSelection,
       horizontalMargin: horizontalMargin,
       verticalMargin: verticalMargin,
       gap: gap,
@@ -160,6 +148,7 @@ Future<void> showContextMenu(
     );
   });
 
+  playerKey.contextMenuSelectionSessionGeneration = selectionSessionGeneration;
   Overlay.of(context).insert(playerKey.contextMenuEntry!);
 }
 
@@ -314,7 +303,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    epubPlayerKey.currentState?.setSelectionClearLocked(false);
     super.dispose();
   }
 
@@ -430,7 +418,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 
   void _toggleReaderNoteMenu({bool? show}) {
     final target = show ?? !_showReaderNoteMenu;
-    epubPlayerKey.currentState?.setSelectionClearLocked(target);
     setState(() {
       _showReaderNoteMenu = target;
     });
@@ -460,7 +447,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   }
 
   void _handleReaderNoteVisibilityChange(bool visible) {
-    epubPlayerKey.currentState?.setSelectionClearLocked(visible);
     if (_showReaderNoteMenu == visible) {
       return;
     }

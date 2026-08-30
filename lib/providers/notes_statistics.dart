@@ -1,57 +1,75 @@
-import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/dao/reading_time.dart';
-import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'notes_statistics.g.dart';
+
+final canonicalAnnotationBooksProvider =
+    StreamProvider<List<AnnotationBookUiModel>>((ref) async* {
+  yield await canonicalAnnotationCatalog.readAll();
+  await for (final _ in annotationSyncRuntime.annotationChanges) {
+    yield await canonicalAnnotationCatalog.readAll();
+  }
+});
+
+class AnnotationBookNotesSummary {
+  final AnnotationBookUiModel book;
+  final int readingTime;
+
+  const AnnotationBookNotesSummary({
+    required this.book,
+    required this.readingTime,
+  });
+}
 
 @riverpod
 class NotesStatistics extends _$NotesStatistics {
   @override
   Future<Map<String, int>> build() async {
-    return _getNotesStatistics();
+    final books = await ref.watch(canonicalAnnotationBooksProvider.future);
+    return _getNotesStatistics(books);
   }
 
-  Future<Map<String, int>> _getNotesStatistics() async {
-    return await bookNoteDao.selectNumberOfNotesAndBooks();
+  Map<String, int> _getNotesStatistics(List<AnnotationBookUiModel> books) {
+    return {
+      'numberOfNotes':
+          books.fold(0, (count, book) => count + book.annotations.length),
+      'numberOfBooks': books.length,
+    };
   }
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = AsyncValue.data(await _getNotesStatistics());
+    ref.invalidate(canonicalAnnotationBooksProvider);
+    state = AsyncValue.data(_getNotesStatistics(
+        await ref.read(canonicalAnnotationBooksProvider.future)));
   }
 }
 
 @riverpod
 class BookIdAndNotes extends _$BookIdAndNotes {
   @override
-  Future<List<Map<String, dynamic>>> build() async {
-    final bookDataList = await _getBookIdAndNotes();
-    final result = <Map<String, dynamic>>[];
-
-    for (final data in bookDataList) {
-      Book book = await bookDao.selectBookById(data['bookId']);
-      int readingTime =
-          await readingTimeDao.selectTotalReadingTimeByBookId(book.id);
-      result.add({
-        'bookId': data['bookId'],
-        'numberOfNotes': data['numberOfNotes'],
-        'book': book,
-        'readingTime': readingTime,
-      });
+  Future<List<AnnotationBookNotesSummary>> build() async {
+    final books = await ref.watch(canonicalAnnotationBooksProvider.future);
+    final result = <AnnotationBookNotesSummary>[];
+    for (final annotationBook in books) {
+      final localBook = annotationBook.localBook;
+      final readingTime = localBook == null
+          ? 0
+          : await readingTimeDao.selectTotalReadingTimeByBookId(localBook.id);
+      result.add(AnnotationBookNotesSummary(
+        book: annotationBook,
+        readingTime: readingTime,
+      ));
     }
-
     return result;
-  }
-
-  Future<List<Map<String, dynamic>>> _getBookIdAndNotes() async {
-    return await bookNoteDao.selectAllBookIdAndNotes();
   }
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = AsyncValue.data(await _getBookIdAndNotes());
+    ref.invalidate(canonicalAnnotationBooksProvider);
+    state = AsyncValue.data(await build());
   }
 }
 

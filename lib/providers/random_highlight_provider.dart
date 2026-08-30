@@ -1,7 +1,7 @@
-import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/dao/book_note.dart';
-import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/models/book_note.dart';
+import 'dart:math';
+
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'random_highlight_provider.g.dart';
@@ -9,11 +9,11 @@ part 'random_highlight_provider.g.dart';
 class RandomHighlightData {
   const RandomHighlightData({
     required this.note,
-    this.book,
+    required this.book,
   });
 
-  final BookNote note;
-  final Book? book;
+  final AnnotationUiModel note;
+  final AnnotationBookUiModel book;
 }
 
 @riverpod
@@ -24,17 +24,15 @@ class RandomHighlight extends _$RandomHighlight {
   }
 
   Future<RandomHighlightData?> _load() async {
-    final note = await bookNoteDao.selectRandomNote();
-    if (note == null) {
-      return null;
-    }
-    Book? book;
-    try {
-      book = await bookDao.selectBookById(note.bookId);
-    } catch (_) {
-      book = null;
-    }
-    return RandomHighlightData(note: note, book: book);
+    final books = await canonicalAnnotationCatalog.readAll();
+    final candidates = [
+      for (final book in books)
+        for (final note in book.annotations)
+          if (note.motivation == AnnotationMotivation.selection)
+            RandomHighlightData(note: note, book: book),
+    ];
+    if (candidates.isEmpty) return null;
+    return candidates[Random().nextInt(candidates.length)];
   }
 
   Future<void> refresh() async {

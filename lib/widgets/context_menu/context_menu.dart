@@ -19,7 +19,6 @@ Future<void> showContextMenu(
     double bottom,
     String annoContent,
     String annoCfi,
-    int? annoId,
     bool footnote,
     Axis axis,
     {String? chapter,
@@ -140,7 +139,6 @@ Future<void> showContextMenu(
       viewportRect: viewportRect,
       annoContent: annoContent,
       annoCfi: annoCfi,
-      annoId: annoId,
       footnote: footnote,
       chapter: chapter,
       annotationContext: annotationContext,
@@ -248,7 +246,6 @@ class _ContextMenuOverlay extends StatefulWidget {
     required this.viewportRect,
     required this.annoContent,
     required this.annoCfi,
-    required this.annoId,
     required this.footnote,
     this.chapter,
     this.annotationContext,
@@ -272,7 +269,6 @@ class _ContextMenuOverlay extends StatefulWidget {
   final Rect viewportRect;
   final String annoContent;
   final String annoCfi;
-  final int? annoId;
   final bool footnote;
   final String? chapter;
   final String? annotationContext;
@@ -309,7 +305,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   bool _waitingForFirstMeasurement = true;
   late BoxConstraints _menuConstraints;
   late double _bottomInset;
-  int? _noteId;
   late final SelectionPersistenceSession _persistenceSession;
 
   @override
@@ -319,7 +314,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     _position = widget.initialPlacement.offset;
     _reverse = widget.initialPlacement.shouldReverse;
     _showTranslationMenu = widget.showTranslationDefault;
-    _noteId = widget.annoId;
     _persistenceSession = SelectionPersistenceSession(
       SelectionSnapshot(
         selectedText: widget.annoContent,
@@ -465,22 +459,13 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     );
   }
 
-  Future<void> _openReaderNoteMenu(int noteId) async {
+  Future<void> _openReaderNoteMenu(String? personalNote) async {
     _toggleReaderNoteMenu(show: true);
     if (_readerNoteMenuKey.currentState == null) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
-    await _readerNoteMenuKey.currentState?.showNoteDialog(noteId);
+    await _readerNoteMenuKey.currentState?.showNoteDialog(personalNote);
     _scheduleRecalculate(delay: const Duration(milliseconds: 300));
-  }
-
-  void _handleNoteCreated(int noteId) {
-    if (_noteId == noteId) {
-      return;
-    }
-    setState(() {
-      _noteId = noteId;
-    });
   }
 
   void _handleReaderNoteVisibilityChange(bool visible) {
@@ -539,14 +524,12 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   initialType: widget.annotationType,
                                   initialColor: widget.annotationColor,
                                   persistenceSession: _persistenceSession,
-                                  id: widget.annoId,
                                   onClose: widget.onClose,
                                   footnote: widget.footnote,
                                   decoration: widget.decoration,
                                   toggleTranslationMenu: _toggleTranslationMenu,
                                   toggleReaderNoteMenu: _toggleReaderNoteMenu,
                                   openReaderNoteMenu: _openReaderNoteMenu,
-                                  onNoteCreated: _handleNoteCreated,
                                   axis: widget.axis,
                                   reverse: _reverse,
                                 ),
@@ -561,20 +544,15 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                             children: [
                               ReaderNoteMenu(
                                 key: _readerNoteMenuKey,
-                                noteId: _noteId,
+                                initialValue: null,
                                 decoration: widget.decoration,
                                 axis: widget.axis,
                                 onVisibilityChange:
                                     _handleReaderNoteVisibilityChange,
                                 onSizeChanged: _handleReaderNoteSizeChanged,
                                 onSave: (value) async {
-                                  final note = await _excerptMenuKey
-                                      .currentState
+                                  await _excerptMenuKey.currentState
                                       ?.savePersonalNote(value);
-                                  if (note != null) {
-                                    _handleNoteCreated(note.id!);
-                                  }
-                                  return note;
                                 },
                               ),
                             ],
@@ -591,12 +569,8 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 axis: widget.axis,
                                 lookupContext: widget.lookupContext,
                                 onSave: (translation) async {
-                                  final note = await _excerptMenuKey
-                                      .currentState
+                                  await _excerptMenuKey.currentState
                                       ?.saveTranslation(translation);
-                                  if (note != null) {
-                                    _handleNoteCreated(note.id!);
-                                  }
                                 },
                               ),
                             ],

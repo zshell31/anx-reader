@@ -281,7 +281,8 @@ class AnnotationRepository {
             existing, 'translation', content.trim());
       });
 
-  Future<BookNote> createBookmark(BookmarkCreation input) => _enqueue(() async {
+  Future<AnnotationMutationResult> createBookmark(BookmarkCreation input) =>
+      _enqueue(() async {
         final fingerprint = _fingerprint(input.book);
         _epubCfi(input.epubCfi);
         final timestamp = canonicalWireTimestamp(now());
@@ -301,21 +302,11 @@ class AnnotationRepository {
           },
           'enrichments': <Object>[],
         });
-        // Reading percentage remains only in the native color projection.
-        final presentation = BookNote(
-          bookId: input.book.id,
-          content: input.content,
-          cfi: input.epubCfi.trim(),
-          chapter: input.chapter,
-          type: 'bookmark',
-          color: input.percentage.toString(),
-          sharedAnnotationId: annotationId,
-          createTime: DateTime.parse(timestamp),
-          updateTime: DateTime.parse(timestamp),
-        );
         await _commit(fingerprint, document);
-        return (await _project(fingerprint, annotationId,
-            localPresentation: presentation))!;
+        return _refreshCanonical(AnnotationRef(
+          bookFingerprint: fingerprint,
+          annotationId: annotationId,
+        ));
       });
 
   /// Compatibility API for remaining native-ID UI consumers.

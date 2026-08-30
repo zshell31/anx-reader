@@ -31,6 +31,8 @@ class AnnotationSyncRuntime {
   AnnotationSyncCoordinator? _presentationCoordinator;
   final StreamController<void> _statusChanges =
       StreamController<void>.broadcast();
+  final StreamController<void> _annotationChanges =
+      StreamController<void>.broadcast();
   final List<StreamSubscription<void>> _coordinatorStatusSubscriptions = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   Future<void>? _reconfiguring;
@@ -40,6 +42,7 @@ class AnnotationSyncRuntime {
   AnnotationSyncCoordinator? get presentationCoordinator =>
       _presentationCoordinator;
   Stream<void> get statusChanges => _statusChanges.stream;
+  Stream<void> get annotationChanges => _annotationChanges.stream;
 
   Future<AnnotationSyncStatus> get status async {
     final coordinator = await _ensureCoordinator();
@@ -128,10 +131,12 @@ class AnnotationSyncRuntime {
   /// debounce: the outbox is already durable and a flight starts immediately.
   void notifyLocalMutation(String fingerprint) {
     final id = canonicalMd5Fingerprint(fingerprint);
+    _annotationChanges.add(null);
     unawaited(_syncTarget(id, localMutation: true));
   }
 
   void notifyPresentationMutation() {
+    _annotationChanges.add(null);
     unawaited(_syncPresentation(localMutation: true));
   }
 
@@ -205,6 +210,7 @@ class AnnotationSyncRuntime {
           AnnotationProjectionReconciler(sharedState)
               .reconcileBook(fingerprint),
       onProjectionChanged: (fingerprint, _) {
+        _annotationChanges.add(null);
         for (final refresh in List<void Function()>.from(
             _openBookRefresh[fingerprint] ?? {})) {
           refresh();
@@ -223,6 +229,7 @@ class AnnotationSyncRuntime {
       reconcileProjection: (_) =>
           AnnotationProjectionReconciler(sharedState).run(),
       onProjectionChanged: (_, __) {
+        _annotationChanges.add(null);
         for (final refreshes in _openBookRefresh.values) {
           for (final refresh in List<void Function()>.from(refreshes)) {
             refresh();

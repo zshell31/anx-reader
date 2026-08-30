@@ -572,9 +572,8 @@ void main() {
     expect(presentationOutbox.localRevision, 3);
   });
 
-  test('bookmark creation is semantic but percentage stays native-only',
-      () async {
-    final note = await repository.createBookmark(
+  test('bookmark creation and deletion use canonical identity', () async {
+    final result = await repository.createBookmark(
       BookmarkCreation(
         book: testBook(),
         content: 'Bookmark location',
@@ -584,20 +583,18 @@ void main() {
       ),
     );
     final document = (await shared.annotationDocument(fingerprint))!;
-    final annotation = annotationOf(document, note.sharedAnnotationId!);
+    final annotation = annotationOf(document, result.ref.annotationId);
     expect(annotation['motivation'], 'bookmark');
     expect(jsonEncode(annotation), isNot(contains('0.42')));
-    expect(note.type, 'bookmark');
-    expect(note.color, '0.42');
 
     clock = clock.add(const Duration(minutes: 1));
-    await repository.tombstoneAnnotationForBookNote(note);
+    await repository.tombstoneAnnotation(result.ref);
     final deleted = annotationOf(
         (await shared.annotationDocument(fingerprint))!,
-        note.sharedAnnotationId!);
+        result.ref.annotationId);
     expect(deleted['deletedAt'], isNotNull);
     expect(
-        await shared.annotationPresentation(note.sharedAnnotationId!), isNull);
+        await shared.annotationPresentation(result.ref.annotationId), isNull);
     expect(native.notes, isEmpty);
   });
 

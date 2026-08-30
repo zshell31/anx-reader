@@ -1,5 +1,4 @@
 import 'package:anx_reader/l10n/generated/L10n.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/providers/random_highlight_provider.dart';
 import 'package:anx_reader/utils/date/relative_time_formatter.dart';
 import 'package:anx_reader/widgets/common/async_skeleton_wrapper.dart';
@@ -47,18 +46,6 @@ class RandomHighlightTile extends StatisticsDashboardTileBase {
           onRefresh: () => ref.read(randomHighlightProvider.notifier).refresh(),
         );
       },
-      mock: RandomHighlightData(
-        note: BookNote(
-          bookId: -1,
-          content: 'Stay hungry, stay foolish.',
-          cfi: '',
-          chapter: 'Mock chapter',
-          type: 'highlight',
-          color: '000000',
-          updateTime: DateTime.now(),
-        ),
-        book: null,
-      ),
     );
   }
 }
@@ -75,8 +62,8 @@ class _HighlightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final quote = data.note.content.trim();
-    final timestamp = RelativeTimeFormatter.format(data.note.updateTime);
+    final quote = data.note.selectedText.trim();
+    final timestamp = RelativeTimeFormatter.format(data.note.updatedAt);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,13 +78,13 @@ class _HighlightCard extends StatelessWidget {
         ),
         const Divider(height: 2),
         Text(
-          data.book?.title ?? L10n.of(context).randomHighlightUnknownBook,
+          data.book.title,
           style: theme.textTheme.labelLarge,
           overflow: TextOverflow.ellipsis,
         ),
-        if (data.note.chapter.isNotEmpty)
+        if (data.note.chapter?.isNotEmpty == true)
           Text(
-            data.note.chapter,
+            data.note.chapter!,
             style: theme.textTheme.bodySmall,
             overflow: TextOverflow.ellipsis,
           ),

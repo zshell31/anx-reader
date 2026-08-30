@@ -1,8 +1,10 @@
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
 import 'package:anx_reader/service/notes/export_notes.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/widgets/bookshelf/book_cover.dart';
 import 'package:anx_reader/widgets/book_notes/book_notes_list.dart';
 import 'package:anx_reader/models/book.dart';
@@ -113,8 +115,9 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
     );
   }
 
-  Future<void> handleExportNotes(BuildContext context, Book book,
-      {List<BookNote>? notes}) async {
+  Future<void> handleExportNotes(
+      BuildContext context, AnnotationBookUiModel book,
+      {List<AnnotationUiModel>? notes}) async {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -123,7 +126,8 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
           builder: (context, setModalState) {
             return Consumer(
               builder: (context, ref, _) {
-                final asyncState = ref.watch(bookNotesControllerProvider(book));
+                final asyncState =
+                    ref.watch(bookNotesControllerProvider(book.fingerprint));
                 return asyncState.when(
                   data: (state) {
                     final bool allowMerge =
@@ -237,11 +241,13 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
               onPressed: () {
                 if (state.exportSortMode.field == NotesSortField.createdTime) {
                   ref
-                      .read(bookNotesControllerProvider(widget.book).notifier)
+                      .read(
+                          bookNotesControllerProvider(bookFingerprint).notifier)
                       .toggleExportSortDirection();
                 } else {
                   ref
-                      .read(bookNotesControllerProvider(widget.book).notifier)
+                      .read(
+                          bookNotesControllerProvider(bookFingerprint).notifier)
                       .setExportSortField(NotesSortField.createdTime);
                 }
               },
@@ -254,11 +260,13 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
               onPressed: () {
                 if (state.exportSortMode.field == NotesSortField.cfi) {
                   ref
-                      .read(bookNotesControllerProvider(widget.book).notifier)
+                      .read(
+                          bookNotesControllerProvider(bookFingerprint).notifier)
                       .toggleExportSortDirection();
                 } else {
                   ref
-                      .read(bookNotesControllerProvider(widget.book).notifier)
+                      .read(
+                          bookNotesControllerProvider(bookFingerprint).notifier)
                       .setExportSortField(NotesSortField.cfi);
                 }
               },
@@ -328,8 +336,8 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
   Widget _exportButton(
     BuildContext context,
     WidgetRef ref,
-    Book book,
-    List<BookNote>? notes,
+    AnnotationBookUiModel book,
+    List<AnnotationUiModel>? notes,
     ExportType type, {
     required bool mergeChapters,
     required Widget icon,
@@ -339,8 +347,9 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
       icon: icon,
       text: label,
       onTap: () {
-        final controller = ref.read(bookNotesControllerProvider(book).notifier);
-        final sorted = controller.notesForExport(
+        final controller =
+            ref.read(bookNotesControllerProvider(book.fingerprint).notifier);
+        final sorted = controller.annotationsForExport(
           selectedOnly: false,
           custom: notes,
         );
@@ -372,7 +381,13 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
           icon: const Icon(Icons.ios_share),
           text: L10n.of(context).notesPageExport,
           onTap: () {
-            handleExportNotes(context, book);
+            final annotationBook = ref
+                .read(bookNotesControllerProvider(bookFingerprint))
+                .valueOrNull
+                ?.book;
+            if (annotationBook != null) {
+              handleExportNotes(context, annotationBook);
+            }
           }),
     ]);
   }
@@ -421,7 +436,7 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
             bookInfo(context, widget.book, widget.numberOfNotes),
             const SizedBox(height: 170),
             BookNotesList(
-                book: widget.book,
+                fingerprint: bookFingerprint,
                 reading: false,
                 exportNotes: handleExportNotes),
           ],
@@ -429,4 +444,6 @@ class _BookNotesPageState extends ConsumerState<BookNotesPage> {
       ),
     );
   }
+
+  String get bookFingerprint => canonicalMd5Fingerprint(widget.book.md5);
 }

@@ -1,8 +1,9 @@
 import 'package:anx_reader/l10n/generated/L10n.dart';
-import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_notes_page.dart';
 import 'package:anx_reader/providers/notes_page_current_book.dart';
 import 'package:anx_reader/providers/notes_statistics.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/widgets/book_notes/book_notes_list.dart';
 import 'package:anx_reader/utils/date/convert_seconds.dart';
 import 'package:anx_reader/widgets/bookshelf/book_cover.dart';
 import 'package:anx_reader/widgets/common/container/filled_container.dart';
@@ -117,10 +118,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                     itemCount: data.length,
                     itemBuilder: (context, index) {
                       return bookNotesItem(
-                        book: data[index]['book']!,
-                        numberOfNotes: data[index]['numberOfNotes']!,
+                        book: data[index].book,
                         isMobile: isMobile,
-                        readingTime: data[index]['readingTime']!,
+                        readingTime: data[index].readingTime,
                       );
                     }),
               );
@@ -131,8 +131,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
   }
 
   Widget bookNotesItem({
-    required Book book,
-    required int numberOfNotes,
+    required AnnotationBookUiModel book,
     required bool isMobile,
     required int readingTime,
   }) {
@@ -153,22 +152,23 @@ class _NotesPageState extends ConsumerState<NotesPage> {
       fontSize: 14,
       color: Colors.grey,
     );
+    final localBook = book.localBook;
+    final numberOfNotes = book.annotations.length;
     return GestureDetector(
       onTap: () {
         if (isMobile) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => BookNotesPage(
-                      book: book,
-                      numberOfNotes: numberOfNotes,
-                      isMobile: true,
-                    )),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (context) {
+            if (localBook != null) {
+              return BookNotesPage(
+                book: localBook,
+                numberOfNotes: numberOfNotes,
+                isMobile: true,
+              );
+            }
+            return _RemoteBookNotesPage(book: book);
+          }));
         } else {
-          ref
-              .read(notesPageCurrentBookProvider.notifier)
-              .setData(book, numberOfNotes);
+          ref.read(notesPageCurrentBookProvider.notifier).setData(book);
         }
       },
       child: FilledContainer(
@@ -206,7 +206,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                         Icon(Icons.bar_chart, size: 16, color: Colors.grey),
                         const SizedBox(width: 4),
                         Text(
-                          '${(book.readingPercentage * 100).toStringAsFixed(1)}%',
+                          localBook == null
+                              ? '—'
+                              : '${(localBook.readingPercentage * 100).toStringAsFixed(1)}%',
                           style: readingTimeStyle,
                         ),
                       ],
@@ -216,17 +218,24 @@ class _NotesPageState extends ConsumerState<NotesPage> {
               ),
             ),
             // Expanded(child: SizedBox()),
-            Hero(
-              tag: isMobile
-                  ? book.coverFullPath
-                  : '${book.coverFullPath}notMobile',
-              child: BookCover(
-                book: book,
-                height: 130,
+            if (localBook != null)
+              Hero(
+                tag: isMobile
+                    ? localBook.coverFullPath
+                    : '${localBook.coverFullPath}notMobile',
+                child: BookCover(
+                  book: localBook,
+                  height: 130,
+                  width: 90,
+                  radius: 20,
+                ),
+              )
+            else
+              const SizedBox(
                 width: 90,
-                radius: 20,
+                height: 130,
+                child: Icon(Icons.cloud_outlined, size: 48),
               ),
-            ),
           ],
         ),
       ),
@@ -241,13 +250,47 @@ class NotesDetail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ref.watch(notesPageCurrentBookProvider).when(
           data: (current) {
+            final localBook = current.book.localBook;
+            if (localBook == null) {
+              return _RemoteBookNotesBody(book: current.book);
+            }
             return BookNotesPage(
-                isMobile: false,
-                book: current.book,
-                numberOfNotes: current.numberOfNotes);
+              isMobile: false,
+              book: localBook,
+              numberOfNotes: current.book.annotations.length,
+            );
           },
           loading: () => const CircularProgressIndicator(),
           error: (error, stack) => NotesTips(),
         );
   }
+}
+
+class _RemoteBookNotesPage extends StatelessWidget {
+  const _RemoteBookNotesPage({required this.book});
+
+  final AnnotationBookUiModel book;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(book.title)),
+        body: _RemoteBookNotesBody(book: book),
+      );
+}
+
+class _RemoteBookNotesBody extends StatelessWidget {
+  const _RemoteBookNotesBody({required this.book});
+
+  final AnnotationBookUiModel book;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Text(book.title, style: Theme.of(context).textTheme.headlineSmall),
+          if (book.author.isNotEmpty) Text(book.author),
+          const SizedBox(height: 16),
+          BookNotesList(fingerprint: book.fingerprint, reading: false),
+        ],
+      );
 }

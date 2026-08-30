@@ -1,6 +1,5 @@
-import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/current_notes_detail.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/providers/notes_statistics.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -12,14 +11,13 @@ class NotesPageCurrentBook extends _$NotesPageCurrentBook {
   Future<CurrentNotesDetail> build() async {
     final idAndNotes = await ref.watch(bookIdAndNotesProvider.future);
 
-    Book book = await bookDao.selectBookById(idAndNotes[0]['bookId']!);
-
-    return CurrentNotesDetail(
-        book: book, numberOfNotes: idAndNotes[0]['numberOfNotes']!);
+    if (idAndNotes.isEmpty) {
+      throw StateError('No canonical annotations');
+    }
+    return CurrentNotesDetail(book: idAndNotes.first.book);
   }
 
-  void setData(Book book, int number) {
-    state =
-        AsyncValue.data(CurrentNotesDetail(book: book, numberOfNotes: number));
+  void setData(AnnotationBookUiModel book) {
+    state = AsyncValue.data(CurrentNotesDetail(book: book));
   }
 }

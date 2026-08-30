@@ -3,6 +3,7 @@ import 'package:anx_reader/models/bookmark.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
 import 'package:anx_reader/providers/bookmark.dart';
 import 'package:anx_reader/utils/error_handler.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/widgets/common/container/filled_container.dart';
 import 'package:anx_reader/widgets/delete_confirm.dart';
 import 'package:flutter/material.dart';
@@ -58,10 +59,10 @@ class _BookmarkWidgetState extends ConsumerState<BookmarkWidget> {
                   widget.epubPlayerKey.currentState?.goToCfi(cfi);
                   widget.onNavigate();
                 },
-                onDelete: (id) {
-                  ref.read(BookmarkProvider(bookId).notifier).removeBookmark(
-                        id: id,
-                      );
+                onDelete: (annotationRef) {
+                  ref
+                      .read(BookmarkProvider(bookId).notifier)
+                      .removeBookmark(annotationRef);
                 },
               ),
             );
@@ -90,7 +91,7 @@ class BookmarkItem extends StatelessWidget {
 
   final BookmarkModel bookmark;
   final Function(String) onTap;
-  final Function(int) onDelete;
+  final Function(AnnotationRef) onDelete;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -121,17 +122,21 @@ class BookmarkItem extends StatelessWidget {
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
                           )),
-                      Text('${(bookmark.percentage * 100).toStringAsFixed(2)}%',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          )),
+                      if (bookmark.percentage != null)
+                        Text(
+                            '${(bookmark.percentage! * 100).toStringAsFixed(2)}%',
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            )),
                     ],
                   ),
                 ),
                 DeleteConfirm(
                   delete: () {
-                    onDelete(bookmark.id!);
+                    final annotationRef = bookmark.ref;
+                    if (annotationRef != null) onDelete(annotationRef);
                   },
                 )
               ],

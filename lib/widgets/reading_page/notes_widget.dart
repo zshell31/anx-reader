@@ -1,6 +1,7 @@
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/widgets/book_notes/book_notes_list.dart';
 import 'package:anx_reader/widgets/reading_page/widget_title.dart';
+import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:flutter/material.dart';
 
 import 'package:anx_reader/models/book.dart';
@@ -20,8 +21,12 @@ class ReadingNotes extends StatelessWidget {
         children: [
           widgetTitle(L10n.of(context).navBarNotes, null),
           Expanded(
-            child:
-                ListView(children: [BookNotesList(book: book, reading: true)]),
+            child: ListView(children: [
+              BookNotesList(
+                fingerprint: canonicalMd5Fingerprint(book.md5),
+                reading: true,
+              )
+            ]),
           ),
         ],
       ),

@@ -53,6 +53,36 @@ void main() {
     expect(source, isNot(contains('tombstoneAnnotationForBookNote')));
   });
 
+  test('Notes and semantic consumers do not read BookNote projections', () {
+    const canonicalConsumers = [
+      'lib/providers/book_notes.dart',
+      'lib/providers/bookmark.dart',
+      'lib/providers/notes_statistics.dart',
+      'lib/providers/random_highlight_provider.dart',
+      'lib/widgets/book_notes/book_note_tile.dart',
+      'lib/widgets/book_notes/book_notes_list.dart',
+      'lib/widgets/context_menu/excerpt_menu.dart',
+      'lib/widgets/context_menu/reader_note_menu.dart',
+      'lib/service/notes/export_notes.dart',
+      'lib/dao/search_repository.dart',
+      'lib/service/ai/tools/repository/notes_repository.dart',
+    ];
+    final forbidden = RegExp(
+        r'book_note\.dart|bookNoteDao|readerNote|sharedAnnotationId|nativeNoteId');
+    for (final path in canonicalConsumers) {
+      expect(forbidden.hasMatch(File(path).readAsStringSync()), isFalse,
+          reason: path);
+    }
+
+    final state = File('lib/models/book_notes_state.dart').readAsStringSync();
+    final list =
+        File('lib/widgets/book_notes/book_notes_list.dart').readAsStringSync();
+    expect(state, contains('Set<String> selectedAnnotationIds'));
+    expect(list, contains('ValueKey(bookNote.ref.annotationId)'));
+    expect(File('lib/providers/book_notes.dart').readAsStringSync(),
+        contains('tombstoneAnnotation(annotation.ref)'));
+  });
+
   test(
       'lookup context is transient and annotation creation uses only annotation context',
       () {

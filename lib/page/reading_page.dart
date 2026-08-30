@@ -182,7 +182,10 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     if (!mounted) return;
     epubPlayerKey.currentState?.refreshAnnotations();
     ref.invalidate(bookmarkProvider(_book.id));
-    ref.invalidate(bookNotesControllerProvider(_book));
+    final fingerprint = _book.md5;
+    if (fingerprint != null) {
+      ref.invalidate(bookNotesControllerProvider(fingerprint));
+    }
   }
 
   void _requestReaderFocus() {

@@ -6,6 +6,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/search_note_group.dart';
 import 'package:anx_reader/providers/search.dart';
 import 'package:anx_reader/service/book.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/utils/error_handler.dart';
 import 'package:anx_reader/widgets/book_notes/book_note_tile.dart';
 import 'package:anx_reader/widgets/bookshelf/book_item.dart';
@@ -241,8 +242,15 @@ class _SearchNoteResult extends ConsumerWidget {
                             note: note,
                             margin: EdgeInsets.zero,
                             onTap: () {
-                              pushToReadingPage(ref, context, item.book,
-                                  cfi: note.cfi);
+                              final localBook = item.book.localBook;
+                              final cfi = note.epubCfi;
+                              if (localBook != null &&
+                                  cfi != null &&
+                                  note.navigationCapability ==
+                                      AnnotationCapability.available) {
+                                pushToReadingPage(ref, context, localBook,
+                                    cfi: cfi);
+                              }
                             },
                           ),
                         ),

@@ -1,7 +1,7 @@
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
-import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/models/book_note.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/utils/convert_string_to_uint8list.dart';
 import 'package:anx_reader/utils/save_file_to_download.dart';
 import 'package:csv/csv.dart';
@@ -13,8 +13,8 @@ import 'package:anx_reader/utils/toast/common.dart';
 enum ExportType { copy, md, txt, csv }
 
 Future<void> exportNotes(
-  Book book,
-  List<BookNote> notesList,
+  AnnotationBookUiModel book,
+  List<AnnotationUiModel> notesList,
   ExportType exportType, {
   bool mergeChapterHeadings = false,
 }) async {
@@ -22,6 +22,8 @@ Future<void> exportNotes(
   if (notesList.isEmpty) {
     return;
   }
+  final copiedMessage = L10n.of(context).notesPageCopied;
+  final exportedToMessage = L10n.of(context).notesPageExportedTo;
 
   final groups = _groupNotesByChapter(notesList, mergeChapterHeadings);
 
@@ -31,7 +33,7 @@ Future<void> exportNotes(
       notes += groups.map(_formatPlainGroup).join('\n\n');
 
       await Clipboard.setData(ClipboardData(text: notes));
-      AnxToast.show(L10n.of(context).notesPageCopied);
+      AnxToast.show(copiedMessage);
       break;
 
     case ExportType.md:
@@ -44,7 +46,7 @@ Future<void> exportNotes(
           mimeType: 'text/markdown');
 
       if (filePath != null) {
-        AnxToast.show('${L10n.of(context).notesPageExportedTo} $filePath');
+        AnxToast.show('$exportedToMessage $filePath');
       }
       break;
 
@@ -55,37 +57,12 @@ Future<void> exportNotes(
           fileName: '${book.title}.txt',
           mimeType: 'text/plain');
       if (filePath != null) {
-        AnxToast.show('${L10n.of(context).notesPageExportedTo} $filePath');
+        AnxToast.show('$exportedToMessage $filePath');
       }
       break;
 
     case ExportType.csv:
-      List<List<dynamic>> list = List.from([
-        [
-          'Book',
-          'Author',
-          'Chapter',
-          'Content',
-          'Reader Note',
-          'Type',
-          'Color',
-          'Create Time',
-          'Update Time'
-        ],
-        ...notesList.map((note) {
-          return List.from([
-            book.title,
-            book.author,
-            note.chapter,
-            note.content,
-            note.readerNote,
-            note.type,
-            '#${note.color}',
-            note.createTime!.toIso8601String(),
-            note.updateTime.toIso8601String(),
-          ]);
-        })
-      ]);
+      final list = canonicalNotesCsvRows(book, notesList);
 
       final string = const ListToCsvConverter().convert(list);
 
@@ -94,48 +71,84 @@ Future<void> exportNotes(
           fileName: '${book.title}.csv',
           mimeType: 'text/csv');
       if (filePath != null) {
-        AnxToast.show('${L10n.of(context).notesPageExportedTo} $filePath');
+        AnxToast.show('$exportedToMessage $filePath');
       }
       break;
   }
 }
 
+List<List<dynamic>> canonicalNotesCsvRows(
+  AnnotationBookUiModel book,
+  List<AnnotationUiModel> notes,
+) =>
+    [
+      [
+        'Book',
+        'Author',
+        'Chapter',
+        'Content',
+        'Context',
+        'Reader Note',
+        'Type',
+        'Color',
+        'Create Time',
+        'Update Time'
+      ],
+      for (final note in notes)
+        [
+          book.title,
+          book.author,
+          note.chapter ?? '',
+          note.selectedText,
+          note.annotationContext,
+          note.effectivePersonalNote?.content,
+          note.motivation.name,
+          note.localPresentation == null
+              ? ''
+              : '#${note.localPresentation!.color}',
+          note.createdAt.toIso8601String(),
+          note.updatedAt.toIso8601String(),
+        ],
+    ];
+
 class _ChapterGroup {
   final String chapter;
-  final List<BookNote> notes;
+  final List<AnnotationUiModel> notes;
 
   _ChapterGroup(this.chapter, this.notes);
 }
 
 List<_ChapterGroup> _groupNotesByChapter(
-    List<BookNote> notes, bool mergeChapters) {
+    List<AnnotationUiModel> notes, bool mergeChapters) {
   if (!mergeChapters) {
-    return notes.map((note) => _ChapterGroup(note.chapter, [note])).toList();
+    return notes
+        .map((note) => _ChapterGroup(note.chapter ?? '', [note]))
+        .toList();
   }
 
   final groups = <_ChapterGroup>[];
   if (notes.isEmpty) return groups;
 
-  String currentChapter = notes.first.chapter;
-  List<BookNote> currentNotes = [];
+  String currentChapter = notes.first.chapter ?? '';
+  List<AnnotationUiModel> currentNotes = [];
 
   void pushGroup() {
-    groups
-        .add(_ChapterGroup(currentChapter, List<BookNote>.from(currentNotes)));
+    groups.add(_ChapterGroup(
+        currentChapter, List<AnnotationUiModel>.from(currentNotes)));
   }
 
   for (final note in notes) {
     if (currentNotes.isEmpty) {
-      currentChapter = note.chapter;
+      currentChapter = note.chapter ?? '';
       currentNotes.add(note);
       continue;
     }
 
-    if (note.chapter == currentChapter) {
+    if ((note.chapter ?? '') == currentChapter) {
       currentNotes.add(note);
     } else {
       pushGroup();
-      currentChapter = note.chapter;
+      currentChapter = note.chapter ?? '';
       currentNotes = [note];
     }
   }
@@ -153,11 +166,14 @@ String _formatPlainGroup(_ChapterGroup group) {
     buffer.writeln(group.chapter);
   }
   for (final note in group.notes) {
-    if (note.content.isNotEmpty) {
-      buffer.writeln('\t${note.content}');
+    if (note.selectedText.isNotEmpty) {
+      buffer.writeln('\t${note.selectedText}');
     }
-    if (note.readerNote != null && note.readerNote!.isNotEmpty) {
-      buffer.writeln('\t\t${note.readerNote}');
+    if (note.annotationContext?.isNotEmpty == true) {
+      buffer.writeln('\t${note.annotationContext}');
+    }
+    if (note.effectivePersonalNote?.content?.isNotEmpty == true) {
+      buffer.writeln('\t\t${note.effectivePersonalNote!.content}');
     }
     buffer.writeln();
   }
@@ -168,11 +184,14 @@ String _formatMarkdownGroup(_ChapterGroup group) {
   final buffer = StringBuffer();
   buffer.writeln('## ${group.chapter}\n');
   for (final note in group.notes) {
-    if (note.content.isNotEmpty) {
-      buffer.writeln('> ${note.content}\n');
+    if (note.selectedText.isNotEmpty) {
+      buffer.writeln('> ${note.selectedText}\n');
     }
-    if (note.readerNote != null && note.readerNote!.isNotEmpty) {
-      buffer.writeln('${note.readerNote}\n');
+    if (note.annotationContext?.isNotEmpty == true) {
+      buffer.writeln('_${note.annotationContext}_\n');
+    }
+    if (note.effectivePersonalNote?.content?.isNotEmpty == true) {
+      buffer.writeln('${note.effectivePersonalNote!.content}\n');
     }
     buffer.writeln();
   }

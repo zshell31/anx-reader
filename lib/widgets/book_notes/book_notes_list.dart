@@ -1,12 +1,12 @@
 import 'package:anx_reader/constants/note_annotations.dart';
 import 'package:anx_reader/enums/hint_key.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
-import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/providers/book_notes.dart';
 import 'package:anx_reader/service/book.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/widgets/book_notes/book_note_tile.dart';
 import 'package:anx_reader/widgets/book_share/excerpt_share_service.dart';
 import 'package:anx_reader/widgets/delete_confirm.dart';
@@ -21,19 +21,19 @@ import 'package:sticky_headers/sticky_headers.dart';
 class BookNotesList extends ConsumerWidget {
   const BookNotesList({
     super.key,
-    required this.book,
+    required this.fingerprint,
     required this.reading,
     this.exportNotes,
   });
 
-  final Book book;
+  final String fingerprint;
   final bool reading;
-  final void Function(BuildContext context, Book book, {List<BookNote>? notes})?
-      exportNotes;
+  final void Function(BuildContext context, AnnotationBookUiModel book,
+      {List<AnnotationUiModel>? notes})? exportNotes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notesAsync = ref.watch(bookNotesControllerProvider(book));
+    final notesAsync = ref.watch(bookNotesControllerProvider(fingerprint));
     return notesAsync.when(
       data: (state) => _buildContent(context, ref, state),
       loading: () => const Padding(
@@ -53,7 +53,7 @@ class BookNotesList extends ConsumerWidget {
       children: [
         StickyHeader(
           header: _header(context, ref, state),
-          content: state.visibleNotes.isEmpty
+          content: state.visibleAnnotations.isEmpty
               ? const Column(
                   children: [
                     Divider(),
@@ -68,7 +68,7 @@ class BookNotesList extends ConsumerWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       child: Text(L10n.of(context).bookNotesOperationsHint),
                     ),
-                    ...state.visibleNotes.map(
+                    ...state.visibleAnnotations.map(
                       (bookNote) => _slidableNote(
                         context,
                         ref,
@@ -84,12 +84,13 @@ class BookNotesList extends ConsumerWidget {
   }
 
   Widget _header(BuildContext context, WidgetRef ref, BookNotesState state) {
-    final notifier = ref.read(bookNotesControllerProvider(book).notifier);
+    final notifier =
+        ref.read(bookNotesControllerProvider(fingerprint).notifier);
     final buttonColor = Theme.of(context).colorScheme.primary;
     if (state.isSelecting) {
-      final allSelected =
-          state.selectedNoteIds.length == state.visibleNotes.length &&
-              state.visibleNotes.isNotEmpty;
+      final allSelected = state.selectedAnnotationIds.length ==
+              state.visibleAnnotations.length &&
+          state.visibleAnnotations.isNotEmpty;
       return Row(
         children: [
           IconButton(
@@ -108,8 +109,7 @@ class BookNotesList extends ConsumerWidget {
           const Spacer(),
           DeleteConfirm(
             delete: () async {
-              final notesToDelete = List<BookNote>.from(state.selectedNotes);
-              await notifier.deleteNotes(notesToDelete);
+              await notifier.deleteAnnotations(state.selectedAnnotations);
               if (reading) {
                 final player = epubPlayerKey.currentState;
                 if (player != null) {
@@ -123,8 +123,9 @@ class BookNotesList extends ConsumerWidget {
           if (!reading && exportNotes != null)
             IconButton(
               onPressed: () {
-                final selected = notifier.notesForExport(selectedOnly: true);
-                exportNotes!.call(context, book, notes: selected);
+                final selected =
+                    notifier.annotationsForExport(selectedOnly: true);
+                exportNotes!.call(context, state.book, notes: selected);
               },
               icon: Icon(Icons.ios_share, color: buttonColor),
             ),
@@ -151,7 +152,8 @@ class BookNotesList extends ConsumerWidget {
       builder: (context) {
         return Consumer(
           builder: (context, ref, _) {
-            final asyncState = ref.watch(bookNotesControllerProvider(book));
+            final asyncState =
+                ref.watch(bookNotesControllerProvider(fingerprint));
             return asyncState.when(
               data: (state) => Padding(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -167,7 +169,8 @@ class BookNotesList extends ConsumerWidget {
                           field: NotesSortField.createdTime,
                           current: state.viewSortMode,
                           onPressed: () => ref
-                              .read(bookNotesControllerProvider(book).notifier)
+                              .read(bookNotesControllerProvider(fingerprint)
+                                  .notifier)
                               .toggleViewSort(NotesSortField.createdTime),
                         ),
                         _sortButton(
@@ -176,7 +179,8 @@ class BookNotesList extends ConsumerWidget {
                           field: NotesSortField.cfi,
                           current: state.viewSortMode,
                           onPressed: () => ref
-                              .read(bookNotesControllerProvider(book).notifier)
+                              .read(bookNotesControllerProvider(fingerprint)
+                                  .notifier)
                               .toggleViewSort(NotesSortField.cfi),
                         ),
                         const Spacer(),
@@ -188,7 +192,8 @@ class BookNotesList extends ConsumerWidget {
                           child: OutlinedButton.icon(
                             onPressed: () => ref
                                 .read(
-                                  bookNotesControllerProvider(book).notifier,
+                                  bookNotesControllerProvider(fingerprint)
+                                      .notifier,
                                 )
                                 .toggleShowBookmarks(),
                             icon: Icon(
@@ -209,7 +214,8 @@ class BookNotesList extends ConsumerWidget {
                       children: [
                         ElevatedButton(
                           onPressed: () => ref
-                              .read(bookNotesControllerProvider(book).notifier)
+                              .read(bookNotesControllerProvider(fingerprint)
+                                  .notifier)
                               .resetFilters(),
                           child: Text(L10n.of(context).notesPageFilterReset),
                         ),
@@ -224,7 +230,7 @@ class BookNotesList extends ConsumerWidget {
                             ),
                             onPressed: Navigator.of(context).pop,
                             child: Text(L10n.of(context).notesPageViewAllNNotes(
-                                state.visibleNotes.length)),
+                                state.visibleAnnotations.length)),
                           ),
                         ),
                       ],
@@ -282,7 +288,8 @@ class BookNotesList extends ConsumerWidget {
     BookNotesState state,
     NoteTypeOption type,
   ) {
-    final notifier = ref.read(bookNotesControllerProvider(book).notifier);
+    final notifier =
+        ref.read(bookNotesControllerProvider(fingerprint).notifier);
 
     Widget colorButton(String color) {
       final key = '${type.type}#$color';
@@ -316,22 +323,29 @@ class BookNotesList extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     BookNotesState state,
-    BookNote bookNote,
+    AnnotationUiModel bookNote,
   ) {
-    final notifier = ref.read(bookNotesControllerProvider(book).notifier);
+    final notifier =
+        ref.read(bookNotesControllerProvider(fingerprint).notifier);
+    final cfi = bookNote.epubCfi;
+    final localBook = state.book.localBook;
+    final canNavigate =
+        bookNote.navigationCapability == AnnotationCapability.available &&
+            cfi != null &&
+            localBook != null;
     return BookNoteTile(
       note: bookNote,
-      onTap: () {
-        if (state.isSelecting) {
-          notifier.toggleSelection(bookNote);
-        } else {
-          if (reading) {
-            epubPlayerKey.currentState?.goToCfi(bookNote.cfi);
-          } else {
-            pushToReadingPage(ref, context, book, cfi: bookNote.cfi);
-          }
-        }
-      },
+      onTap: state.isSelecting
+          ? () => notifier.toggleSelection(bookNote)
+          : !canNavigate
+              ? null
+              : () {
+                  if (reading) {
+                    epubPlayerKey.currentState?.goToCfi(cfi);
+                  } else {
+                    pushToReadingPage(ref, context, localBook, cfi: cfi);
+                  }
+                },
       onLongPress: () {
         notifier.toggleSelection(bookNote);
       },
@@ -339,7 +353,7 @@ class BookNotesList extends ConsumerWidget {
           ? IconButton(
               onPressed: () => notifier.toggleSelection(bookNote),
               icon: Icon(
-                state.selectedNoteIds.contains(bookNote.id)
+                state.selectedAnnotationIds.contains(bookNote.ref.annotationId)
                     ? EvaIcons.checkmark_circle
                     : Icons.circle_outlined,
                 color: Theme.of(context).colorScheme.primary,
@@ -352,11 +366,11 @@ class BookNotesList extends ConsumerWidget {
   Widget _slidableNote(
     BuildContext context,
     WidgetRef ref,
-    BookNote bookNote,
+    AnnotationUiModel bookNote,
     Widget child,
   ) {
     return Slidable(
-      key: ValueKey(bookNote.id),
+      key: ValueKey(bookNote.ref.annotationId),
       startActionPane: _actionPane(context, ref, bookNote),
       endActionPane: _actionPane(context, ref, bookNote),
       child: child,
@@ -364,7 +378,7 @@ class BookNotesList extends ConsumerWidget {
   }
 
   ActionPane _actionPane(
-      BuildContext context, WidgetRef ref, BookNote bookNote) {
+      BuildContext context, WidgetRef ref, AnnotationUiModel bookNote) {
     return ActionPane(
       motion: const StretchMotion(),
       children: [
@@ -372,10 +386,10 @@ class BookNotesList extends ConsumerWidget {
           onPressed: (context) {
             ExcerptShareService.showShareExcerpt(
               context: context,
-              bookTitle: book.title,
-              author: book.author,
-              excerpt: bookNote.content,
-              chapter: bookNote.chapter,
+              bookTitle: stateBook(ref)?.title ?? '',
+              author: stateBook(ref)?.author ?? '',
+              excerpt: bookNote.selectedText,
+              chapter: bookNote.chapter ?? '',
             );
           },
           icon: Icons.share,
@@ -392,10 +406,16 @@ class BookNotesList extends ConsumerWidget {
     );
   }
 
-  void _editBookNote(BuildContext context, WidgetRef ref, BookNote bookNote) {
-    String currentType = bookNote.type;
-    String currentColor = bookNote.color;
-    String? currentNote = bookNote.readerNote;
+  AnnotationBookUiModel? stateBook(WidgetRef ref) =>
+      ref.read(bookNotesControllerProvider(fingerprint)).valueOrNull?.book;
+
+  void _editBookNote(
+      BuildContext context, WidgetRef ref, AnnotationUiModel bookNote) {
+    final isBookmark = bookNote.motivation == AnnotationMotivation.bookmark;
+    String currentType = bookNote.localPresentation?.style.name ?? 'highlight';
+    String currentColor =
+        bookNote.localPresentation?.color ?? notesColors.first;
+    String? currentNote = bookNote.effectivePersonalNote?.content;
 
     final noteController = TextEditingController(text: currentNote);
 
@@ -415,52 +435,53 @@ class BookNotesList extends ConsumerWidget {
                       // The excerpt is selected source text, not commentary.
                       // Editing it alone would invalidate its CFI/context.
                       child: Text(
-                        bookNote.content,
+                        bookNote.selectedText,
                         style: const TextStyle(fontSize: 16),
                       ),
                     ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          Row(
-                            children: notesType.map((type) {
-                              return IconButton(
-                                icon: Icon(
-                                  type.icon,
-                                  color: currentType == type.type
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.grey,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    currentType = type.type;
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                          Row(
-                            children: notesColors.map((color) {
-                              return IconButton(
-                                icon: Icon(
-                                  currentColor == color
-                                      ? EvaIcons.checkmark_circle_2
-                                      : Icons.circle,
-                                  color: Color(int.parse('0x99$color')),
-                                  size: 30,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    currentColor = color;
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                        ],
+                    if (!isBookmark)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            Row(
+                              children: notesType.map((type) {
+                                return IconButton(
+                                  icon: Icon(
+                                    type.icon,
+                                    color: currentType == type.type
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      currentType = type.type;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            Row(
+                              children: notesColors.map((color) {
+                                return IconButton(
+                                  icon: Icon(
+                                    currentColor == color
+                                        ? EvaIcons.checkmark_circle_2
+                                        : Icons.circle,
+                                    color: Color(int.parse('0x99$color')),
+                                    size: 30,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      currentColor = color;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: TextField(
@@ -482,22 +503,15 @@ class BookNotesList extends ConsumerWidget {
                 ),
                 TextButton(
                   onPressed: () async {
-                    final updatedNote = BookNote(
-                      id: bookNote.id,
-                      bookId: bookNote.bookId,
-                      content: bookNote.content,
-                      cfi: bookNote.cfi,
-                      chapter: bookNote.chapter,
-                      type: currentType,
-                      color: currentColor,
-                      readerNote: noteController.text.trim(),
-                      createTime: bookNote.createTime,
-                      updateTime: DateTime.now(),
-                    );
                     Navigator.of(context).pop();
                     await ref
-                        .read(bookNotesControllerProvider(book).notifier)
-                        .updateNote(updatedNote);
+                        .read(bookNotesControllerProvider(fingerprint).notifier)
+                        .updateAnnotation(
+                          bookNote.ref,
+                          personalNote: noteController.text.trim(),
+                          type: isBookmark ? null : currentType,
+                          color: isBookmark ? null : currentColor,
+                        );
                   },
                   child: Text(L10n.of(context).commonSave),
                 ),

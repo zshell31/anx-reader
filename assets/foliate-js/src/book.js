@@ -1505,6 +1505,7 @@ class Reader {
       remove,
       detail: {
         cfi,
+        annotationId: remove ? this.#bookmarkInfo.id : null,
         content,
         percentage
       }

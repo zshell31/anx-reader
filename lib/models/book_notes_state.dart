@@ -1,6 +1,6 @@
 import 'package:anx_reader/constants/note_annotations.dart';
-import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/models/book_note.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'book_notes_state.freezed.dart';
@@ -39,25 +39,26 @@ abstract class BookNotesState with _$BookNotesState {
   const BookNotesState._();
 
   const factory BookNotesState({
-    required Book book,
-    required List<BookNote> allNotes,
-    required List<BookNote> visibleNotes,
+    required AnnotationBookUiModel book,
+    required List<AnnotationUiModel> allAnnotations,
+    required List<AnnotationUiModel> visibleAnnotations,
     required NotesSortMode viewSortMode,
     required NotesSortMode exportSortMode,
     required bool showBookmarks,
     required Set<String> enabledTypeColors,
-    required Set<int> selectedNoteIds,
+    required Set<String> selectedAnnotationIds,
   }) = _BookNotesState;
 
-  int get totalNotes => allNotes.length;
+  int get totalNotes => allAnnotations.length;
 
-  bool get isSelecting => selectedNoteIds.isNotEmpty;
+  bool get isSelecting => selectedAnnotationIds.isNotEmpty;
 
-  List<BookNote> get selectedNotes => allNotes
-      .where((note) => note.id != null && selectedNoteIds.contains(note.id))
+  List<AnnotationUiModel> get selectedAnnotations => allAnnotations
+      .where((annotation) =>
+          selectedAnnotationIds.contains(annotation.ref.annotationId))
       .toList();
 
-  bool get showAllNotes => visibleNotes.length == allNotes.length;
+  bool get showAllNotes => visibleAnnotations.length == allAnnotations.length;
 }
 
 extension NoteFilterDefaults on BookNotesState {

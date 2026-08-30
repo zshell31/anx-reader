@@ -1,5 +1,5 @@
 import 'package:anx_reader/constants/note_annotations.dart';
-import 'package:anx_reader/models/book_note.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/utils/time_to_human.dart';
 import 'package:anx_reader/widgets/common/container/filled_container.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +15,7 @@ class BookNoteTile extends StatelessWidget {
     this.margin = const EdgeInsets.only(bottom: 8),
   });
 
-  final BookNote note;
+  final AnnotationUiModel note;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final Widget? trailing;
@@ -23,7 +23,11 @@ class BookNoteTile extends StatelessWidget {
   final EdgeInsetsGeometry margin;
 
   Icon _buildIcon(Color color) {
-    final match = notesType.where((option) => option.type == note.type);
+    if (note.motivation == AnnotationMotivation.bookmark) {
+      return Icon(Icons.bookmark, color: color);
+    }
+    final style = note.localPresentation?.style.name ?? 'highlight';
+    final match = notesType.where((option) => option.type == style);
     if (match.isNotEmpty) {
       return Icon(match.first.icon, color: color);
     }
@@ -32,7 +36,10 @@ class BookNoteTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = Color(int.tryParse('0xaa${note.color}') ?? 0xaa555555);
+    final iconColor = Color(
+      int.tryParse('0xaa${note.localPresentation?.color ?? '555555'}') ??
+          0xaa555555,
+    );
     final infoStyle = const TextStyle(
       fontSize: 14,
       color: Colors.grey,
@@ -59,12 +66,12 @@ class BookNoteTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    note.content,
+                    note.selectedText,
                     style: const TextStyle(
                       fontSize: 16,
                     ),
                   ),
-                  if (note.readerNote != null && note.readerNote!.isNotEmpty)
+                  if (note.effectivePersonalNote?.content?.isNotEmpty == true)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -78,7 +85,7 @@ class BookNoteTile extends StatelessWidget {
                               ),
                               Expanded(
                                 child: Text(
-                                  note.readerNote!,
+                                  note.effectivePersonalNote!.content!,
                                   style: infoStyle.copyWith(
                                     color: Colors.grey.shade600,
                                   ),
@@ -100,13 +107,13 @@ class BookNoteTile extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          note.chapter,
+                          note.chapter ?? '',
                           style: infoStyle,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Text(
-                        timeToHuman(note.createTime),
+                        timeToHuman(note.createdAt),
                         style: infoStyle,
                       ),
                     ],

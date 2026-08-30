@@ -1,4 +1,5 @@
 import 'package:anx_reader/dao/reading_time.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'statictics_summary_value.g.dart';
@@ -23,7 +24,9 @@ class StaticticsSummaryValue extends _$StaticticsSummaryValue {
       case StatisticType.totalDates:
         return await readingTimeDao.selectTotalNumberOfDate();
       case StatisticType.totalNotes:
-        return await readingTimeDao.selectTotalNumberOfNotes();
+        final books = await canonicalAnnotationCatalog.readAll();
+        return books.fold<int>(
+            0, (count, book) => count + book.annotations.length);
     }
   }
 

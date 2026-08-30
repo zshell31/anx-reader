@@ -41,7 +41,9 @@ void main() {
   test('bookmark creation does not dedupe against a selection at the same CFI',
       () {
     final bookmarks = source('lib/providers/bookmark.dart');
-    expect(bookmarks, contains("cfi = ? AND book_id = ? AND type = ?"));
-    expect(bookmarks, contains("[bookmark.cfi, bookId, 'bookmark']"));
+    expect(bookmarks,
+        contains('annotation.motivation == AnnotationMotivation.bookmark'));
+    expect(bookmarks, isNot(contains('value.cfi == bookmark.cfi')));
+    expect(bookmarks, isNot(contains('bookNoteDao')));
   });
 }

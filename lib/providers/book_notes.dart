@@ -1,12 +1,11 @@
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/constants/note_annotations.dart';
-import 'package:anx_reader/dao/book_note.dart';
-import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
 import 'package:anx_reader/providers/bookmark.dart';
+import 'package:anx_reader/providers/notes_statistics.dart';
+import 'package:anx_reader/service/sync/annotation_catalog.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
-import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'book_notes.g.dart';
@@ -42,22 +41,33 @@ class BookNotesController extends _$BookNotesController {
   }
 
   @override
-  Future<BookNotesState> build(Book book) async {
-    final notes = await bookNoteDao.selectBookNotesByBookId(book.id);
+  Future<BookNotesState> build(String fingerprint) async {
+    ref.listen(canonicalAnnotationBooksProvider, (previous, next) {
+      if (previous?.hasValue == true && next.hasValue) refresh();
+    });
+    final annotationBook =
+        await canonicalAnnotationCatalog.readBook(fingerprint);
+    if (annotationBook == null) {
+      throw StateError('Canonical annotation document was not found');
+    }
     return _createState(
-      book: book,
-      notes: notes,
+      book: annotationBook,
+      annotations: annotationBook.annotations,
     );
   }
 
   Future<void> refresh() async {
     final current = state.valueOrNull;
     try {
-      final notes = await bookNoteDao.selectBookNotesByBookId(book.id);
+      final annotationBook =
+          await canonicalAnnotationCatalog.readBook(fingerprint);
+      if (annotationBook == null) {
+        throw StateError('Canonical annotation document was not found');
+      }
       state = AsyncValue.data(
         _createState(
-          book: book,
-          notes: notes,
+          book: annotationBook,
+          annotations: annotationBook.annotations,
           previous: current,
         ),
       );
@@ -66,20 +76,19 @@ class BookNotesController extends _$BookNotesController {
     }
   }
 
-  void toggleSelection(BookNote note) {
+  void toggleSelection(AnnotationUiModel annotation) {
     final current = state.valueOrNull;
-    if (current == null || note.id == null) {
-      return;
-    }
-    final updatedSelection = Set<int>.from(current.selectedNoteIds);
-    if (updatedSelection.contains(note.id)) {
-      updatedSelection.remove(note.id);
+    if (current == null) return;
+    final id = annotation.ref.annotationId;
+    final updatedSelection = Set<String>.from(current.selectedAnnotationIds);
+    if (updatedSelection.contains(id)) {
+      updatedSelection.remove(id);
     } else {
-      updatedSelection.add(note.id!);
+      updatedSelection.add(id);
     }
     _emit(
       current.copyWith(
-        selectedNoteIds: updatedSelection,
+        selectedAnnotationIds: updatedSelection,
       ),
     );
   }
@@ -87,10 +96,10 @@ class BookNotesController extends _$BookNotesController {
   void clearSelection() {
     final current = state.valueOrNull;
     if (current == null) return;
-    if (current.selectedNoteIds.isEmpty) return;
+    if (current.selectedAnnotationIds.isEmpty) return;
     _emit(
       current.copyWith(
-        selectedNoteIds: {},
+        selectedAnnotationIds: {},
       ),
     );
   }
@@ -98,12 +107,11 @@ class BookNotesController extends _$BookNotesController {
   void selectAllVisible() {
     final current = state.valueOrNull;
     if (current == null) return;
-    final ids = current.visibleNotes
-        .where((note) => note.id != null)
-        .map((note) => note.id!)
+    final ids = current.visibleAnnotations
+        .map((annotation) => annotation.ref.annotationId)
         .toSet();
     _emit(
-      current.copyWith(selectedNoteIds: ids),
+      current.copyWith(selectedAnnotationIds: ids),
     );
   }
 
@@ -113,8 +121,8 @@ class BookNotesController extends _$BookNotesController {
     final next = current.copyWith(showBookmarks: !current.showBookmarks);
     _emit(
       next.copyWith(
-        visibleNotes: _filterAndSort(
-          next.allNotes,
+        visibleAnnotations: _filterAndSort(
+          next.allAnnotations,
           next.enabledTypeColors,
           next.showBookmarks,
           next.viewSortMode,
@@ -183,8 +191,8 @@ class BookNotesController extends _$BookNotesController {
     _emit(
       current.copyWith(
         viewSortMode: newMode,
-        visibleNotes: _filterAndSort(
-          current.allNotes,
+        visibleAnnotations: _filterAndSort(
+          current.allAnnotations,
           current.enabledTypeColors,
           current.showBookmarks,
           newMode,
@@ -215,53 +223,53 @@ class BookNotesController extends _$BookNotesController {
     );
   }
 
-  Future<void> updateNote(BookNote note) async {
+  Future<void> updateAnnotation(
+    AnnotationRef ref, {
+    required String personalNote,
+    String? type,
+    String? color,
+  }) async {
     final current = state.valueOrNull;
     if (current == null) return;
-    await annotationRepository.updateNativeAnnotation(note);
-    // await Sync().syncData(
-    //   SyncDirection.upload,
-    //   null,
-    //   trigger: SyncTrigger.manual,
-    // );
-    await refresh();
-  }
-
-  Future<void> deleteNotes(List<BookNote> notesToDelete) async {
-    if (notesToDelete.isEmpty) {
-      return;
+    await annotationRepository.setPersonalNote(ref, personalNote);
+    if (type != null && color != null) {
+      await annotationRepository.updatePresentation(ref, type, color);
     }
-    await annotationRepository
-        .tombstoneAnnotations(notesToDelete.where((note) => note.id != null));
+    await refresh();
+  }
 
-    // await Sync().syncData(
-    //   SyncDirection.upload,
-    //   null,
-    //   trigger: SyncTrigger.auto,
-    // );
+  Future<void> deleteAnnotations(
+      Iterable<AnnotationUiModel> annotations) async {
+    final current = state.valueOrNull;
+    for (final annotation in annotations) {
+      await annotationRepository.tombstoneAnnotation(annotation.ref);
+    }
 
-    ref.read(BookmarkProvider(book.id).notifier).refreshBookmarks();
+    final localBook = current?.book.localBook;
+    if (localBook != null) {
+      ref.read(BookmarkProvider(localBook.id).notifier).refreshBookmarks();
+    }
 
     await refresh();
   }
 
-  List<BookNote> notesForExport({
+  List<AnnotationUiModel> annotationsForExport({
     required bool selectedOnly,
-    List<BookNote>? custom,
+    List<AnnotationUiModel>? custom,
   }) {
     final current = state.valueOrNull;
     if (current == null) {
       return const [];
     }
-    final baseList =
-        custom ?? (selectedOnly ? current.selectedNotes : current.allNotes);
-    return _sortNotes(baseList, current.exportSortMode);
+    final baseList = custom ??
+        (selectedOnly ? current.selectedAnnotations : current.allAnnotations);
+    return _sortAnnotations(baseList, current.exportSortMode);
   }
 
   BookNotesState _recomputeVisible(BookNotesState state) {
     return state.copyWith(
-      visibleNotes: _filterAndSort(
-        state.allNotes,
+      visibleAnnotations: _filterAndSort(
+        state.allAnnotations,
         state.enabledTypeColors,
         state.showBookmarks,
         state.viewSortMode,
@@ -270,8 +278,8 @@ class BookNotesController extends _$BookNotesController {
   }
 
   BookNotesState _createState({
-    required Book book,
-    required List<BookNote> notes,
+    required AnnotationBookUiModel book,
+    required List<AnnotationUiModel> annotations,
     BookNotesState? previous,
   }) {
     final enabledTypeColors = previous?.enabledTypeColors ??
@@ -279,14 +287,15 @@ class BookNotesController extends _$BookNotesController {
     final showBookmarks = previous?.showBookmarks ?? true;
     final viewSort = previous?.viewSortMode ?? _viewSortFromPrefs();
     final exportSort = previous?.exportSortMode ?? _exportSortFromPrefs();
-    final validSelection = (previous?.selectedNoteIds ?? {})
-        .where((id) => notes.any((note) => note.id == id))
+    final validSelection = (previous?.selectedAnnotationIds ?? {})
+        .where((id) =>
+            annotations.any((annotation) => annotation.ref.annotationId == id))
         .toSet();
     return BookNotesState(
       book: book,
-      allNotes: notes,
-      visibleNotes: _filterAndSort(
-        notes,
+      allAnnotations: annotations,
+      visibleAnnotations: _filterAndSort(
+        annotations,
         enabledTypeColors,
         showBookmarks,
         viewSort,
@@ -295,7 +304,7 @@ class BookNotesController extends _$BookNotesController {
       exportSortMode: exportSort,
       showBookmarks: showBookmarks,
       enabledTypeColors: enabledTypeColors,
-      selectedNoteIds: validSelection,
+      selectedAnnotationIds: validSelection,
     );
   }
 
@@ -306,49 +315,43 @@ class BookNotesController extends _$BookNotesController {
 
 String _filterKey(String type, String color) => '$type#${color.toUpperCase()}';
 
-List<BookNote> _filterAndSort(
-  List<BookNote> notes,
+List<AnnotationUiModel> _filterAndSort(
+  List<AnnotationUiModel> annotations,
   Set<String> enabledTypeColors,
   bool showBookmarks,
   NotesSortMode sortMode,
 ) {
-  final filtered = <BookNote>[];
-  for (final note in notes) {
-    if (note.type == 'bookmark') {
+  final filtered = <AnnotationUiModel>[];
+  for (final annotation in annotations) {
+    if (annotation.motivation == AnnotationMotivation.bookmark) {
       if (showBookmarks) {
-        filtered.add(note);
+        filtered.add(annotation);
       }
       continue;
     }
-
-    final match = notesType
-        .firstWhere(
-          (option) => option.type == note.type,
-          orElse: () => const NoteTypeOption(type: '', icon: Icons.bookmark),
-        )
-        .type;
-
-    if (match.isEmpty) {
-      continue;
-    }
-
-    final key = _filterKey(note.type, note.color);
+    final presentation = annotation.localPresentation;
+    final prefs = Prefs();
+    final style = presentation?.style.name ?? prefs.annotationType;
+    final color = presentation?.color ??
+        prefs.annotationColor.replaceFirst(RegExp(r'^#'), '');
+    final key = _filterKey(style, color);
     if (enabledTypeColors.contains(key)) {
-      filtered.add(note);
+      filtered.add(annotation);
     }
   }
 
-  return _sortNotes(filtered, sortMode);
+  return _sortAnnotations(filtered, sortMode);
 }
 
-List<BookNote> _sortNotes(List<BookNote> notes, NotesSortMode mode) {
-  final sorted = List<BookNote>.from(notes);
+List<AnnotationUiModel> _sortAnnotations(
+    List<AnnotationUiModel> annotations, NotesSortMode mode) {
+  final sorted = List<AnnotationUiModel>.from(annotations);
   sorted.sort((a, b) {
     int comparison;
     if (mode.field == NotesSortField.createdTime) {
-      comparison = _compareDate(a.createTime, b.createTime);
+      comparison = _compareDate(a.createdAt, b.createdAt);
     } else {
-      comparison = _compareCfi(a.cfi, b.cfi);
+      comparison = _compareCfi(a.epubCfi ?? '', b.epubCfi ?? '');
     }
 
     if (mode.direction == SortDirection.asc) {

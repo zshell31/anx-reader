@@ -1,6 +1,4 @@
-import 'package:anx_reader/dao/book_note.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
-import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -8,7 +6,7 @@ import 'package:icons_plus/icons_plus.dart';
 class ReaderNoteMenu extends StatefulWidget {
   const ReaderNoteMenu({
     super.key,
-    this.noteId,
+    this.initialValue,
     required this.decoration,
     required this.axis,
     required this.onVisibilityChange,
@@ -16,19 +14,18 @@ class ReaderNoteMenu extends StatefulWidget {
     required this.onSave,
   });
 
-  final int? noteId;
+  final String? initialValue;
   final BoxDecoration decoration;
   final Axis axis;
   final ValueChanged<bool> onVisibilityChange;
   final VoidCallback onSizeChanged;
-  final Future<BookNote?> Function(String value) onSave;
+  final Future<void> Function(String value) onSave;
 
   @override
   State<ReaderNoteMenu> createState() => ReaderNoteMenuState();
 }
 
 class ReaderNoteMenuState extends State<ReaderNoteMenu> {
-  BookNote? note;
   bool _showNoteDialog = false;
   final textFieldController = TextEditingController();
   bool showSaveButton = false;
@@ -36,7 +33,11 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
   @override
   void initState() {
     super.initState();
-    getNoteDetail(widget.noteId);
+    final value = widget.initialValue?.trim();
+    if (value?.isNotEmpty == true) {
+      textFieldController.text = value!;
+      _showNoteDialog = true;
+    }
   }
 
   @override
@@ -79,34 +80,14 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
     _notifySizeChange();
   }
 
-  Future<void> getNoteDetail(int? id) async {
-    if (id == null) return;
-    try {
-      final fetchedNote = await bookNoteDao.selectBookNoteById(id);
-      note = fetchedNote;
-
-      if (note != null &&
-          note!.readerNote != null &&
-          note!.readerNote!.isNotEmpty) {
-        textFieldController.text = note!.readerNote!;
-        _setShowNoteDialog(true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() {});
-        _notifySizeChange();
-      }
-    }
-  }
-
-  Future<void> showNoteDialog(int noteId) async {
-    await getNoteDetail(noteId);
+  Future<void> showNoteDialog([String? value]) async {
+    if (value != null) textFieldController.text = value;
     _setShowNoteDialog(true);
   }
 
   Future<void> saveNote() async {
     textFieldController.text = textFieldController.text.trim();
-    note = await widget.onSave(textFieldController.text);
+    await widget.onSave(textFieldController.text);
     _notifySizeChange();
   }
 

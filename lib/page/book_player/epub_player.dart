@@ -709,7 +709,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           (position['bottom'] as num).toDouble(),
           location['text'] as String,
           location['cfi'] as String,
-          null,
           location['footnote'] as bool,
           writingMode.isVertical ? Axis.vertical : Axis.horizontal,
           chapter: _selectionContext(location, 'chapter'),
@@ -777,7 +776,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
             bottom,
             note,
             cfi,
-            null,
             false,
             writingMode.isVertical ? Axis.vertical : Axis.horizontal,
             chapter: _selectionContext(annotation, 'chapter'),
@@ -859,10 +857,16 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         String content = detail['content'];
 
         if (remove) {
+          final annotationId = detail['annotationId'] as String?;
+          final fingerprint = widget.book.md5;
+          if (annotationId == null || fingerprint == null) return;
           await ref
               .read(bookmarkProvider(widget.book.id).notifier)
               .removeBookmark(
-                cfi: cfi,
+                AnnotationRef(
+                  bookFingerprint: fingerprint,
+                  annotationId: annotationId,
+                ),
               );
           bookmarkCfi = '';
           bookmarkExists = false;

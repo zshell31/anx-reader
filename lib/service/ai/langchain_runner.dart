@@ -7,11 +7,15 @@ import 'package:langchain/langchain.dart';
 
 class CancelableLangchainRunner {
   static const String thinkTag = '<think/>';
-  StreamSubscription<ChatResult>? _subscription;
+  final Set<StreamSubscription<ChatResult>> _subscriptions =
+      <StreamSubscription<ChatResult>>{};
 
   void cancel() {
-    _subscription?.cancel();
-    _subscription = null;
+    final subscriptions = _subscriptions.toList(growable: false);
+    _subscriptions.clear();
+    for (final subscription in subscriptions) {
+      unawaited(subscription.cancel());
+    }
   }
 
   Stream<String> stream({
@@ -22,12 +26,13 @@ class CancelableLangchainRunner {
     String answerBuffer = '';
     bool reasoningDetected = false;
     bool answerPhaseStarted = false;
+    StreamSubscription<ChatResult>? subscription;
 
     late StreamController<String> controller;
     controller = StreamController<String>(
       onListen: () {
         final source = model.stream(prompt);
-        _subscription = source.listen(
+        subscription = source.listen(
           (event) {
             final rawChunk = event.output.content;
             final reasoningChunk = event.output.reasoningContent;
@@ -81,14 +86,21 @@ class CancelableLangchainRunner {
             if (!controller.isClosed) {
               await controller.close();
             }
-            _subscription = null;
+            final completed = subscription;
+            if (completed != null) _subscriptions.remove(completed);
+            subscription = null;
           },
           cancelOnError: false,
         );
+        _subscriptions.add(subscription!);
       },
       onCancel: () async {
-        await _subscription?.cancel();
-        _subscription = null;
+        final active = subscription;
+        if (active != null) {
+          _subscriptions.remove(active);
+          subscription = null;
+          await active.cancel();
+        }
         await _closeModel(model);
         if (!controller.isClosed) {
           await controller.close();
@@ -108,6 +120,7 @@ class CancelableLangchainRunner {
     int maxIterations = 120,
   }) {
     final controller = StreamController<String>();
+    StreamSubscription<ChatResult>? subscription;
 
     Future<void>(() async {
       final parser = const ToolsAgentOutputParser();
@@ -194,7 +207,7 @@ class CancelableLangchainRunner {
 
           ChatResult? aggregated;
           final completer = Completer<void>();
-          _subscription = model.stream(prompt, options: options).listen(
+          subscription = model.stream(prompt, options: options).listen(
             (chunk) {
               final normalizedChunk = _normalizeThinkChunk(chunk);
 
@@ -227,13 +240,16 @@ class CancelableLangchainRunner {
               }
             },
             onDone: () {
-              _subscription = null;
+              final completed = subscription;
+              if (completed != null) _subscriptions.remove(completed);
+              subscription = null;
               if (!completer.isCompleted) {
                 completer.complete();
               }
             },
             cancelOnError: true,
           );
+          _subscriptions.add(subscription!);
 
           await completer.future;
 
@@ -326,8 +342,12 @@ class CancelableLangchainRunner {
           controller.addError(error, stack);
         }
       } finally {
-        await _subscription?.cancel();
-        _subscription = null;
+        final active = subscription;
+        if (active != null) {
+          _subscriptions.remove(active);
+          subscription = null;
+          await active.cancel();
+        }
         await _closeModel(model);
         if (!controller.isClosed) {
           await controller.close();

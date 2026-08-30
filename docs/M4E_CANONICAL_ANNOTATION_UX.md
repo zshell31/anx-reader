@@ -302,23 +302,58 @@ At the end of every M4E session:
 
 ### M4E.5 — Sentence-aware annotation context
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: `annotationContext` is compact persisted
-  sentence context; `lookupContext` may be wider, is transient, and is never
-  persisted implicitly.
-- Tests run: —
-- Discovered limitations or follow-up work: No mass backfill of old annotations
-  is in scope.
+- Status: COMPLETE
+- Commit SHA: `247ee365`
+- Important files changed: `assets/foliate-js/src/sentence-context.mjs`,
+  `assets/foliate-js/src/book.js`, `assets/foliate-js/dist/bundle.js`,
+  `assets/foliate-js/test/sentence-context.test.mjs`,
+  `lib/page/book_player/epub_player.dart`, the selection context-menu widgets,
+  `test/page/book_player/selection_session_bridge_test.dart`,
+  `test/service/sync/annotation_mutation_boundary_test.dart`, and
+  `test/service/sync/annotation_repository_test.dart`.
+- Architectural decisions made: A pure sentence-context module reconstructs
+  the live content-document text around a DOM Range and uses
+  `Intl.Segmenter` with sentence granularity and the document language when
+  available. A deterministic local punctuation scanner handles `.`, `?`, `!`,
+  `…`, punctuation runs, closing quotes, and closing brackets when
+  `Intl.Segmenter` is unavailable or fails; Intl output is narrowly refined for
+  the single ellipsis glyph because some implementations do not end a sentence
+  there. Whitespace is collapsed without case-folding or otherwise rewriting
+  lexical content. `annotationContext` is the normalized smallest complete
+  sentence span containing the selection and is passed only to explicit
+  annotation creation. `lookupContext` is the normalized previous sentence,
+  containing span, and next sentence when available; it remains in the
+  generation-bound SelectionSession/menu/provider path and translation now
+  consumes it. The stable payload also carries selected text, chapter, CFI,
+  and geometry. Protocol v2 and existing annotation bytes are unchanged.
+- Tests run: configured `npm test` in `assets/foliate-js` passed all three test
+  files (19 focused sentence-context subtests plus the existing 12 auto-page
+  and 7 SelectionSession subtests); configured `npm run build` succeeded and
+  rebuilt `dist/bundle.js` with the same three top-level-await target warnings;
+  Dart formatting covered all touched Dart files; targeted `flutter analyze`
+  on the player, menus, and touched tests found no issues; focused `flutter
+  test` for the bridge, mutation boundary, and repository passed 23 tests; and
+  `flutter test test/page/book_player/selection_session_bridge_test.dart
+  test/service/sync` passed 171 tests. `package.json` has no lint script, so no
+  unconfigured lint command was invented.
+- Discovered limitations or follow-up work: The fallback is intentionally a
+  punctuation heuristic rather than a linguistic parser and may split unusual
+  abbreviations differently from `Intl.Segmenter`. Context is limited to the
+  current live content document; it does not claim sentence neighbors across
+  EPUB spine documents. The repository has no DOM/WebView integration harness,
+  so Range-to-document reconstruction is covered through the pure module,
+  bridge tests, and built integration. Existing annotations without context
+  are deliberately not backfilled or rewritten. There is no intentional
+  semantic difference from Lingua Reader's compact persisted versus wider
+  provider-context split.
 - Acceptance checklist:
-  - [ ] Replace character-window persistence with robust sentence segmentation
+  - [x] Replace character-window persistence with robust sentence segmentation
     plus fallback.
-  - [ ] Avoid duplication for full-sentence selections after whitespace and
+  - [x] Avoid duplication for full-sentence selections after whitespace and
     terminal-punctuation normalization.
-  - [ ] Keep multi-sentence persisted context to the smallest meaningful span.
-  - [ ] Provide wider transient provider context separately.
-  - [ ] Test word, phrase, clause, sentence, punctuation omission,
+  - [x] Keep multi-sentence persisted context to the smallest meaningful span.
+  - [x] Provide wider transient provider context separately.
+  - [x] Test word, phrase, clause, sentence, punctuation omission,
     multi-sentence selection, and whitespace normalization.
 
 ### M4E.6 — Simplified transient lookup UX
@@ -443,21 +478,21 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 4 of 11 implementation phases
+- Completed submilestones: 5 of 11 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.4 — Preserve cross-page selection
+Last completed submilestone: M4E.5 — Sentence-aware annotation context
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `df3bf5c5 fix: stabilize paginated selection lifecycle`
-Documentation checkpoint: The current commit records the completed M4E.4 implementation SHA and handoff
-Repository state: Clean at the completed M4E.4 documentation checkpoint
-Next submilestone: M4E.5 — Sentence-aware annotation context
-Next concrete tasks: Inventory the current persisted character-window context and transient provider-context consumers; introduce sentence-aware persisted `annotationContext` with normalization/fallback while keeping wider `lookupContext` transient; add focused word, phrase, clause, sentence, punctuation, multi-sentence, and whitespace tests
+Last implementation commit: `247ee365 feat: add sentence-aware annotation context`
+Documentation checkpoint: The current commit records the completed M4E.5 implementation SHA and handoff
+Repository state: Clean at the completed M4E.5 documentation checkpoint
+Next submilestone: M4E.6 — Simplified transient lookup UX
+Next concrete tasks: Inventory the current primary selection actions and transient provider result flows; present AI, Translate, Dictionary, Personal note, and presentation actions without creating an annotation; introduce session-scoped `AnnotationRef` reuse only after the first explicit save; add lookup/no-write and explicit-save/reuse tests
 Known failing tests: None
-Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. Paginated auto-page selection is supported only across visual pages within one live content `Document`/EPUB section; a spine-document replacement ends the session rather than claiming a cross-document DOM `Range`. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `assets/foliate-js/src/book.js` and its current `buildRangeContextText`; `lib/page/book_player/selection_session_bridge.dart`; selection payload consumers in `lib/page/book_player/epub_player.dart`; canonical annotation creation/mutation paths that persist context; and focused context/protocol mutation tests
+Known limitations: Automated tests do not synthesize real Android WebView native-handle gestures. Paginated auto-page selection and sentence context are limited to one live content `Document`/EPUB section; a spine-document replacement ends the session rather than claiming a cross-document DOM `Range` or sentence neighbor. The deterministic sentence fallback is punctuation-based and may differ from `Intl.Segmenter` for unusual abbreviations. Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
+Important files to inspect next: `lib/widgets/context_menu/context_menu.dart`, `lib/widgets/context_menu/excerpt_menu.dart`, `lib/widgets/context_menu/translation_menu.dart`, AI and dictionary provider entry points, `lib/page/book_player/selection_session_bridge.dart`, `lib/page/book_player/epub_player.dart`, and canonical enrichment mutation APIs in `lib/service/sync/annotation_repository.dart`
 
 ### M4E.3 discovered pre-implementation lifecycle
 

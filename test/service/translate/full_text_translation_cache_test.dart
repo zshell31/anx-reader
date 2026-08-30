@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/models/full_text_translation_cache.dart';
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/enums/lang_list.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/service/translate/index.dart';
 import 'package:anx_reader/service/translate/translation_cache_database.dart';
 import 'package:anx_reader/service/translate/translation_fingerprint.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -166,6 +168,54 @@ void main() {
           <String>['shared', 'shared']);
     });
 
+    test(
+        'silent provider times out, releases shared in-flight, and later retry persists',
+        () async {
+      final provider = _SilentThenSuccessfulProvider();
+      final request = _request();
+
+      final first = cache.translate(
+        request,
+        () => provider.translateTextOnly(
+          request.sourceText,
+          LangListEnum.english,
+          LangListEnum.french,
+        ),
+      );
+      final second = cache.translate(
+        request,
+        () => provider.translateTextOnly(
+          request.sourceText,
+          LangListEnum.english,
+          LangListEnum.french,
+        ),
+      );
+
+      await expectLater(
+        Future.wait(<Future<String>>[first, second]),
+        throwsA(isA<Exception>()),
+      );
+      expect(provider.attempts, 3);
+      expect(provider.cancellations, 3);
+      expect(await database.findIncludingDeleted(request.requestKey), isNull);
+
+      provider.succeed = true;
+      expect(
+        await cache.translate(
+          request,
+          () => provider.translateTextOnly(
+            request.sourceText,
+            LangListEnum.english,
+            LangListEnum.french,
+          ),
+        ),
+        'recovered',
+      );
+      expect(provider.attempts, 4);
+      expect((await database.find(request.requestKey))?.translatedText,
+          'recovered');
+    });
+
     test('book clear tombstones only that book', () async {
       final first = _request(book: 'a' * 32);
       final second = _request(book: 'b' * 32);
@@ -243,3 +293,45 @@ TranslationCacheDatabase _databaseAt(String path) => TranslationCacheDatabase(
         ),
       ),
     );
+
+class _SilentThenSuccessfulProvider extends TranslateServiceProvider {
+  _SilentThenSuccessfulProvider()
+      : super(
+          translationInactivityTimeout: const Duration(milliseconds: 10),
+          translationRetryBaseDelay: Duration.zero,
+        );
+
+  int attempts = 0;
+  int cancellations = 0;
+  bool succeed = false;
+
+  @override
+  TranslateService get service => TranslateService.ai;
+
+  @override
+  String getLabel(BuildContext context) => 'test';
+
+  @override
+  Widget translate(
+    String text,
+    LangListEnum from,
+    LangListEnum to, {
+    String? contextText,
+  }) =>
+      const SizedBox.shrink();
+
+  @override
+  Stream<String> translateStream(
+    String text,
+    LangListEnum from,
+    LangListEnum to, {
+    String? contextText,
+    bool isFullText = false,
+  }) {
+    attempts++;
+    if (succeed) return Stream<String>.value('recovered');
+    return StreamController<String>(
+      onCancel: () => cancellations++,
+    ).stream;
+  }
+}

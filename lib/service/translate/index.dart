@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:core';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -72,6 +73,20 @@ TranslateService getTranslateService(String name) {
 /// Base class for all translation service providers.
 /// Subclasses must implement [service], [label], [translate], and [translateStream].
 abstract class TranslateServiceProvider {
+  TranslateServiceProvider({
+    this.translationInactivityTimeout = const Duration(seconds: 30),
+    this.translationRetryBaseDelay = const Duration(milliseconds: 100),
+  });
+
+  /// Maximum silence permitted from one provider attempt. Applying the bound
+  /// to the stream (rather than its collected Future) cancels the subscription
+  /// when it expires, allowing transports such as CancelableLangchainRunner to
+  /// release their request resources.
+  final Duration translationInactivityTimeout;
+
+  /// Exposed for deterministic provider liveness tests.
+  final Duration translationRetryBaseDelay;
+
   /// The service enum value this provider corresponds to.
   TranslateService get service;
 
@@ -146,6 +161,13 @@ abstract class TranslateServiceProvider {
           contextText: contextText,
           isFullText: isFullText,
           routeSnapshot: routeSnapshot,
+        ).timeout(
+          translationInactivityTimeout,
+          onTimeout: (sink) => sink.addError(TimeoutException(
+            'Translation provider was inactive for '
+            '${translationInactivityTimeout.inSeconds} seconds',
+            translationInactivityTimeout,
+          )),
         )) {
           lastResult = result;
         }
@@ -162,7 +184,9 @@ abstract class TranslateServiceProvider {
         if (attempt < maxRetries) {
           AnxLog.warning(
               'Translation attempt ${attempt + 1} failed with exception: $e. Retrying...');
-          await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
+          await Future.delayed(
+            translationRetryBaseDelay * (attempt + 1),
+          );
           continue;
         } else {
           throw Exception(

@@ -861,6 +861,123 @@ Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
 17. Perform an offline edit, reconnect, and sync.
 18. Inspect an unbound/unsupported annotation where practical.
 
+## Post-M4E stabilization review
+
+- Status: COMPLETE
+- Review date: 2026-08-30
+- Scope: focused correctness and compatibility fixes after M4E completion. The
+  canonical architecture, protocol-v2 schema version, UUID identity, merge
+  rules, and presentation-domain separation remain unchanged.
+
+### Findings addressed and commits
+
+- `908d417a fix: align annotation enrichments across clients`
+  - Anx material writes now use the shared semantic fields consumed by Lingua
+    Reader. Translation writes `providerId`, `providerName`, and `translation`.
+    Dictionary writes provider identity plus `markdown`, optional
+    `translation`, and optional string metadata. AI analysis writes provider
+    identity, optional top-level `translation`, and structured `commentary`
+    (`translation`, `translationNotes`, `grammar`, and `usage` when present).
+  - Legacy generic `content` remains readable/searchable for compatibility but
+    is no longer the primary Anx wire payload for these three material kinds.
+    `personal-note` and AI-thread message content retain their established
+    protocol fields.
+  - The read model exposes `content`, `translation`, `markdown`, `commentary`,
+    `providerId`, and `providerName`. Search includes only known meaningful text
+    fields and does not stringify arbitrary JSON. Unknown fields remain intact.
+- `614d5843 fix: preserve canonical bookmark identity and progress`
+  - Foliate removal is UUID-only. Flutter carries the current bookmark UUID
+    from relocation state and JavaScript resolves deletion only through
+    `annotationsById`; no deletion falls back to CFI. `annotationsByValue`
+    remains only a rendering convenience and translation refresh now enumerates
+    the UUID map so same-CFI entries are not collapsed.
+  - Bookmark progress is stored as `target.progress.fraction`, validated in the
+    inclusive range 0 through 1, exposed as `bookmarkPercentage`, and kept
+    outside Anx presentation. Valid legacy bookmark percentages are recovered
+    from the retired bookmark color column; invalid values are ignored safely.
+- `9f597b24 fix: avoid transient selection persistence on delete`
+  - Delete is absent for an unbound transient selection. Its defensive handler
+    also closes without creating state when no `AnnotationRef` exists. Existing
+    annotation deletion still writes a sticky UUID tombstone.
+- `ad16be7b fix: preserve implicit annotation presentation defaults`
+  - `localPresentation` remains the explicit synchronized value. One read-model
+    resolver computes effective display presentation from that value or current
+    Anx defaults. Renderer, filter, Notes tile, and editor use the resolver.
+  - The Notes editor tracks personal-note and presentation changes separately;
+    note-only edits never materialize current defaults. Explicit style/color
+    changes remain stable when global defaults later change.
+- `8c815b2c feat: save selection AI results to canonical annotations`
+  - Only selection-originated `AiChatStream` instances receive an optional
+    `SelectionAiPersistenceContext`. Their initial prompt includes selected text
+    and transient `lookupContext`; opening, generation, and closing write no
+    annotation.
+  - Explicit Save Analysis persists `ai-analysis`; Save Conversation persists
+    `ai-thread`. The first save uses the session creation gate and later saves
+    reuse its exact `AnnotationRef`. Existing annotations are addressed by their
+    supplied ref and same-CFI lookup is never performed. Ordinary reader AI chat
+    remains a general chat without annotation persistence controls.
+- `fdc4c0f6 fix: clarify canonical notes CSV export`
+  - CSV now has separate `Motivation`, `Presentation`, and `Color` columns.
+    It no longer silently changes the old `Type` column from
+    highlight/underline/bookmark semantics to selection/bookmark semantics.
+    Missing explicit presentation exports as blank rather than materializing an
+    effective default.
+- `6d9c6038 test: verify stabilization renderer identity`
+  - Rebuilt the checked-in Foliate bundle and strengthened the architecture
+    guard for UUID-only removal.
+
+### Cross-client compatibility reference
+
+Compatibility was verified against the current local Lingua Reader checkout at
+commit `3678929d8db7eef1d0e91849ba88a59428c9ec99`, specifically
+`src/annotations/types.ts`, `src/annotations/adapters.ts`, and representative
+store/adapter fixtures. Its `MaterialAnnotationEnrichment` shape permits
+provider identity, `content`, `translation`, `markdown`, structured
+`commentary`, and string metadata. Its adapter projects translation from
+`translation` or `commentary.translation`, dictionary articles from `markdown`,
+and AI detail from `commentary`.
+
+The copied minimal fixture at
+`test/fixtures/lingua_annotation_book_v2.json` covers Lingua-created
+translation, dictionary, and AI analysis plus unknown fields. Anx production
+tests cover the inverse Anx-created payload expectations. Protocol-v2
+`translation`, `dictionary`, `ai-analysis`, `personal-note`, and `ai-thread`
+remain compatible; schema version remains 2. No shared-protocol ambiguity and
+no Lingua Reader change were required.
+
+### Verification
+
+- Dart formatting was applied to every touched Dart file; final diff checks
+  passed.
+- Targeted Flutter analysis of each change set passed without errors. Full
+  `flutter analyze --no-pub` reported the same 42 repository informational
+  lints documented at M4E completion, with zero errors and zero warnings.
+- Focused sync, protocol, repository, catalog, migration, selection,
+  presentation, renderer, AI persistence, and stabilization coverage passed
+  213 tests.
+- Full `flutter test --no-pub` passed twice: 284 tests on each run.
+- Foliate `npm test` passed 42 tests, including bookmark/highlight same-CFI
+  removal in both directions. `npm run build` succeeded and rebuilt
+  `dist/bundle.js`; Webpack emitted the same three known top-level-await target
+  warnings. No JavaScript lint script exists, so none was invented.
+
+### Remaining limitations
+
+- Manual Android/device verification is still required; no device checks are
+  claimed by this review.
+- Unbound canonical documents are supported once discovered or imported.
+  WebDAV listing/discovery for arbitrary remote-only books remains a later
+  milestone and was intentionally not added here.
+- The prior M4E limitations remain: presentation ordering uses device clocks
+  and has no compaction, coincident marks have no chooser, external provider
+  apps cannot return savable results, selection cannot span EPUB spine DOM
+  documents, physical legacy tables remain migration-only input, and there is
+  no automated Android native-handle gesture harness.
+
+Overall milestone status: COMPLETE
+
+Branch readiness: Ready for manual verification / merge review
+
 ## Overall milestone status
 
 - Status: COMPLETE
@@ -869,15 +986,13 @@ Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.11 — Final regression and architecture
-verification
+Last completed work: Post-M4E stabilization review
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: `cba0b2f6 test: complete M4E annotation UX regression coverage`
-Documentation checkpoint: The current commit records completed M4E.11 evidence
-and the final handoff
-Repository state: Clean at the completed M4E.11 documentation checkpoint
-Next submilestone: None; M4E implementation and automated verification are
-complete
+Last implementation commit: `6d9c6038 test: verify stabilization renderer identity`
+Documentation checkpoint: This section records the completed post-M4E review,
+cross-client reference, focused commits, and final automated verification
+Repository state: Clean after the stabilization documentation commit
+Next submilestone: None; M4E and post-M4E stabilization are complete
 Next concrete tasks: Execute the manual Android/device checklist, then perform
 merge review. Do not claim device verification until those checks are run.
 Known failing tests: None
@@ -885,9 +1000,10 @@ Known limitations: Presentation LWW uses wall-clock timestamps; presentation
 document/reset records have no compaction; coincident annotation ranges have no
 chooser UI; external provider apps cannot return savable result payloads;
 selection cannot span separate EPUB spine DOM documents; there is no automated
-Android native-handle gesture harness; and physical legacy tables may remain as
-migration-only input. Local `develop` still has the previously documented
-divergence from `origin/develop`.
+Android native-handle gesture harness; physical legacy tables may remain as
+migration-only input; and remote-only WebDAV book discovery remains out of
+scope. Local `develop` still has the previously documented divergence from
+`origin/develop`.
 Important files for review: final architecture coverage under
 `test/service/sync/final_annotation_architecture_test.dart`, the acceptance
 coverage under `test/service/sync/` and `test/page/book_player/`, the Foliate

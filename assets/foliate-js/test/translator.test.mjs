@@ -150,6 +150,12 @@ const relocate = (translator, chapter, ...elements) =>
     chapter.doc,
     visibleRange(...(elements.length > 0 ? elements : chapter.paragraphs)),
   )
+const relocateWithPrefetch = (translator, chapter, current, next) =>
+  translator.reconcileDocument(
+    chapter.doc,
+    visibleRange(current),
+    visibleRange(next),
+  )
 
 const settle = () => new Promise(resolve => setImmediate(resolve))
 const flushLayout = async view => {
@@ -356,17 +362,31 @@ test('retired document elements are unobserved and no longer reconciled', async 
   assert.deepEqual(calls.map(([, text]) => text), ['B'])
 })
 
-test('reconciliation translates only the paginator visible range', async () => {
+test('reconciliation translates current and next paginator ranges only', async () => {
   const { translator, calls } = setup()
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapter = makeDocument('visible', 'next page', 'far away')
   translator.observeDocument(chapter.doc)
 
-  await relocate(translator, chapter, chapter.paragraphs[0])
-  assert.deepEqual(calls.map(([, text]) => text), ['visible'])
-  assert.equal(wrappers(chapter.paragraphs[1]).length, 0)
-
-  await relocate(translator, chapter, chapter.paragraphs[1])
+  await relocateWithPrefetch(
+    translator,
+    chapter,
+    chapter.paragraphs[0],
+    chapter.paragraphs[1],
+  )
   assert.deepEqual(calls.map(([, text]) => text), ['visible', 'next page'])
+  assert.equal(wrappers(chapter.paragraphs[1]).length, 1)
   assert.equal(wrappers(chapter.paragraphs[2]).length, 0)
+
+  await relocateWithPrefetch(
+    translator,
+    chapter,
+    chapter.paragraphs[1],
+    chapter.paragraphs[2],
+  )
+  assert.deepEqual(
+    calls.map(([, text]) => text),
+    ['visible', 'next page', 'far away'],
+  )
+  assert.equal(wrappers(chapter.paragraphs[2]).length, 1)
 })

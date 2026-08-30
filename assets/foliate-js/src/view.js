@@ -173,12 +173,16 @@ export class View extends HTMLElement {
   #emit(name, detail, cancelable) {
     return this.dispatchEvent(new CustomEvent(name, { detail, cancelable }))
   }
-  #onRelocate({ reason, range, index, fraction, size }) {
+  #onRelocate({ reason, range, prefetchRange, index, fraction, size }) {
     // Relocation is the renderer's layout-complete boundary. Reconcile all
     // documents it still owns so a missed IntersectionObserver transition
     // cannot leave a visible paragraph untranslated.
     const documents = this.renderer.getContents().map(({ doc }) => doc)
-    this.#translator.reconcileDocuments(documents, range).catch(error =>
+    this.#translator.reconcileDocuments(
+      documents,
+      range,
+      prefetchRange,
+    ).catch(error =>
       console.warn('Translation relocation reconciliation failed:', error))
 
     this.#index = index

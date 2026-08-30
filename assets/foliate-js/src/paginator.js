@@ -1125,12 +1125,16 @@ export class Paginator extends HTMLElement {
       sel.addRange(this.#anchor)
     }
   }
-  #getVisibleRange() {
+  #getVisibleRange(offset = 0) {
     if (this.scrolled) return getVisibleRange(this.#view.document,
-      this.start + this.#margin, this.end - this.#margin, this.#getRectMapper())
+      this.start + this.#margin + offset,
+      this.end - this.#margin + offset,
+      this.#getRectMapper())
     const size = this.#rtl ? -this.size : this.size
     return getVisibleRange(this.#view.document,
-      this.start - size, this.end - size, this.#getRectMapper())
+      this.start - size + offset,
+      this.end - size + offset,
+      this.#getRectMapper())
   }
   #afterScroll(reason) {
     const range = this.#getVisibleRange()
@@ -1140,6 +1144,12 @@ export class Paginator extends HTMLElement {
 
     const index = this.#index
     const detail = { reason, range, index }
+    const hasNextVisualPage = this.scrolled
+      ? this.viewSize - this.end > 2
+      : this.page < this.pages - 2
+    if (hasNextVisualPage) {
+      detail.prefetchRange = this.#getVisibleRange(this.size)
+    }
     if (this.scrolled) detail.fraction = this.start / this.viewSize
     else if (this.pages > 0) {
       const { page, pages } = this

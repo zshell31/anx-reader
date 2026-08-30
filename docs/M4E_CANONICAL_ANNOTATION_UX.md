@@ -360,7 +360,7 @@ At the end of every M4E session:
 ### M4E.6 — Simplified transient lookup UX
 
 - Status: COMPLETE
-- Commit SHA: pending in this implementation commit
+- Commit SHA: `d32f6afd`
 - Important files changed: `lib/page/book_player/selection_persistence_session.dart`,
   the context/excerpt/translation/personal-note menu widgets,
   `lib/service/sync/annotation_repository.dart`,
@@ -531,10 +531,10 @@ At the end of every M4E session:
 
 Last completed submilestone: M4E.6 — Simplified transient lookup UX
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last implementation commit: pending `feat: add transient annotation lookup workflow`
-Documentation checkpoint: This implementation commit records M4E.6 COMPLETE;
-the following documentation checkpoint records its SHA
-Repository state: Implementation ready for its M4E.6 commit
+Last implementation commit: `d32f6afd feat: add transient annotation lookup workflow`
+Documentation checkpoint: The current commit records the completed M4E.6
+implementation SHA and handoff
+Repository state: Clean at the completed M4E.6 documentation checkpoint
 Next submilestone: M4E.7 — Canonical enrichment mutation API
 Next concrete tasks: Add canonical `AnnotationRef` create/enrichment/tombstone
 APIs, migrate the SelectionPersistenceSession and context menu off native IDs,

@@ -47,6 +47,14 @@ void main() {
     expect(source, contains('annotationRepository.setPersonalNote(ref'));
     expect(source, contains('annotationRepository.updatePresentation('));
     expect(source, contains('annotationRepository.tombstoneAnnotation('));
+    expect(source, contains('hasPersistedAnnotation'));
+    expect(source,
+        contains('final ref = widget.persistenceSession.annotationRef'));
+    expect(
+      source,
+      isNot(contains(
+          'await widget.persistenceSession.ensureAnnotation(\n        _createOrResolve,\n      );\n      await annotationRepository.tombstoneAnnotation')),
+    );
     expect(source, isNot(contains('saveTranslationForNativeId')));
     expect(source, isNot(contains('setPersonalNoteForNativeId')));
     expect(source, isNot(contains('updatePresentationForNativeId')));

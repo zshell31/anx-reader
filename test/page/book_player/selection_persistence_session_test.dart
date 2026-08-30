@@ -32,6 +32,18 @@ void main() {
 
     expect(writes, 0);
     expect(session.annotationRef, isNull);
+    expect(session.hasPersistedAnnotation, isFalse);
+  });
+
+  test('transient delete eligibility never creates an annotation', () {
+    var writes = 0;
+    final session = SelectionPersistenceSession(snapshot());
+
+    final canDelete = session.hasPersistedAnnotation;
+
+    expect(canDelete, isFalse);
+    expect(session.annotationRef, isNull);
+    expect(writes, 0);
   });
 
   test('provider failure and closing a result write nothing', () async {
@@ -82,6 +94,7 @@ void main() {
     expect(creates, 1);
     expect(saves, 2);
     expect(session.annotationRef?.annotationId, 'annotation-a');
+    expect(session.hasPersistedAnnotation, isTrue);
   });
 
   test('concurrent persistence creates only one annotation', () async {

@@ -52,6 +52,7 @@ class SelectionPersistenceSession {
 
   AnnotationRef? get annotationRef => _annotation?.ref;
   SelectionAnnotationHandle? get annotation => _annotation;
+  bool get hasPersistedAnnotation => _annotation != null;
 
   void attachExisting(SelectionAnnotationHandle annotation) {
     final current = _annotation;

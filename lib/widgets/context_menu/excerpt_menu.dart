@@ -180,11 +180,13 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   }
 
   Future<void> deleteHandler() async {
+    final ref = widget.persistenceSession.annotationRef;
+    if (ref == null) {
+      widget.onClose();
+      return;
+    }
     if (deleteConfirm) {
-      final handle = await widget.persistenceSession.ensureAnnotation(
-        _createOrResolve,
-      );
-      await annotationRepository.tombstoneAnnotation(handle.ref);
+      await annotationRepository.tombstoneAnnotation(ref);
       await epubPlayerKey.currentState!.refreshAnnotations();
       widget.onClose();
     } else {
@@ -306,10 +308,11 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         axis: widget.axis,
         mainAxisSize: MainAxisSize.min,
         children: [
-          iconButton(
-            onPressed: deleteHandler,
-            icon: deleteIcon(),
-          ),
+          if (widget.persistenceSession.hasPersistedAnnotation)
+            iconButton(
+              onPressed: deleteHandler,
+              icon: deleteIcon(),
+            ),
           for (final type in notesType) typeButton(type.type, type.icon),
           for (String color in notesColors) colorButton(color),
         ],

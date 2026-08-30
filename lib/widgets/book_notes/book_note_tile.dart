@@ -1,4 +1,5 @@
 import 'package:anx_reader/constants/note_annotations.dart';
+import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/utils/time_to_human.dart';
 import 'package:anx_reader/widgets/common/container/filled_container.dart';
@@ -22,11 +23,11 @@ class BookNoteTile extends StatelessWidget {
   final Color? backgroundColor;
   final EdgeInsetsGeometry margin;
 
-  Icon _buildIcon(Color color) {
+  Icon _buildIcon(Color color, AnnotationPresentation presentation) {
     if (note.motivation == AnnotationMotivation.bookmark) {
       return Icon(Icons.bookmark, color: color);
     }
-    final style = note.localPresentation?.style.name ?? 'highlight';
+    final style = presentation.style.name;
     final match = notesType.where((option) => option.type == style);
     if (match.isNotEmpty) {
       return Icon(match.first.icon, color: color);
@@ -36,8 +37,15 @@ class BookNoteTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final prefs = Prefs();
+    final presentation = note.effectivePresentation(
+      defaultStyle: prefs.annotationType,
+      defaultColor: prefs.annotationColor,
+    );
     final iconColor = Color(
-      int.tryParse('0xaa${note.localPresentation?.color ?? '555555'}') ??
+      int.tryParse(
+            '0xaa${note.motivation == AnnotationMotivation.bookmark ? '555555' : presentation.color}',
+          ) ??
           0xaa555555,
     );
     final infoStyle = const TextStyle(
@@ -59,7 +67,7 @@ class BookNoteTile extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 10, right: 10, top: 10),
-              child: _buildIcon(iconColor),
+              child: _buildIcon(iconColor, presentation),
             ),
             Expanded(
               child: Column(

@@ -225,13 +225,15 @@ class BookNotesController extends _$BookNotesController {
 
   Future<void> updateAnnotation(
     AnnotationRef ref, {
-    required String personalNote,
+    String? personalNote,
     String? type,
     String? color,
   }) async {
     final current = state.valueOrNull;
     if (current == null) return;
-    await annotationRepository.setPersonalNote(ref, personalNote);
+    if (personalNote != null) {
+      await annotationRepository.setPersonalNote(ref, personalNote);
+    }
     if (type != null && color != null) {
       await annotationRepository.updatePresentation(ref, type, color);
     }
@@ -329,11 +331,13 @@ List<AnnotationUiModel> _filterAndSort(
       }
       continue;
     }
-    final presentation = annotation.localPresentation;
     final prefs = Prefs();
-    final style = presentation?.style.name ?? prefs.annotationType;
-    final color = presentation?.color ??
-        prefs.annotationColor.replaceFirst(RegExp(r'^#'), '');
+    final presentation = annotation.effectivePresentation(
+      defaultStyle: prefs.annotationType,
+      defaultColor: prefs.annotationColor,
+    );
+    final style = presentation.style.name;
+    final color = presentation.color;
     final key = _filterKey(style, color);
     if (enabledTypeColors.contains(key)) {
       filtered.add(annotation);

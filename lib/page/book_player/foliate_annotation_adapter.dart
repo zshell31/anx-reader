@@ -55,12 +55,15 @@ class FoliateAnnotationAdapter {
         note: annotation.selectedText,
       );
     }
-    final presentation = annotation.localPresentation;
+    final presentation = annotation.effectivePresentation(
+      defaultStyle: defaultStyle.name,
+      defaultColor: defaultColor,
+    );
     return FoliateAnnotationDto(
       id: annotation.ref.annotationId,
       value: annotation.epubCfi!,
-      type: (presentation?.style ?? defaultStyle).name,
-      color: presentation?.color ?? defaultColor,
+      type: presentation.style.name,
+      color: presentation.color,
       note: annotation.selectedText,
     );
   }

@@ -1,4 +1,5 @@
 import 'package:anx_reader/constants/note_annotations.dart';
+import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/hint_key.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
@@ -412,10 +413,19 @@ class BookNotesList extends ConsumerWidget {
   void _editBookNote(
       BuildContext context, WidgetRef ref, AnnotationUiModel bookNote) {
     final isBookmark = bookNote.motivation == AnnotationMotivation.bookmark;
-    String currentType = bookNote.localPresentation?.style.name ?? 'highlight';
-    String currentColor =
-        bookNote.localPresentation?.color ?? notesColors.first;
+    final prefs = Prefs();
+    final effectivePresentation = bookNote.effectivePresentation(
+      defaultStyle: prefs.annotationType,
+      defaultColor: prefs.annotationColor,
+    );
+    final initialType = effectivePresentation.style.name;
+    final initialColor = effectivePresentation.color;
+    String currentType = initialType;
+    String currentColor = initialColor;
     String? currentNote = bookNote.effectivePersonalNote?.content;
+    final initialNote = currentNote?.trim() ?? '';
+    var presentationDirty = false;
+    var personalNoteDirty = false;
 
     final noteController = TextEditingController(text: currentNote);
 
@@ -456,6 +466,9 @@ class BookNotesList extends ConsumerWidget {
                                   onPressed: () {
                                     setState(() {
                                       currentType = type.type;
+                                      presentationDirty =
+                                          currentType != initialType ||
+                                              currentColor != initialColor;
                                     });
                                   },
                                 );
@@ -474,6 +487,9 @@ class BookNotesList extends ConsumerWidget {
                                   onPressed: () {
                                     setState(() {
                                       currentColor = color;
+                                      presentationDirty =
+                                          currentType != initialType ||
+                                              currentColor != initialColor;
                                     });
                                   },
                                 );
@@ -491,6 +507,9 @@ class BookNotesList extends ConsumerWidget {
                           hintText: L10n.of(context).contextMenuAddNoteTips,
                         ),
                         maxLines: 3,
+                        onChanged: (value) {
+                          personalNoteDirty = value.trim() != initialNote;
+                        },
                       ),
                     ),
                   ],
@@ -508,9 +527,15 @@ class BookNotesList extends ConsumerWidget {
                         .read(bookNotesControllerProvider(fingerprint).notifier)
                         .updateAnnotation(
                           bookNote.ref,
-                          personalNote: noteController.text.trim(),
-                          type: isBookmark ? null : currentType,
-                          color: isBookmark ? null : currentColor,
+                          personalNote: personalNoteDirty
+                              ? noteController.text.trim()
+                              : null,
+                          type: !isBookmark && presentationDirty
+                              ? currentType
+                              : null,
+                          color: !isBookmark && presentationDirty
+                              ? currentColor
+                              : null,
                         );
                   },
                   child: Text(L10n.of(context).commonSave),

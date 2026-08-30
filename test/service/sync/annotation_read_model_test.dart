@@ -114,6 +114,43 @@ void main() {
           reason: 'read adapters must not mutate or reserialize source maps');
     });
 
+    test('effective presentation keeps explicit and current defaults distinct',
+        () {
+      final implicit = const CanonicalAnnotationReadAdapter()
+          .read(document([annotation('implicit')]))
+          .single;
+      final first = implicit.effectivePresentation(
+        defaultStyle: 'highlight',
+        defaultColor: '#66CCFF',
+      );
+      final changed = implicit.effectivePresentation(
+        defaultStyle: 'underline',
+        defaultColor: '00ff00',
+      );
+
+      expect(implicit.localPresentation, isNull);
+      expect(first.style, AnnotationPresentationStyle.highlight);
+      expect(first.color, '66CCFF');
+      expect(changed.style, AnnotationPresentationStyle.underline);
+      expect(changed.color, '00ff00');
+
+      const explicit = AnnotationPresentation(
+        annotationId: 'explicit',
+        style: AnnotationPresentationStyle.highlight,
+        color: 'red',
+      );
+      final explicitModel = const CanonicalAnnotationReadAdapter(
+        presentations: {'explicit': explicit},
+      ).read(document([annotation('explicit')])).single;
+      expect(
+        explicitModel.effectivePresentation(
+          defaultStyle: 'underline',
+          defaultColor: 'blue',
+        ),
+        same(explicit),
+      );
+    });
+
     test('keeps same-CFI annotations separate by canonical UUID', () {
       final sharedSelector = [
         {'type': 'epub-cfi', 'cfi': 'epubcfi(/6/2)'}

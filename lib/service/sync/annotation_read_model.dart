@@ -168,6 +168,22 @@ class AnnotationUiModel {
 
   bool get isTombstoned =>
       tombstoneState == AnnotationTombstoneState.tombstoned;
+
+  /// Resolves display-only presentation without materializing current defaults.
+  AnnotationPresentation effectivePresentation({
+    required String defaultStyle,
+    required String defaultColor,
+  }) {
+    final explicit = localPresentation;
+    if (explicit != null) return explicit;
+    return AnnotationPresentation(
+      annotationId: ref.annotationId,
+      style: defaultStyle == 'underline'
+          ? AnnotationPresentationStyle.underline
+          : AnnotationPresentationStyle.highlight,
+      color: defaultColor.replaceFirst(RegExp(r'^#'), ''),
+    );
+  }
 }
 
 /// One-way adapter from protocol-owned canonical maps to typed read models.

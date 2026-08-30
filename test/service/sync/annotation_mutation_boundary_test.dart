@@ -91,6 +91,26 @@ void main() {
         contains('tombstoneAnnotation(annotation.ref)'));
   });
 
+  test('Notes surfaces share effective presentation and dirty persistence', () {
+    final provider = File('lib/providers/book_notes.dart').readAsStringSync();
+    final tile =
+        File('lib/widgets/book_notes/book_note_tile.dart').readAsStringSync();
+    final editor =
+        File('lib/widgets/book_notes/book_notes_list.dart').readAsStringSync();
+    final renderer =
+        File('lib/page/book_player/foliate_annotation_adapter.dart')
+            .readAsStringSync();
+
+    for (final source in [provider, tile, editor, renderer]) {
+      expect(source, contains('.effectivePresentation('));
+    }
+    expect(editor, contains('presentationDirty'));
+    expect(editor, contains('personalNoteDirty'));
+    expect(editor, contains('personalNote: personalNoteDirty'));
+    expect(editor, contains('type: !isBookmark && presentationDirty'));
+    expect(provider, contains('if (personalNote != null)'));
+  });
+
   test('modern runtime has no legacy annotation-table writes or reads', () {
     const migrationOnly = {
       'lib/dao/database.dart',

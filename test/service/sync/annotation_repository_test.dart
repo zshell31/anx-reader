@@ -249,6 +249,20 @@ void main() {
     expect(presentationNotifications, 1);
   });
 
+  test('editing only personal note does not materialize presentation defaults',
+      () async {
+    final ref = await repository.createAnnotation(creation());
+
+    await repository.setPersonalNote(ref, 'note only');
+
+    expect(await shared.annotationPresentation(ref.annotationId), isNull);
+    expect(await shared.hasAnnotationPresentationOperation(ref.annotationId),
+        isFalse);
+    final annotation = annotationOf(
+        (await shared.annotationDocument(fingerprint))!, ref.annotationId);
+    expect(annotation['enrichments'].single['content'], 'note only');
+  });
+
   test('bookmark motivation is canonical and presentation is rejected',
       () async {
     final ref = await repository.createBookmark(BookmarkCreation(

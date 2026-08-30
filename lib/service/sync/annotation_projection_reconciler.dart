@@ -4,7 +4,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
-import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:crypto/crypto.dart';
@@ -288,7 +288,7 @@ class AnnotationProjectionReconciler {
     if (selectedText is! String || (chapter != null && chapter is! String)) {
       return null;
     }
-    final personalNote = _projectedPersonalNote(annotation);
+    final personalNote = effectivePersonalNote(annotation);
     final material = {
       'motivation': annotation['motivation'],
       'selectedText': selectedText,
@@ -308,38 +308,14 @@ class AnnotationProjectionReconciler {
     );
   }
 
-  _PersonalNote? _projectedPersonalNote(Map<String, dynamic> annotation) {
-    final enrichments = annotation['enrichments'] as List;
-    final personalNotes = enrichments
-        .cast<Map<String, dynamic>>()
-        .where((item) => item['kind'] == 'personal-note')
-        .toList();
-    if (personalNotes.isEmpty) return null;
-    // Tombstones participate in winner selection. Otherwise an older active
-    // enrichment could resurrect a note that the user explicitly cleared.
-    personalNotes.sort((left, right) {
-      final time =
-          (left['updatedAt'] as String).compareTo(right['updatedAt'] as String);
-      return time != 0
-          ? time
-          : canonicalJson(left).compareTo(canonicalJson(right));
-    });
-    final winner = personalNotes.last;
-    if (winner.containsKey('deletedAt') || winner['content'] is! String) {
-      return null;
-    }
-    return _PersonalNote(
-        winner['content'] as String, winner['updatedAt'] as String);
-  }
-
   String _projectionUpdatedAt(
-      Map<String, dynamic> annotation, _PersonalNote? personalNote) {
+      Map<String, dynamic> annotation, AnnotationEnrichmentView? personalNote) {
     final annotationTime = annotation['updatedAt'] as String;
     if (personalNote == null ||
-        annotationTime.compareTo(personalNote.updatedAt) >= 0) {
+        !personalNote.updatedAt.isAfter(DateTime.parse(annotationTime))) {
       return annotationTime;
     }
-    return personalNote.updatedAt;
+    return canonicalWireTimestamp(personalNote.updatedAt);
   }
 
   BookNote _desiredNote(
@@ -412,11 +388,4 @@ class _RepresentableProjection {
     required this.updatedAt,
     required this.hash,
   });
-}
-
-class _PersonalNote {
-  final String content;
-  final String updatedAt;
-
-  const _PersonalNote(this.content, this.updatedAt);
 }

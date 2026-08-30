@@ -4,6 +4,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_projection_reconciler.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -255,7 +256,7 @@ class AnnotationRepository {
     final personal = enrichments
         .where((item) => item['kind'] == 'personal-note')
         .toList()
-      ..sort(_compareUpdated);
+      ..sort(compareCanonicalEntityRecency);
     final timestamp = _nextTimestamp(annotation, after: personal);
     final deterministicId = 'personal-note:${binding.annotationId}';
     final ownedNotes = personal
@@ -263,7 +264,7 @@ class AnnotationRepository {
             item['id'] == deterministicId ||
             (item['id'] as String).startsWith('$deterministicId:'))
         .toList()
-      ..sort(_compareUpdated);
+      ..sort(compareCanonicalEntityRecency);
     final ownedWinner = ownedNotes.isEmpty ? null : ownedNotes.last;
 
     if (value.isEmpty) {
@@ -432,7 +433,7 @@ class AnnotationRepository {
   }
 
   void _ensureAlive(Map<String, dynamic> annotation) {
-    if (annotation.containsKey('deletedAt')) {
+    if (isProtocolEntityTombstoned(annotation)) {
       throw StateError('Cannot edit a tombstoned annotation');
     }
   }
@@ -449,15 +450,6 @@ class AnnotationRepository {
       candidate = previous.add(const Duration(milliseconds: 1));
     }
     return canonicalWireTimestamp(candidate);
-  }
-
-  static int _compareUpdated(
-      Map<String, dynamic> left, Map<String, dynamic> right) {
-    final time =
-        (left['updatedAt'] as String).compareTo(right['updatedAt'] as String);
-    return time != 0
-        ? time
-        : canonicalJson(left).compareTo(canonicalJson(right));
   }
 }
 

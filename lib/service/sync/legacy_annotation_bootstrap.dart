@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/native_annotation_projection.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:crypto/crypto.dart';
@@ -92,24 +93,6 @@ abstract final class LegacyAnnotationAnchor {
 
   static String _motivation(String nativeType) =>
       nativeType == 'bookmark' ? 'bookmark' : 'selection';
-}
-
-String? supportedEpubCfi(Map target) {
-  final selectors = target['selectors'];
-  if (selectors is! List) return null;
-  final values = <String>{};
-  for (final selector in selectors) {
-    if (selector is Map && selector['type'] == 'epub-cfi') {
-      final value = selector['cfi'];
-      if (value is String && _isEpubCfi(value)) values.add(value.trim());
-    }
-  }
-  return values.length == 1 ? values.single : null;
-}
-
-bool _isEpubCfi(String value) {
-  final cfi = value.trim();
-  return cfi.startsWith('epubcfi(') && cfi.endsWith(')') && cfi.length > 9;
 }
 
 /// Imports only identities and locators that can be represented honestly.
@@ -243,7 +226,7 @@ class LegacyAnnotationBootstrap {
     } on AnnotationProtocolException {
       return 'invalid MD5 fingerprint';
     }
-    if (!_isEpubCfi(note.cfi)) return 'invalid or non-EPUB-CFI locator';
+    if (!isEpubCfi(note.cfi)) return 'invalid or non-EPUB-CFI locator';
     return null;
   }
 

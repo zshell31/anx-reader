@@ -127,22 +127,41 @@ At the end of every M4E session:
 
 ### M4E.1 — Canonical annotation read model and semantic helpers
 
-- Status: NOT STARTED
-- Commit SHA: —
-- Important files changed: —
-- Architectural decisions made: Read-only typed adapters will reference
-  canonical protocol maps without becoming a second serialization layer.
-- Tests run: —
-- Discovered limitations or follow-up work: Inspect and centralize existing
-  tombstone, enrichment winner, selector, and capability rules before migrating
-  consumers.
+- Status: COMPLETE
+- Commit SHA: Pending this phase commit
+- Important files changed: `lib/service/sync/annotation_read_model.dart`,
+  `lib/service/sync/annotation_projection_reconciler.dart`,
+  `lib/service/sync/annotation_repository.dart`,
+  `lib/service/sync/legacy_annotation_bootstrap.dart`, and
+  `test/service/sync/annotation_read_model_test.dart`
+- Architectural decisions made: `CanonicalAnnotationReadAdapter` is a one-way
+  typed view with no reverse serialization API. `AnnotationRef` combines the
+  canonical MD5 book fingerprint and annotation UUID. Enrichment payloads are
+  recursively read-only so future protocol fields remain inspectable without
+  becoming a second serializer. Tombstones participate in the effective
+  personal-note winner before an active value is selected. Navigation and
+  rendering capabilities are separate and never control annotation visibility.
+  Local presentation is an optional injected value until M4E.2 persists it.
+- Tests run: `dart format` on all touched Dart files; `flutter analyze` on all
+  touched production/test Dart files (no issues); `flutter test` for
+  `annotation_read_model_test.dart`, `annotation_protocol_test.dart`,
+  `annotation_projection_reconciliation_test.dart`, and
+  `annotation_repository_test.dart` (44 passed); `flutter test` for
+  `annotation_protocol_fixture_test.dart` and
+  `annotation_mutation_boundary_test.dart` (34 passed); final focused
+  `annotation_read_model_test.dart` run after tie-break coverage (8 passed).
+- Discovered limitations or follow-up work: Book availability is supplied by
+  the caller because the canonical document deliberately has no local catalog
+  binding. The adapter currently carries an optional presentation value; M4E.2
+  must supply effective defaults and durable sidecar reads. The existing native
+  projection remains in place until later phases.
 - Acceptance checklist:
-  - [ ] Add `AnnotationRef` and a typed UI/read model.
-  - [ ] Centralize tombstone, active enrichment, effective personal-note,
+  - [x] Add `AnnotationRef` and a typed UI/read model.
+  - [x] Centralize tombstone, active enrichment, effective personal-note,
     supported EPUB CFI selector, and capability semantics.
-  - [ ] Include local presentation through an injected/read-only boundary.
-  - [ ] Preserve unknown protocol fields and selectors.
-  - [ ] Add focused tests.
+  - [x] Include local presentation through an injected/read-only boundary.
+  - [x] Preserve unknown protocol fields and selectors.
+  - [x] Add focused tests.
 
 ### M4E.2 — Local annotation presentation sidecar
 
@@ -340,17 +359,17 @@ At the end of every M4E session:
 ## Overall milestone status
 
 - Status: IN PROGRESS
-- Completed submilestones: 0 of 11 implementation phases
+- Completed submilestones: 1 of 11 implementation phases
 - Branch readiness: Not ready to merge
 
 ## Current checkpoint
 
-Last completed submilestone: M4E.0 durable plan (pending its required first commit)
+Last completed submilestone: M4E.1 — Canonical annotation read model and semantic helpers (pending its phase commit)
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last commit: `1a84d5a7 Fix annotation book metadata merge` (branch base)
-Repository state: Planning document added; no production code changed
-Next submilestone: M4E.1 — Canonical annotation read model and semantic helpers
-Next concrete tasks: Commit this planning document, then inspect protocol semantic helpers and projection/UI consumers; design read-only `AnnotationRef`/`AnnotationUiModel` adapters; add focused tests without introducing a second serializer
-Known failing tests: None known; no tests run for the documentation-only checkpoint
+Last commit: `6aeed3d3 docs: add M4E canonical annotation UX plan`
+Repository state: M4E.1 implementation, tests, and this progress update are ready for their independent commit
+Next submilestone: M4E.2 — Local annotation presentation sidecar
+Next concrete tasks: Commit M4E.1, then inspect the application database migration framework, shared-state schema migration conventions, annotation preference defaults, and legacy BookNote presentation/bootstrap paths; design a UUID-keyed local sidecar that migrates type/color without dirtying canonical state
+Known failing tests: None
 Known limitations: Local `develop` tracks the upstream project and `git pull --ff-only` could not fast-forward because histories diverged; per user direction, M4E is based on the current local `develop` tip containing merged M4A–M4D work, with no `origin/develop` comparison
-Important files to inspect next: `lib/service/sync/annotation_protocol.dart`, `lib/service/sync/annotation_repository.dart`, `lib/service/sync/annotation_projection_reconciler.dart`, `lib/service/sync/shared_state_database.dart`, `lib/models/book_note.dart`, `lib/dao/book_note.dart`, and `test/service/sync/annotation_protocol_test.dart`
+Important files to inspect next: `lib/service/sync/shared_state_database.dart`, `lib/dao/database.dart`, `lib/dao/book_note.dart`, `lib/service/sync/legacy_annotation_bootstrap.dart`, `lib/service/sync/annotation_projection_reconciler.dart`, `lib/config/shared_preference_provider.dart`, and `test/service/sync/shared_state_database_test.dart`

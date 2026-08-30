@@ -8,6 +8,16 @@ import 'package:path/path.dart' as path;
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as io;
 
+String contentTypeForFoliateAsset(String uriPath) {
+  if (uriPath.endsWith('.html')) return 'text/html';
+  if (uriPath.endsWith('.css')) return 'text/css';
+  if (uriPath.endsWith('.js') || uriPath.endsWith('.mjs')) {
+    return 'application/javascript';
+  }
+  if (uriPath.endsWith('.json')) return 'application/json';
+  return 'application/octet-stream';
+}
+
 class Server {
   static final Server _singleton = Server._internal();
 
@@ -126,24 +136,10 @@ class Server {
       String content =
           await _loadAsset('assets/foliate-js/${uriPath.substring(12)}');
 
-      // Determine content type based on file extension
-      String contentType;
-      if (uriPath.endsWith('.html')) {
-        contentType = 'text/html';
-      } else if (uriPath.endsWith('.css')) {
-        contentType = 'text/css';
-      } else if (uriPath.endsWith('.js')) {
-        contentType = 'application/javascript';
-      } else if (uriPath.endsWith('.json')) {
-        contentType = 'application/json';
-      } else {
-        contentType = 'application/octet-stream';
-      }
-
       return shelf.Response.ok(
         content,
         headers: {
-          'Content-Type': contentType,
+          'Content-Type': contentTypeForFoliateAsset(uriPath),
         },
       );
     } else if (uriPath.startsWith('/bgimg/')) {

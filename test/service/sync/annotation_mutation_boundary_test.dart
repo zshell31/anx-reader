@@ -37,6 +37,26 @@ void main() {
     }
   });
 
+  test(
+      'lookup context is transient and annotation creation uses only annotation context',
+      () {
+    final playerSource =
+        File('lib/page/book_player/epub_player.dart').readAsStringSync();
+    final menuSource =
+        File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
+    final excerptSource =
+        File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
+
+    expect(playerSource,
+        contains("_selectionContext(location, 'annotationContext')"));
+    expect(
+        playerSource, contains("_selectionContext(location, 'lookupContext')"));
+    expect(menuSource, contains('annotationContext: widget.annotationContext'));
+    expect(menuSource, contains('lookupContext: widget.lookupContext'));
+    expect(excerptSource, contains('context: widget.annotationContext'));
+    expect(excerptSource, isNot(contains('context: widget.lookupContext')));
+  });
+
   test('rendered annotation taps use a bridge path distinct from selections',
       () {
     final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();

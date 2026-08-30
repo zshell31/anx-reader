@@ -229,6 +229,15 @@ void main() {
     expect(outbox.single.localRevision, 1);
   });
 
+  test('selection without useful sentence context omits canonical context',
+      () async {
+    final note = await createSelection(context: null);
+    final document = (await shared.annotationDocument(fingerprint))!;
+    final annotation = annotationOf(document, note.sharedAnnotationId!);
+
+    expect(annotation['target'], isNot(contains('context')));
+  });
+
   test('personal note create/edit/clear tombstones and preserves unknown data',
       () async {
     final note = await createSelection();

@@ -103,7 +103,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   String bookmarkCfi = '';
   bool bookmarkExists = false;
   WritingModeEnum writingMode = WritingModeEnum.horizontalTb;
-  String? _lastSelectionContextText;
+  String? _lastSelectionAnnotationContext;
+  String? _lastSelectionLookupContext;
   final SelectionSessionBridgeState _selectionSession =
       SelectionSessionBridgeState();
 
@@ -612,9 +613,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
   }
 
-  String? _selectionContextText(Map<String, dynamic> location) {
-    final rawContextText = location['contextText']?.toString();
-    return (rawContextText?.trim().isEmpty ?? true) ? null : rawContextText;
+  String? _selectionContext(
+    Map<String, dynamic> location,
+    String field,
+  ) {
+    final rawContext = location[field]?.toString();
+    return (rawContext?.trim().isEmpty ?? true) ? null : rawContext;
   }
 
   Future<void> setHandler(InAppWebViewController controller) async {
@@ -684,7 +688,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         final location = Map<String, dynamic>.from(args[0] as Map);
         if (!_selectionSession.selectionChanged(location)) return;
 
-        _lastSelectionContextText = _selectionContextText(location);
+        _lastSelectionAnnotationContext =
+            _selectionContext(location, 'annotationContext');
+        _lastSelectionLookupContext =
+            _selectionContext(location, 'lookupContext');
         removeOverlay();
       },
     );
@@ -695,7 +702,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         if (!_selectionSession.actionsRequested(location)) return;
 
         final generation = _selectionSession.generation!;
-        _lastSelectionContextText = _selectionContextText(location);
+        _lastSelectionAnnotationContext =
+            _selectionContext(location, 'annotationContext');
+        _lastSelectionLookupContext =
+            _selectionContext(location, 'lookupContext');
         final position = Map<String, dynamic>.from(location['pos'] as Map);
         showContextMenu(
           context,
@@ -708,7 +718,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           null,
           location['footnote'] as bool,
           writingMode.isVertical ? Axis.vertical : Axis.horizontal,
-          contextText: _lastSelectionContextText,
+          chapter: _selectionContext(location, 'chapter'),
+          annotationContext: _lastSelectionAnnotationContext,
+          lookupContext: _lastSelectionLookupContext,
           selectionSessionGeneration: generation,
         );
       },
@@ -728,7 +740,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         final payload = Map<String, dynamic>.from(args[0] as Map);
         final generation = (payload['sessionId'] as num).toInt();
         if (!_selectionSession.selectionCleared(generation)) return;
-        _lastSelectionContextText = null;
+        _lastSelectionAnnotationContext = null;
+        _lastSelectionLookupContext = null;
         removeOverlay(selectionSessionGeneration: generation);
       },
     );
@@ -754,9 +767,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           int id = annotation['annotation']['id'];
           String cfi = annotation['annotation']['value'];
           String note = annotation['annotation']['note'];
-          final rawContextText = annotation['contextText']?.toString();
-          _lastSelectionContextText =
-              (rawContextText?.trim().isEmpty ?? true) ? null : rawContextText;
+          _lastSelectionAnnotationContext =
+              _selectionContext(annotation, 'annotationContext');
+          _lastSelectionLookupContext =
+              _selectionContext(annotation, 'lookupContext');
           double left = (annotation['pos']['left'] as num).toDouble();
           double top = (annotation['pos']['top'] as num).toDouble();
           double right = (annotation['pos']['right'] as num).toDouble();
@@ -772,7 +786,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
             id,
             false,
             writingMode.isVertical ? Axis.vertical : Axis.horizontal,
-            contextText: _lastSelectionContextText,
+            chapter: _selectionContext(annotation, 'chapter'),
+            annotationContext: _lastSelectionAnnotationContext,
+            lookupContext: _lastSelectionLookupContext,
           );
         });
     controller.addJavaScriptHandler(

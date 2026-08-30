@@ -4,6 +4,7 @@ console.log('AnxUA', navigator.userAgent)
 import './view.js'
 import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
+import { buildRangeSentenceContext } from './sentence-context.mjs'
 import { FootnoteHandler } from './footnotes.js'
 import { Overlayer } from './overlayer.js'
 import { collapse, compare, fromRange, toRange } from './epubcfi.js'
@@ -73,75 +74,6 @@ const getSelectionRange = (selection) => {
   return range.collapsed ? null : range;
 };
 
-const CONTEXT_WINDOW_CHARS = 120;
-const MAX_CONTEXT_CHARS = 600;
-
-const _collapseWhitespace = (text) =>
-  typeof text === 'string'
-    ? text.replace(/\s+/g, ' ').trim()
-    : '';
-
-const _sliceWithWindow = (text, start, end) => {
-  if (!text) return '';
-  const safeStart = Math.max(0, Math.min(text.length, start));
-  const safeEnd = Math.max(safeStart, Math.min(text.length, end));
-  return text.slice(safeStart, safeEnd);
-};
-
-const buildRangeContextText = (range) => {
-  if (!range) return '';
-
-  const selectionText = range.toString().trim();
-  const startNode = range.startContainer;
-  const endNode = range.endContainer;
-  const startText = startNode?.textContent ?? '';
-  const endText = endNode?.textContent ?? '';
-
-  let contextText = '';
-
-  if (startNode === endNode) {
-    const segment = _sliceWithWindow(
-      startText,
-      range.startOffset - CONTEXT_WINDOW_CHARS,
-      range.endOffset + CONTEXT_WINDOW_CHARS
-    );
-    contextText = _collapseWhitespace(segment);
-  } else {
-    const startSegment = _collapseWhitespace(
-      _sliceWithWindow(
-        startText,
-        range.startOffset - CONTEXT_WINDOW_CHARS,
-        range.startOffset + CONTEXT_WINDOW_CHARS
-      )
-    );
-    const endSegment = _collapseWhitespace(
-      _sliceWithWindow(
-        endText,
-        range.endOffset - CONTEXT_WINDOW_CHARS,
-        range.endOffset + CONTEXT_WINDOW_CHARS
-      )
-    );
-    const parts = [
-      startSegment,
-      selectionText,
-      endSegment
-    ].filter(Boolean);
-    contextText = parts.join(' ');
-  }
-
-  if (!contextText && selectionText) {
-    contextText = selectionText;
-  }
-
-  contextText = _collapseWhitespace(contextText);
-
-  if (contextText.length > MAX_CONTEXT_CHARS) {
-    return contextText.slice(0, MAX_CONTEXT_CHARS);
-  }
-
-  return contextText;
-};
-
 const buildSelectionPayload = (view, doc, index, range = getSelectionRange(doc.getSelection())) => {
   const selection = doc.getSelection();
 
@@ -149,7 +81,7 @@ const buildSelectionPayload = (view, doc, index, range = getSelectionRange(doc.g
 
   const position = getPosition(range);
   const cfi = view.getCFI(index, range);
-  const lang = 'en-US'
+  const lang = doc.documentElement?.lang || 'en-US'
 
   let text = selection.toString();
   if (!text) {
@@ -159,7 +91,7 @@ const buildSelectionPayload = (view, doc, index, range = getSelectionRange(doc.g
     text = newSelection.toString();
   }
 
-  const contextText = buildRangeContextText(range);
+  const { annotationContext, lookupContext } = buildRangeSentenceContext(range, { locale: lang });
 
   return {
     index,
@@ -167,7 +99,9 @@ const buildSelectionPayload = (view, doc, index, range = getSelectionRange(doc.g
     cfi,
     pos: position,
     text,
-    contextText,
+    chapter: view.lastLocation?.tocItem?.label ?? '',
+    annotationContext,
+    lookupContext,
     footnote: Boolean(doc.__isFootNote || window.isFootNoteOpen() || isPdf),
   };
 };
@@ -1084,8 +1018,9 @@ class Reader {
       const annotation = this.annotationsByValue.get(e.detail.value)
       const pos = getPosition(e.detail.range)
       if (window.getSelection()?.toString()) return
-      const contextText = buildRangeContextText(e.detail.range)
-      onAnnotationClick({ annotation, pos, contextText })
+      const { annotationContext, lookupContext } = buildRangeSentenceContext(e.detail.range)
+      const chapter = this.view.lastLocation?.tocItem?.label ?? ''
+      onAnnotationClick({ annotation, pos, chapter, annotationContext, lookupContext })
     })
     view.addEventListener('external-link', e => {
       e.preventDefault()

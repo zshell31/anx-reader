@@ -12,12 +12,12 @@ class TranslationMenu extends StatefulWidget {
     required this.content,
     required this.decoration,
     required this.axis,
-    this.contextText,
+    this.lookupContext,
   });
   final String content;
   final BoxDecoration decoration;
   final Axis axis;
-  final String? contextText;
+  final String? lookupContext;
 
   @override
   State<TranslationMenu> createState() => _TranslationMenuState();
@@ -46,9 +46,9 @@ class _TranslationMenuState extends State<TranslationMenu> {
 
         setState(() {
           final effectiveContextText =
-              (widget.contextText?.trim().isEmpty ?? true)
+              (widget.lookupContext?.trim().isEmpty ?? true)
                   ? null
-                  : widget.contextText;
+                  : widget.lookupContext;
           _translationWidget = translateText(
             widget.content,
             contextText: effectiveContextText,

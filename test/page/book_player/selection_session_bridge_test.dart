@@ -25,6 +25,30 @@ void main() {
     expect(state.generation, 2);
   });
 
+  test('stable snapshot carries persisted and transient contexts separately',
+      () {
+    final state = SelectionSessionBridgeState();
+    final payload = <String, dynamic>{
+      ...selection(9, 'word'),
+      'annotationContext': 'Containing sentence has a word.',
+      'lookupContext':
+          'Previous sentence. Containing sentence has a word. Next sentence.',
+      'chapter': 'Chapter 1',
+      'cfi': 'epubcfi(/6/2!/4/2,/1:0,/1:4)',
+      'pos': {'left': 0.1, 'top': 0.2, 'right': 0.3, 'bottom': 0.4},
+    };
+
+    expect(state.selectionChanged(payload), isTrue);
+    expect(state.actionsRequested(payload), isTrue);
+    expect(state.selection?['annotationContext'],
+        'Containing sentence has a word.');
+    expect(state.selection?['lookupContext'],
+        'Previous sentence. Containing sentence has a word. Next sentence.');
+    expect(state.selection?['chapter'], 'Chapter 1');
+    expect(state.selection?['cfi'], payload['cfi']);
+    expect(state.selection?['pos'], payload['pos']);
+  });
+
   test('selection clear removes matching actions and destroys the session', () {
     final state = SelectionSessionBridgeState();
     state.selectionChanged(selection(3));

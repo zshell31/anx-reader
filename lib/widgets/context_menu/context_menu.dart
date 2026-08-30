@@ -20,7 +20,9 @@ Future<void> showContextMenu(
     int? annoId,
     bool footnote,
     Axis axis,
-    {String? contextText,
+    {String? chapter,
+    String? annotationContext,
+    String? lookupContext,
     int? selectionSessionGeneration}) async {
   final playerKey = epubPlayerKey.currentState;
   if (playerKey == null) return;
@@ -135,7 +137,9 @@ Future<void> showContextMenu(
       annoCfi: annoCfi,
       annoId: annoId,
       footnote: footnote,
-      contextText: contextText,
+      chapter: chapter,
+      annotationContext: annotationContext,
+      lookupContext: lookupContext,
       decoration: decoration,
       onClose: onClose,
       menuConstraints: menuConstraints,
@@ -238,7 +242,9 @@ class _ContextMenuOverlay extends StatefulWidget {
     required this.annoCfi,
     required this.annoId,
     required this.footnote,
-    this.contextText,
+    this.chapter,
+    this.annotationContext,
+    this.lookupContext,
     required this.decoration,
     required this.onClose,
     required this.menuConstraints,
@@ -257,7 +263,9 @@ class _ContextMenuOverlay extends StatefulWidget {
   final String annoCfi;
   final int? annoId;
   final bool footnote;
-  final String? contextText;
+  final String? chapter;
+  final String? annotationContext;
+  final String? lookupContext;
   final BoxDecoration decoration;
   final VoidCallback onClose;
   final BoxConstraints menuConstraints;
@@ -495,7 +503,8 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 ExcerptMenu(
                                   annoCfi: widget.annoCfi,
                                   annoContent: widget.annoContent,
-                                  contextText: widget.contextText,
+                                  chapter: widget.chapter,
+                                  annotationContext: widget.annotationContext,
                                   id: widget.annoId,
                                   onClose: widget.onClose,
                                   footnote: widget.footnote,
@@ -537,7 +546,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                 content: widget.annoContent,
                                 decoration: widget.decoration,
                                 axis: widget.axis,
-                                contextText: widget.contextText,
+                                lookupContext: widget.lookupContext,
                               ),
                             ],
                           ),

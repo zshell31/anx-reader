@@ -24,7 +24,8 @@ import 'package:url_launcher/url_launcher.dart';
 class ExcerptMenu extends StatefulWidget {
   final String annoCfi;
   final String annoContent;
-  final String? contextText;
+  final String? chapter;
+  final String? annotationContext;
   final int? id;
   final Function() onClose;
   final bool footnote;
@@ -40,7 +41,8 @@ class ExcerptMenu extends StatefulWidget {
     super.key,
     required this.annoCfi,
     required this.annoContent,
-    this.contextText,
+    this.chapter,
+    this.annotationContext,
     this.id,
     required this.onClose,
     required this.footnote,
@@ -128,8 +130,8 @@ class ExcerptMenuState extends State<ExcerptMenu> {
           book: player.book,
           selectedText: widget.annoContent,
           epubCfi: widget.annoCfi,
-          chapter: player.chapterTitle,
-          context: widget.contextText,
+          chapter: widget.chapter ?? player.chapterTitle,
+          context: widget.annotationContext,
           type: resolvedType,
           color: resolvedColor,
         ),

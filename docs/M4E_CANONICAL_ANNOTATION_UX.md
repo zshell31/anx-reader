@@ -208,7 +208,7 @@ At the end of every M4E session:
 ### M4E.3 — Explicit SelectionSession state machine
 
 - Status: COMPLETE
-- Commit SHA: pending follow-up documentation checkpoint
+- Commit SHA: `16108268`
 - Important files changed: `assets/foliate-js/src/selection-session.mjs`,
   `assets/foliate-js/src/book.js`, `assets/foliate-js/dist/bundle.js`,
   `assets/foliate-js/test/selection-session.test.mjs`,
@@ -424,8 +424,9 @@ At the end of every M4E session:
 
 Last completed submilestone: M4E.3 — Explicit SelectionSession state machine
 Current branch: `feature/m4e-canonical-annotation-ux`
-Last commit: pending M4E.3 implementation commit
-Repository state: M4E.3 implementation and documentation complete and validated; commits pending
+Last implementation commit: `16108268 feat: add explicit reader selection sessions`
+Documentation checkpoint: The current commit records the completed M4E.3 implementation SHA and handoff
+Repository state: Clean at the completed M4E.3 documentation checkpoint
 Next submilestone: M4E.4 — Preserve cross-page selection
 Next concrete tasks: Add focused auto-page race coverage around `view.next()`, post-next selection rechecks, clear/new-selection invalidation, and page/document replacement; bind every remaining auto-page callback explicitly to the active selection generation without redesigning Foliate's cross-document Range capabilities
 Known failing tests: None

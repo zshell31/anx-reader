@@ -114,6 +114,7 @@ export class Translator {
         elements: new Set(),
         active: true,
         reconciliationScheduled: false,
+        visibleRange: undefined,
       }
       this.#documents.set(doc, documentState)
     }
@@ -162,24 +163,30 @@ export class Translator {
     this.#documents.delete(doc)
   }
 
-  async reconcileDocument(doc) {
+  async reconcileDocument(doc, visibleRange = undefined) {
     const documentState = this.#documents.get(doc)
+    if (documentState && visibleRange !== undefined) {
+      documentState.visibleRange = visibleRange
+    }
     if (!documentState?.active || this.#translationMode === TranslationMode.OFF) {
       return
     }
 
     const promises = []
     for (const element of documentState.elements) {
-      if (this.#isRelevantElement(element)) {
+      if (this.#isRelevantElement(element, documentState.visibleRange)) {
         promises.push(this.#reconcileElement(element))
       }
     }
     await Promise.allSettled(promises)
   }
 
-  async reconcileDocuments(documents = this.#documents.keys()) {
+  async reconcileDocuments(
+    documents = this.#documents.keys(),
+    visibleRange = undefined,
+  ) {
     await Promise.allSettled(
-      Array.from(documents, doc => this.reconcileDocument(doc)),
+      Array.from(documents, doc => this.reconcileDocument(doc, visibleRange)),
     )
   }
 
@@ -416,7 +423,24 @@ export class Translator {
     element.classList.remove('translation-source-hidden')
   }
 
-  #isRelevantElement(element) {
+  #isRelevantElement(element, visibleRange) {
+    // Reflowable paginator documents use an iframe whose layout viewport spans
+    // the entire columnized chapter. Geometry alone therefore makes every
+    // paragraph look visible and can start hundreds of translations at once.
+    // The paginator's relocation Range is the authoritative visible region.
+    if (visibleRange?.intersectsNode) {
+      try {
+        return visibleRange.intersectsNode(element)
+      } catch (_) {
+        return false
+      }
+    }
+    // Before the first relocation there is no reliable reflowable viewport.
+    // IntersectionObserver remains active while reconciliation waits for it.
+    if (visibleRange === undefined) return false
+
+    // Fixed-layout relocation has no DOM Range. Its one- or two-document
+    // spread has a meaningful iframe viewport, so geometry is safe there.
     const rect = element.getBoundingClientRect()
     const view = element.ownerDocument?.defaultView ?? window
     const width = view?.innerWidth ?? window.innerWidth

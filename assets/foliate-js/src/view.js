@@ -178,7 +178,7 @@ export class View extends HTMLElement {
     // documents it still owns so a missed IntersectionObserver transition
     // cannot leave a visible paragraph untranslated.
     const documents = this.renderer.getContents().map(({ doc }) => doc)
-    this.#translator.reconcileDocuments(documents).catch(error =>
+    this.#translator.reconcileDocuments(documents, range).catch(error =>
       console.warn('Translation relocation reconciliation failed:', error))
 
     this.#index = index

@@ -142,6 +142,14 @@ const makeDocument = (...texts) => {
 
 const wrappers = element => element.children
   .filter(child => child.classList.contains('translated-text'))
+const visibleRange = (...elements) => ({
+  intersectsNode: element => elements.includes(element),
+})
+const relocate = (translator, chapter, ...elements) =>
+  translator.reconcileDocument(
+    chapter.doc,
+    visibleRange(...(elements.length > 0 ? elements : chapter.paragraphs)),
+  )
 
 const settle = () => new Promise(resolve => setImmediate(resolve))
 const flushLayout = async view => {
@@ -168,10 +176,10 @@ test('already-enabled bilingual mode reconciles every newly observed chapter', a
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapterA = makeDocument('A')
   translator.observeDocument(chapterA.doc)
-  await flushLayout(chapterA.view)
+  await relocate(translator, chapterA)
   const chapterB = makeDocument('B1', 'B2')
   translator.observeDocument(chapterB.doc)
-  await flushLayout(chapterB.view)
+  await relocate(translator, chapterB)
 
   assert.deepEqual(calls.map(([, text, context]) => [text, context]), [
     ['A', ''],
@@ -187,7 +195,7 @@ test('document reconciliation repairs a missed initial observer callback', async
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapter = makeDocument('visible paragraph')
   translator.observeDocument(chapter.doc)
-  await flushLayout(chapter.view)
+  await relocate(translator, chapter)
 
   assert.equal(calls.length, 1)
   assert.equal(wrappers(chapter.paragraphs[0]).length, 1)
@@ -201,7 +209,7 @@ test('observer and reconciliation join one in-flight element operation', async (
   const chapter = makeDocument('deduplicated')
   translator.observeDocument(chapter.doc)
   observer.trigger(chapter.paragraphs[0])
-  const reconciliation = translator.reconcileDocument(chapter.doc)
+  const reconciliation = relocate(translator, chapter)
 
   assert.equal(calls.length, 1)
   complete('shared translation')
@@ -216,7 +224,7 @@ test('immediately resolved cached result materializes exactly one wrapper', asyn
   const chapter = makeDocument('cached')
   translator.observeDocument(chapter.doc)
   observer.trigger(chapter.paragraphs[0])
-  await translator.reconcileDocument(chapter.doc)
+  await relocate(translator, chapter)
 
   assert.equal(calls.length, 1)
   assert.equal(wrappers(chapter.paragraphs[0]).length, 1)
@@ -242,7 +250,7 @@ test('reconciliation restores a removed wrapper without another bridge call', as
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapter = makeDocument('repair')
   translator.observeDocument(chapter.doc)
-  await flushLayout(chapter.view)
+  await relocate(translator, chapter)
   wrappers(chapter.paragraphs[0])[0].remove()
 
   await translator.reconcileDocument(chapter.doc)
@@ -264,7 +272,7 @@ test('late completion from a retired chapter cannot affect its replacement', asy
   const chapterB = makeDocument('B')
   translator.observeDocument(chapterB.doc)
   translator.retainDocuments([chapterB.doc])
-  await flushLayout(chapterB.view)
+  await relocate(translator, chapterB)
   completeA('late A')
   await settle()
 
@@ -283,7 +291,7 @@ test('a transient failure remains retryable on later reconciliation', async () =
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapter = makeDocument('retry')
   translator.observeDocument(chapter.doc)
-  await flushLayout(chapter.view)
+  await relocate(translator, chapter)
   assert.equal(wrappers(chapter.paragraphs[0]).length, 0)
 
   await translator.reconcileDocument(chapter.doc)
@@ -296,7 +304,7 @@ test('a permanent authentication failure is not retried on every relocation', as
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   const chapter = makeDocument('permanent failure')
   translator.observeDocument(chapter.doc)
-  await flushLayout(chapter.view)
+  await relocate(translator, chapter)
 
   await translator.reconcileDocument(chapter.doc)
   await translator.reconcileDocument(chapter.doc)
@@ -309,6 +317,7 @@ test('all display modes preserve their existing source/wrapper semantics', async
   const chapter = makeDocument('mode source')
   const paragraph = chapter.paragraphs[0]
   translator.observeDocument(chapter.doc)
+  await relocate(translator, chapter)
   await flushLayout(chapter.view)
   assert.equal(calls.length, 0)
   assert.equal(wrappers(paragraph).length, 0)
@@ -338,10 +347,26 @@ test('retired document elements are unobserved and no longer reconciled', async 
   translator.observeDocument(chapterA.doc)
   translator.observeDocument(chapterB.doc)
   translator.retainDocuments([chapterB.doc])
+  await relocate(translator, chapterB)
 
   assert.equal(observer.targets.has(chapterA.paragraphs[0]), false)
   assert.equal(observer.unobserved.has(chapterA.paragraphs[0]), true)
   await translator.setTranslationMode(TranslationMode.BILINGUAL)
   await translator.reconcileDocument(chapterA.doc)
   assert.deepEqual(calls.map(([, text]) => text), ['B'])
+})
+
+test('reconciliation translates only the paginator visible range', async () => {
+  const { translator, calls } = setup()
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const chapter = makeDocument('visible', 'next page', 'far away')
+  translator.observeDocument(chapter.doc)
+
+  await relocate(translator, chapter, chapter.paragraphs[0])
+  assert.deepEqual(calls.map(([, text]) => text), ['visible'])
+  assert.equal(wrappers(chapter.paragraphs[1]).length, 0)
+
+  await relocate(translator, chapter, chapter.paragraphs[1])
+  assert.deepEqual(calls.map(([, text]) => text), ['visible', 'next page'])
+  assert.equal(wrappers(chapter.paragraphs[2]).length, 0)
 })

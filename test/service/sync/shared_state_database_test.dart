@@ -335,7 +335,8 @@ void main() {
       await store.close();
     });
 
-    test('a newer unsupported schema fails safely', () async {
+    test('a newer unsupported schema fails without polluting a fresh open',
+        () async {
       final path = p.join(directory.path, 'newer.db');
       const schema = SharedStateSchema();
       final newer = await databaseFactoryFfi.openDatabase(path,
@@ -346,6 +347,16 @@ void main() {
       final store =
           SharedStateDatabase(path: path, factory: databaseFactoryFfi);
       await expectLater(store.database, throwsA(isA<UnsupportedError>()));
+
+      // sqflite_common prints the expected open failure while it closes the
+      // rejected handle. Prove that fixture is path-local and cannot affect a
+      // subsequent default-schema database in this process.
+      final fresh = SharedStateDatabase(
+        path: p.join(directory.path, 'fresh.db'),
+        factory: databaseFactoryFfi,
+      );
+      expect(await fresh.schemaVersion, currentSharedStateSchema.version);
+      await fresh.close();
     });
   });
 

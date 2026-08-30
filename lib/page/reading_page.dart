@@ -15,6 +15,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/read_theme.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
+import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/book_notes.dart';
 import 'package:anx_reader/providers/bookmark.dart';
@@ -81,6 +82,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   bool bottomBarOffstage = true;
   late String heroTag;
   Widget? _aiChat;
+  SelectionAiPersistenceContext? _aiSelectionContext;
   final aiChatKey = GlobalKey<AiChatStreamState>();
   static const double _aiChatMinWidth = 240;
   late double _aiChatWidth;
@@ -524,6 +526,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
         onPressed: () {
           setState(() {
             _aiChat = null;
+            _aiSelectionContext = null;
           });
         },
         icon: const Icon(Icons.close),
@@ -547,6 +550,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
             sendImmediate: false,
             quickPromptChips: _getAiQuickPromptChips(),
             trailing: _buildAiChatTrailing(context),
+            selectionContext: _aiSelectionContext,
           ),
         ),
       ],
@@ -585,7 +589,9 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   Future<void> showAiChat({
     String? content,
     bool sendImmediate = false,
+    SelectionAiPersistenceContext? selectionContext,
   }) async {
+    _aiSelectionContext = selectionContext;
     List<AiQuickPromptChip> quickPrompts = _getAiQuickPromptChips();
 
     // Determine display mode
@@ -627,6 +633,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                       initialMessage: content,
                       sendImmediate: sendImmediate,
                       quickPromptChips: quickPrompts,
+                      selectionContext: selectionContext,
                     ),
                   ),
                 ),
@@ -647,6 +654,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                 sendImmediate: sendImmediate,
                 quickPromptChips: quickPrompts,
                 trailing: _buildAiChatTrailing(navigatorKey.currentContext!),
+                selectionContext: selectionContext,
               ),
             ),
           ],

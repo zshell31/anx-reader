@@ -6,6 +6,7 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
+import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
@@ -333,12 +334,15 @@ class ExcerptMenuState extends State<ExcerptMenu> {
                 widget.onClose();
                 final key = readingPageKey.currentState;
                 if (key != null) {
-                  key.showAiChat(
-                    content: widget.annoContent,
-                    sendImmediate: false,
+                  final aiContext = SelectionAiPersistenceContext.canonical(
+                    session: widget.persistenceSession,
+                    createAnnotation: _createOrResolve,
                   );
-                  key.aiChatKey.currentState?.inputController.text =
-                      widget.annoContent;
+                  key.showAiChat(
+                    content: aiContext.initialPrompt,
+                    sendImmediate: true,
+                    selectionContext: aiContext,
+                  );
                 }
               },
               icon: const Icon(EvaIcons.message_circle_outline),

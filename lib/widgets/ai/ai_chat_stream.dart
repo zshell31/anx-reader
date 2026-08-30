@@ -5,12 +5,14 @@ import 'package:anx_reader/enums/hint_key.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/ai_provider.dart';
+import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
 import 'package:anx_reader/providers/ai_chat.dart';
 import 'package:anx_reader/providers/ai_history.dart';
 import 'package:anx_reader/providers/ai_providers.dart';
 import 'package:anx_reader/service/ai/ai_services.dart';
 import 'package:anx_reader/service/ai/ai_history.dart';
 import 'package:anx_reader/service/ai/index.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/utils/env_var.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/utils/ai_reasoning_parser.dart';
@@ -38,12 +40,14 @@ class AiChatStream extends ConsumerStatefulWidget {
     this.sendImmediate = false,
     this.quickPromptChips = const [],
     this.trailing,
+    this.selectionContext,
   });
 
   final String? initialMessage;
   final bool sendImmediate;
   final List<AiQuickPromptChip> quickPromptChips;
   final List<Widget>? trailing;
+  final SelectionAiPersistenceContext? selectionContext;
 
   @override
   ConsumerState<AiChatStream> createState() => AiChatStreamState();
@@ -105,6 +109,9 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
     ];
     _fontSize = Prefs().aiChatFontSize;
     inputController.text = widget.initialMessage ?? '';
+    if (widget.selectionContext != null) {
+      ref.read(aiChatProvider.notifier).clear();
+    }
     _suggestedPrompts = _pickSuggestedPrompts();
     if (widget.sendImmediate) {
       _sendMessage();
@@ -540,7 +547,7 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
   }
 
   ChatMessage? _getLastAssistantMessage() {
-    final messages = ref.watch(aiChatProvider).asData?.value;
+    final messages = ref.read(aiChatProvider).asData?.value;
     if (messages == null || messages.isEmpty) {
       return null;
     }
@@ -551,6 +558,40 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
       }
     }
     return null;
+  }
+
+  Future<void> _saveSelectionAnalysis() async {
+    final persistence = widget.selectionContext;
+    final message = _getLastAssistantMessage();
+    if (persistence == null || message == null) return;
+    final content = chatMessageDisplayContent(message).trim();
+    if (content.isEmpty) return;
+    await persistence.saveAnalysis(content);
+    if (mounted) AnxToast.show(L10n.of(context).commonSave);
+  }
+
+  Future<void> _saveSelectionConversation() async {
+    final persistence = widget.selectionContext;
+    final messages = ref.read(aiChatProvider).value;
+    if (persistence == null || messages == null) return;
+    final values = <AiThreadMessageInput>[
+      for (final message in messages)
+        if (message is HumanChatMessage &&
+            message.contentAsString.trim().isNotEmpty)
+          AiThreadMessageInput(
+            role: 'user',
+            content: message.contentAsString.trim(),
+          )
+        else if (message is AIChatMessage &&
+            chatMessageDisplayContent(message).trim().isNotEmpty)
+          AiThreadMessageInput(
+            role: 'assistant',
+            content: chatMessageDisplayContent(message).trim(),
+          ),
+    ];
+    if (values.isEmpty) return;
+    await persistence.saveConversation(values);
+    if (mounted) AnxToast.show(L10n.of(context).commonSave);
   }
 
   @override
@@ -785,7 +826,9 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
         leading: IconButton(
           icon: const Icon(Icons.insert_drive_file),
           tooltip: L10n.of(context).history,
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          onPressed: widget.selectionContext == null
+              ? () => _scaffoldKey.currentState?.openDrawer()
+              : null,
         ),
         actions: [
           IconButton(
@@ -801,9 +844,9 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
           if (widget.trailing != null) ...widget.trailing!,
         ],
       ),
-      drawer: Drawer(
-        child: _buildHistoryDrawer(context),
-      ),
+      drawer: widget.selectionContext == null
+          ? Drawer(child: _buildHistoryDrawer(context))
+          : null,
       body: EnvVar.isAppStore &&
               Prefs().shouldShowHint(HintKey.aiDataSharingConsent)
           ? _buildDataSharingConsent(context)
@@ -840,6 +883,27 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
                                 Center(child: Text('error: $error')),
                           ),
                 ),
+                if (widget.selectionContext != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.bookmark_add_outlined),
+                          label: const Text('Save analysis'),
+                          onPressed:
+                              _isStreaming ? null : _saveSelectionAnalysis,
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.forum_outlined),
+                          label: const Text('Save conversation'),
+                          onPressed:
+                              _isStreaming ? null : _saveSelectionConversation,
+                        ),
+                      ],
+                    ),
+                  ),
                 inputBox,
               ],
             ),

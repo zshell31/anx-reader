@@ -156,6 +156,25 @@ void main() {
     expect(excerptSource, isNot(contains('context: snapshot.lookupContext')));
   });
 
+  test('selection-origin AI carries optional context and explicit save actions',
+      () {
+    final menu =
+        File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
+    final chat = File('lib/widgets/ai/ai_chat_stream.dart').readAsStringSync();
+    final context =
+        File('lib/page/book_player/selection_ai_persistence_context.dart')
+            .readAsStringSync();
+
+    expect(menu, contains('SelectionAiPersistenceContext.canonical'));
+    expect(menu, contains('selectionContext: aiContext'));
+    expect(menu, contains('content: aiContext.initialPrompt'));
+    expect(context, contains('session.snapshot.lookupContext'));
+    expect(context, contains('session.persist('));
+    expect(chat, contains("label: const Text('Save analysis')"));
+    expect(chat, contains("label: const Text('Save conversation')"));
+    expect(chat, contains('widget.selectionContext != null'));
+  });
+
   test('rendered annotation taps use a bridge path distinct from selections',
       () {
     final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();

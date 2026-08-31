@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildSentenceContext } from '../src/sentence-context.mjs'
+import {
+    buildRangeSentenceContext,
+    buildSentenceContext,
+} from '../src/sentence-context.mjs'
 
 const contextFor = (source, selectedText, options = {}) => {
     const selectionStart = source.indexOf(selectedText)
@@ -21,6 +24,40 @@ test('word uses only its containing sentence for annotation context', () => {
     const result = contextFor(source, 'incels')
     assert.equal(result.annotationContext,
         'He spent several years talking to incels on obscure online forums.')
+})
+
+test('DOM range uses its semantic paragraph instead of unrelated book body text', () => {
+    const block = {}
+    const body = {}
+    const doc = {
+        body,
+        createRange: () => {
+            let root
+            let side
+            return {
+                selectNodeContents: value => { root = value },
+                setEnd: () => { side = 'before' },
+                setStart: () => { side = 'after' },
+                toString: () => {
+                    assert.equal(root, block)
+                    return side === 'before' ? 'The selected ' : ' has context.'
+                },
+            }
+        },
+    }
+    const parentElement = { closest: () => block }
+    const textNode = { nodeType: 3, ownerDocument: doc, parentElement }
+    const range = {
+        startContainer: textNode,
+        startOffset: 13,
+        endContainer: textNode,
+        endOffset: 17,
+        toString: () => 'word',
+    }
+
+    const result = buildRangeSentenceContext(range, { segmenterFactory: null })
+    assert.equal(result.annotationContext, 'The selected word has context.')
+    assert.equal(result.lookupContext, 'The selected word has context.')
 })
 
 test('multi-word phrase uses its containing sentence', () => {

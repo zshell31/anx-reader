@@ -6,6 +6,7 @@ import 'package:anx_reader/service/annotation_enrichment/google_annotation_trans
 import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
+import 'package:anx_reader/utils/log/common.dart';
 import 'package:flutter/foundation.dart';
 
 typedef SaveAnnotationEditor = Future<AnnotationRef> Function(
@@ -56,6 +57,7 @@ class AnnotationEditorController extends ChangeNotifier {
 
   Future<void> runProvider(AnnotationEditorProvider provider) async {
     final request = draft.startProvider(provider);
+    AnxLog.info('Annotation enrichment started: ${provider.name}');
     notifyListeners();
     try {
       final AnnotationEditorSourceResult result;
@@ -98,8 +100,13 @@ class AnnotationEditorController extends ChangeNotifier {
           );
           break;
       }
-      draft.completeProvider(request, result);
+      if (draft.completeProvider(request, result)) {
+        AnxLog.info('Annotation enrichment completed: ${provider.name}');
+      }
     } catch (error) {
+      AnxLog.warning(
+        'Annotation enrichment failed: ${provider.name}: $error',
+      );
       draft.failProvider(request, error);
     }
     _notifyIfAlive();

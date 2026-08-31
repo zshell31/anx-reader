@@ -43,15 +43,23 @@ export class SelectionGestureOwnership {
             return false
         }
 
-        // PointerEvent.click carries pointerId on current WebViews. Retain the
-        // coordinate identity fallback for WebViews exposing click as a plain
-        // MouseEvent.
-        if (pointerId != null && gesture.pointerId != null
-            && pointerId !== gesture.pointerId) {
-            return false
-        }
-        if (clientX !== gesture.clientX || clientY !== gesture.clientY) {
-            return false
+        // PointerEvent.click carries pointerId on current WebViews and that is
+        // the stable identity. Its coordinates may be independently rounded
+        // from pointerup, so do not require exact coordinate equality too.
+        const matchingPointerId = pointerId != null
+            && gesture.pointerId != null
+            && pointerId === gesture.pointerId
+        if (!matchingPointerId) {
+            // Older WebViews expose click as a plain MouseEvent; some also use
+            // a synthetic compatibility pointer ID. Allow normal coordinate
+            // rounding while still rejecting an unrelated event. A new
+            // pointerdown invalidates this state before its click can arrive.
+            const coordinateSlop = 2
+            if (clientX == null || clientY == null
+                || Math.abs(clientX - gesture.clientX) > coordinateSlop
+                || Math.abs(clientY - gesture.clientY) > coordinateSlop) {
+                return false
+            }
         }
 
         this.#gesture = null

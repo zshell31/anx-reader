@@ -204,16 +204,43 @@ void main() {
             contains("callFlutter('onSelectionActionsRequested', annotation")));
   });
 
-  test('lookup actions prepare selection then open the unified editor', () {
+  test('tap inside an active selection claims the native pointer default', () {
+    final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();
+
+    expect(
+        bookSource,
+        contains(
+            'const inside = pointIsInsideRange(range, e.clientX, e.clientY);'));
+    expect(bookSource, contains('if (inside) e.preventDefault();'));
+    expect(bookSource, isNot(contains('if (!inside) e.preventDefault();')));
+  });
+
+  test('internal editor handoff clears only its owning DOM selection', () {
+    final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();
+    final playerSource =
+        File('lib/page/book_player/epub_player.dart').readAsStringSync();
+    final menuSource =
+        File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
+
+    expect(bookSource, contains('current.generation !== Number(sessionId)'));
+    expect(playerSource, contains("source: 'clearSelection(\$generation)'"));
+    expect(menuSource, contains('prepareSelectionForInternalAction'));
+  });
+
+  test('lookup actions use their explicit internal or external boundary', () {
     final excerptSource =
         File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
     final contextMenuSource =
         File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
 
     expect(excerptSource, contains('contextMenuGoogleTranslate'));
+    expect(excerptSource, contains('ExternalDictionaryService'));
+    expect(excerptSource, contains('dictionary.lookup(widget.annoContent)'));
+    expect(excerptSource, contains('widget.prepareExternalAction()'));
     expect(excerptSource, contains('showAnnotationEditor('));
     expect(excerptSource, contains('prepareInternalAction'));
     expect(contextMenuSource, contains('prepareSelectionForExternalAction'));
+    expect(contextMenuSource, contains('prepareSelectionForInternalAction'));
     expect(excerptSource, isNot(contains('contextMenuTranslate')));
     expect(excerptSource, isNot(contains('Icons.translate')));
   });

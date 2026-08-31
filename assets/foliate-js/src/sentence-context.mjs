@@ -5,6 +5,10 @@ const TERMINAL_ENDING = /[.!?\u2026]+["'\u2019\u201d\u00bb\u203a)\]\}]*$/u
 const BARE_TERMINAL_ENDING = /[.!?\u2026]+$/u
 const BARE_CLOSING_QUOTES = /["'\u2019\u201d\u00bb\u203a]+$/u
 const BARE_CLOSING_PUNCTUATION = /["'\u2019\u201d\u00bb\u203a)\]\}]+$/u
+const CONTEXT_BLOCK_SELECTOR = [
+    'p', 'li', 'blockquote', 'dd', 'dt', 'figcaption',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'td', 'th',
+].join(',')
 
 export const normalizeContextWhitespace = text => typeof text === 'string'
     ? text.replace(/\s+/gu, ' ').trim()
@@ -158,7 +162,20 @@ export const buildRangeSentenceContext = (range, options = {}) => {
     if (!range) return { annotationContext: null, lookupContext: null }
     const doc = range.startContainer?.ownerDocument
         ?? (range.startContainer?.nodeType === 9 ? range.startContainer : null)
-    const root = doc?.body ?? doc?.documentElement
+    const startElement = range.startContainer?.nodeType === 1
+        ? range.startContainer
+        : range.startContainer?.parentElement
+    const endElement = range.endContainer?.nodeType === 1
+        ? range.endContainer
+        : range.endContainer?.parentElement
+    const startBlock = startElement?.closest?.(CONTEXT_BLOCK_SELECTOR)
+    const endBlock = endElement?.closest?.(CONTEXT_BLOCK_SELECTOR)
+    // A selection contained by one semantic text block gets paragraph-local
+    // offsets. This avoids unrelated EPUB body text and missing separators
+    // between adjacent elements confusing sentence segmentation.
+    const root = startBlock && startBlock === endBlock
+        ? startBlock
+        : doc?.body ?? doc?.documentElement
     if (!doc || !root) return { annotationContext: null, lookupContext: null }
 
     const beforeRange = doc.createRange()

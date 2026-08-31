@@ -153,7 +153,7 @@ test('document replacement cannot consume a newer document click', () => {
     assert.equal(harness.ownership.consumeClick(replacement, point), false)
 })
 
-test('click identity mismatch is not consumed and a new pointer clears it', () => {
+test('matching pointer identity tolerates independently rounded click coordinates', () => {
     const harness = createHarness()
 
     harness.pointerDown()
@@ -162,7 +162,52 @@ test('click identity mismatch is not consumed and a new pointer clears it', () =
     assert.equal(harness.ownership.consumeClick(harness.doc, {
         ...point,
         clientX: point.clientX + 1,
+    }), true)
+})
+
+test('synthetic pointer identity falls back to matching coordinates', () => {
+    const harness = createHarness()
+
+    harness.pointerDown()
+    harness.ownership.endPointer(
+        harness.doc, point.pointerId, point.clientX, point.clientY)
+    assert.equal(harness.ownership.consumeClick(harness.doc, {
+        ...point,
+        pointerId: point.pointerId + 1,
+    }), true)
+})
+
+test('identity and coordinate mismatch is not consumed and a new pointer clears it', () => {
+    const harness = createHarness()
+
+    harness.pointerDown()
+    harness.ownership.endPointer(
+        harness.doc, point.pointerId, point.clientX, point.clientY)
+    assert.equal(harness.ownership.consumeClick(harness.doc, {
+        ...point,
+        pointerId: point.pointerId + 1,
+        clientX: point.clientX + 3,
     }), false)
     harness.ownership.beginPointer(harness.doc, 8, null, point.clientX, point.clientY)
     assert.equal(harness.ownership.consumeClick(harness.doc, point), false)
+})
+
+test('plain MouseEvent fallback accepts coordinate rounding only', () => {
+    const harness = createHarness()
+
+    harness.pointerDown()
+    harness.ownership.endPointer(
+        harness.doc, point.pointerId, point.clientX, point.clientY)
+    assert.equal(harness.ownership.consumeClick(harness.doc, {
+        clientX: point.clientX + 1,
+        clientY: point.clientY - 1,
+    }), true)
+
+    harness.pointerDown()
+    harness.ownership.endPointer(
+        harness.doc, point.pointerId, point.clientX, point.clientY)
+    assert.equal(harness.ownership.consumeClick(harness.doc, {
+        clientX: point.clientX + 3,
+        clientY: point.clientY,
+    }), false)
 })

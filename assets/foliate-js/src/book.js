@@ -251,8 +251,10 @@ const setSelectionHandler = (view, doc, index) => {
   doc.addEventListener('selectionchange', handleSelectionStateChange);
 
   // Capture the hit before Android/native selection processing can collapse or
-  // replace the DOM Range. We do not prevent the event, so native handles keep
-  // their normal behavior.
+  // replace the DOM Range. A pointer that starts inside the selected text owns
+  // the action-toggle gesture, so suppress the native default that otherwise
+  // collapses the Range on some Android WebViews. Selection-handle and outside
+  // gestures start outside the text rects and retain their native behavior.
   doc.addEventListener('pointerdown', e => {
     coordinator.interactionOwner = doc;
     const range = getSelectionRange(doc.getSelection());
@@ -275,16 +277,18 @@ const setSelectionHandler = (view, doc, index) => {
     }
 
     const rangeKey = getRangeKey(coordinator, range);
+    const inside = pointIsInsideRange(range, e.clientX, e.clientY);
     coordinator.pendingPointer = {
       doc,
       pointerId: e.pointerId,
       generation: session.generation,
       rangeKey,
       range: range.cloneRange(),
-      inside: pointIsInsideRange(range, e.clientX, e.clientY),
+      inside,
       collapsedDuringTap: false,
       cancelled: false,
     };
+    if (inside) e.preventDefault();
   }, true);
 
   doc.addEventListener('pointercancel', e => {
@@ -1790,12 +1794,15 @@ window.hideSelectionActions = sessionId => {
   return Boolean(getSelectionCoordinator(view).machine.hideActions(Number(sessionId)))
 }
 
-window.clearSelection = () => {
+window.clearSelection = sessionId => {
   const view = globalThis.__anxActiveSelectionView ?? reader.view
   const coordinator = getSelectionCoordinator(view)
   const current = coordinator.machine.current
+  if (sessionId != null
+    && (!current || current.generation !== Number(sessionId))) return false
   if (current) endSelectionSession(view, current.owner, current.generation)
   view.deselect()
+  return true
 }
 
 window.addAnnotation = (annotation) => reader.addAnnotation(annotation)

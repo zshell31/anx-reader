@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   test('builds a normalized LDOCE URL', () {
@@ -38,6 +41,26 @@ void main() {
     expect(markdown, contains('_transitive_'));
     expect(markdown, contains('Take the book with you.'));
     expect(markdown, contains('**take it for granted**'));
+  });
+
+  test('lookup identifies as a browser accepted by LDOCE', () async {
+    final fixture = await File('test/fixtures/ldoce_entry.html').readAsString();
+    late Map<String, String> headers;
+    final service = LdoceAnnotationDictionaryService(
+      client: MockClient((request) async {
+        headers = request.headers;
+        return http.Response.bytes(
+          utf8.encode(fixture),
+          200,
+          headers: const {'content-type': 'text/html; charset=utf-8'},
+        );
+      }),
+    );
+
+    final article = await service.lookup('take');
+
+    expect(headers['user-agent'], contains('Mozilla/5.0'));
+    expect(article.entries, isNotEmpty);
   });
 
   test('not-found HTML returns a useful error', () {

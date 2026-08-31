@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/l10n/generated/L10n_ru.dart';
@@ -6,7 +9,9 @@ import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_controller.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
+import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.dart';
 import 'package:anx_reader/service/annotation_enrichment/google_annotation_translate.dart';
+import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,12 +53,40 @@ void main() {
           .width;
       expect(dialogWidth, lessThanOrEqualTo(760));
       expect(dialogWidth, lessThanOrEqualTo(size.width - 24));
+      expect(dialogWidth, equals((size.width - 24).clamp(0, 760)));
 
       await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
       await tester.tap(_promptAction('Discard'));
       await tester.pumpAndSettle();
     }
+  });
+
+  testWidgets('existing annotation opens at full width and scroll offset zero',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    final controller = _controller(draft: _existingDraft());
+    addTearDown(controller.dispose);
+
+    await _openDialog(tester, controller);
+
+    final scaffold = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(Scaffold),
+    );
+    expect(tester.getSize(scaffold).width, 760);
+    final media = MediaQuery.of(tester.element(scaffold));
+    expect(
+      tester.getSize(scaffold).height,
+      math.min(
+        media.size.height * 0.94,
+        media.size.height - media.viewInsets.bottom - 24,
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.text('“phrase”')).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(find.byType(AppBar)).dy),
+    );
   });
 
   testWidgets('bottom actions stay visible while editor body scrolls',
@@ -132,8 +165,60 @@ void main() {
     expect(google.calls, 1);
   });
 
+  testWidgets('source chips run every provider and reveal their results',
+      (tester) async {
+    final controller = _controller(
+      google: _CountingGoogle(),
+      ldoce: _ImmediateLdoce(),
+      ai: _ImmediateAi(),
+    );
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    await tester.tap(find.widgetWithText(ActionChip, 'Google Translate'));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(
+      controller.draft.sourceResults[AnnotationEditorProvider.googleTranslate]
+          ?.translation,
+      'translated',
+    );
+
+    await tester.tap(find.widgetWithText(ActionChip, 'LDOCE'));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(
+      controller
+          .draft.sourceResults[AnnotationEditorProvider.ldoce]?.translation,
+      'dictionary definition',
+    );
+
+    await tester.tap(find.widgetWithText(ActionChip, 'OpenAI'));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(
+      controller.draft.sourceResults[AnnotationEditorProvider.ai]?.commentary
+          ?.grammar,
+      'grammar analysis',
+    );
+  });
+
+  testWidgets('provider failures stay visible and can be retried',
+      (tester) async {
+    final google = _FailingGoogle();
+    final controller = _controller(google: google);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    await tester.tap(find.widgetWithText(ActionChip, 'Google Translate'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('network unavailable'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Google Translate'), findsOneWidget);
+    expect(google.calls, 1);
+  });
+
   testWidgets('existing source does not rerun its initial provider',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final google = _CountingGoogle();
     final controller = _controller(
       draft: _existingDraft(),
@@ -148,9 +233,120 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('saved translation'), findsOneWidget);
+    expect(find.text('saved translation'), findsNothing);
     expect(find.text('Edit annotation'), findsOneWidget);
     expect(google.calls, 0);
+
+    await tester.tap(find.text('Google Translate'));
+    await tester.pumpAndSettle();
+    expect(find.text('saved translation'), findsOneWidget);
+  });
+
+  testWidgets('source cards collapse but a refreshing card stays expanded',
+      (tester) async {
+    final google = _PendingGoogle();
+    final controller = _controller(
+      draft: _draftWithAllSources(),
+      google: google,
+    );
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    final googleCard = find.ancestor(
+      of: find.text('Google Translate'),
+      matching: find.byType(Card),
+    );
+    expect(find.text('google result'), findsNothing);
+    expect(
+      find.descendant(
+        of: googleCard,
+        matching: find.byIcon(Icons.chevron_right),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<AnimatedRotation>(find.descendant(
+            of: googleCard,
+            matching: find.byType(AnimatedRotation),
+          ))
+          .turns,
+      0,
+    );
+
+    await tester.tap(find.text('Google Translate'));
+    await tester.pumpAndSettle();
+    expect(find.text('google result'), findsOneWidget);
+    expect(
+      tester
+          .widget<AnimatedRotation>(find.descendant(
+            of: googleCard,
+            matching: find.byType(AnimatedRotation),
+          ))
+          .turns,
+      0.25,
+    );
+
+    await tester.tap(find.text('Google Translate'));
+    await tester.pumpAndSettle();
+    expect(find.text('google result'), findsNothing);
+
+    await tester.tap(find.descendant(
+      of: googleCard,
+      matching: find.byIcon(Icons.refresh),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(google.calls, 1);
+    expect(find.text('google result'), findsOneWidget);
+
+    await tester.tap(find.text('Google Translate'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('google result'), findsOneWidget);
+
+    google.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('write idea intent focuses personal notes', (tester) async {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+
+    await _openDialog(tester, controller, focusPersonalNote: true);
+    await tester.pump();
+
+    final noteField = tester.widget<TextField>(
+      find.byKey(const Key('annotation-editor-personal-note')),
+    );
+    expect(noteField.focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('write idea fills the available area above the keyboard',
+      (tester) async {
+    await tester.binding.setSurfaceSize(null);
+    tester.view.physicalSize = const Size(3600, 2700);
+    addTearDown(tester.view.resetPhysicalSize);
+    final controller = _controller(draft: _existingDraft());
+    addTearDown(controller.dispose);
+
+    await _openDialog(tester, controller, focusPersonalNote: true);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 900);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final scaffold = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(Scaffold),
+    );
+    final rect = tester.getRect(scaffold);
+    final logicalHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final logicalBottomInset =
+        tester.view.viewInsets.bottom / tester.view.devicePixelRatio;
+    expect(rect.top, 12);
+    expect(rect.bottom, logicalHeight - logicalBottomInset - 12);
   });
 
   test('editor has generated Russian localization strings', () {
@@ -167,6 +363,7 @@ Future<void> _openDialog(
   WidgetTester tester,
   AnnotationEditorController controller, {
   AnnotationEditorProvider? initialProvider,
+  bool focusPersonalNote = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -181,6 +378,7 @@ Future<void> _openDialog(
             builder: (_) => AnnotationEditorDialog(
               controller: controller,
               initialProvider: initialProvider,
+              focusPersonalNote: focusPersonalNote,
             ),
           ),
           child: const Text('Open editor'),
@@ -201,12 +399,16 @@ Finder _promptAction(String label) => find.descendant(
 AnnotationEditorController _controller({
   AnnotationEditorDraft? draft,
   GoogleAnnotationTranslateService? google,
+  LdoceAnnotationDictionaryService? ldoce,
+  AnnotationAiService? ai,
   SaveAnnotationEditor? saveDraft,
 }) =>
     AnnotationEditorController(
       draft: draft ?? _newDraft(),
       book: _book(),
       google: google,
+      ldoce: ldoce,
+      ai: ai,
       saveDraft: saveDraft ?? (_) async => _ref(),
       deleteAnnotation: (ref) async => ref,
       targetLanguageCode: () => 'uk',
@@ -342,4 +544,78 @@ class _CountingGoogle extends GoogleAnnotationTranslateService {
     calls++;
     return const GoogleAnnotationTranslation(text: 'translated');
   }
+}
+
+class _PendingGoogle extends GoogleAnnotationTranslateService {
+  final Completer<GoogleAnnotationTranslation> _completer = Completer();
+  int calls = 0;
+
+  void complete() {
+    _completer.complete(
+      const GoogleAnnotationTranslation(text: 'refreshed translation'),
+    );
+  }
+
+  @override
+  Future<GoogleAnnotationTranslation> translate(
+    String text, {
+    required String targetLanguage,
+  }) {
+    calls++;
+    return _completer.future;
+  }
+}
+
+class _FailingGoogle extends GoogleAnnotationTranslateService {
+  int calls = 0;
+
+  @override
+  Future<GoogleAnnotationTranslation> translate(
+    String text, {
+    required String targetLanguage,
+  }) async {
+    calls++;
+    throw StateError('network unavailable');
+  }
+}
+
+class _ImmediateLdoce extends LdoceAnnotationDictionaryService {
+  @override
+  Future<LdoceArticle> lookup(String text) async => const LdoceArticle(
+        title: 'phrase',
+        url: 'https://example.test/phrase',
+        entries: [
+          LdoceEntry(
+            headword: 'phrase',
+            senses: [LdoceSense(definition: 'dictionary definition')],
+          ),
+        ],
+      );
+}
+
+class _ImmediateAi extends AnnotationAiService {
+  @override
+  Future<AnnotationEditorSourceResult> analyze({
+    required String selectedText,
+    required String? context,
+    required String bookTitle,
+    required String chapter,
+    required String targetLanguageCode,
+    required String targetLanguageName,
+  }) async =>
+      const AnnotationEditorSourceResult(
+        providerId: 'route-id',
+        providerName: 'Configured AI',
+        kind: 'ai-analysis',
+        commentary: AnnotationEditorCommentary(grammar: 'grammar analysis'),
+      );
+
+  @override
+  Future<String> followUp({
+    required AnnotationEditorDraft draft,
+    required String question,
+    required String targetLanguageCode,
+    required String targetLanguageName,
+  }) async =>
+      'answer';
 }

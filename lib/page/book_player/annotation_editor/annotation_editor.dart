@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
@@ -19,6 +21,7 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
   required Book book,
   required SelectionPersistenceSession session,
   AnnotationEditorProvider? initialProvider,
+  bool focusPersonalNote = false,
 }) async {
   final snapshot = session.snapshot;
   final ref = session.annotationRef;
@@ -54,6 +57,7 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
       builder: (context) => AnnotationEditorDialog(
         controller: controller,
         initialProvider: initialProvider,
+        focusPersonalNote: focusPersonalNote,
       ),
     );
     if (result?.outcome == AnnotationEditorOutcome.saved &&
@@ -77,11 +81,13 @@ class _AnnotationEditorResult {
 class AnnotationEditorDialog extends StatefulWidget {
   final AnnotationEditorController controller;
   final AnnotationEditorProvider? initialProvider;
+  final bool focusPersonalNote;
 
   const AnnotationEditorDialog({
     super.key,
     required this.controller,
     this.initialProvider,
+    this.focusPersonalNote = false,
   });
 
   @override
@@ -90,7 +96,11 @@ class AnnotationEditorDialog extends StatefulWidget {
 
 class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   late final TextEditingController _noteController;
+  late final Set<AnnotationEditorProvider> _initialSourceProviders;
+  final FocusNode _noteFocusNode = FocusNode();
   final TextEditingController _questionController = TextEditingController();
+  final ScrollController _scrollController =
+      ScrollController(keepScrollOffset: false);
   bool _closePromptOpen = false;
 
   AnnotationEditorController get controller => widget.controller;
@@ -99,9 +109,15 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   @override
   void initState() {
     super.initState();
+    _initialSourceProviders = Set.unmodifiable(draft.sourceResults.keys);
     _noteController = TextEditingController(text: draft.personalNote);
     _noteController.addListener(_noteChanged);
     controller.addListener(_changed);
+    if (widget.focusPersonalNote) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _noteFocusNode.requestFocus();
+      });
+    }
     if (widget.initialProvider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && draft.sourceResults[widget.initialProvider!] == null) {
@@ -117,7 +133,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
     _noteController
       ..removeListener(_noteChanged)
       ..dispose();
+    _noteFocusNode.dispose();
     _questionController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -211,23 +229,30 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
     final theme = Theme.of(context);
     final l10n = L10n.of(context);
     final eInk = Prefs().eInkMode;
+    final dialogHeight = math.min(
+      media.size.height * 0.94,
+      math.max(0.0, media.size.height - media.viewInsets.bottom - 24),
+    );
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _requestClose();
       },
-      child: AnimatedPadding(
-        duration: eInk ? Duration.zero : const Duration(milliseconds: 150),
-        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-        child: Dialog(
-          insetPadding: const EdgeInsets.all(12),
-          clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 760,
-              maxHeight: media.size.height * 0.94,
-            ),
+      child: Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        insetAnimationDuration:
+            eInk ? Duration.zero : const Duration(milliseconds: 150),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 760,
+            maxHeight: dialogHeight,
+          ),
+          child: SizedBox(
+            width: double.maxFinite,
+            height: dialogHeight,
             child: Scaffold(
+              resizeToAvoidBottomInset: false,
               appBar: AppBar(
                 automaticallyImplyLeading: false,
                 title: Text(
@@ -244,6 +269,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                 ],
               ),
               body: SingleChildScrollView(
+                controller: _scrollController,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -295,13 +321,25 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                       ],
                     ),
                     for (final provider in AnnotationEditorProvider.values)
+                      if (draft.sourceResults[provider] == null)
+                        if (draft.stateFor(provider).error case final error?)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _ErrorText(
+                              '${provider.providerName}: $error',
+                            ),
+                          ),
+                    for (final provider in AnnotationEditorProvider.values)
                       if (draft.sourceResults[provider] case final result?) ...[
                         const SizedBox(height: 12),
                         _SourceCard(
+                          key: ValueKey(provider),
                           provider: provider,
                           result: result,
                           selectedText: draft.selection.selectedText,
                           state: draft.stateFor(provider),
+                          initiallyExpanded:
+                              !_initialSourceProviders.contains(provider),
                           onRefresh: () => controller.runProvider(provider),
                           onRemove: () => controller.removeProvider(provider),
                         ),
@@ -313,7 +351,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                     ),
                     const SizedBox(height: 8),
                     TextField(
+                      key: const Key('annotation-editor-personal-note'),
                       controller: _noteController,
+                      focusNode: _noteFocusNode,
                       minLines: 3,
                       maxLines: 8,
                       decoration: InputDecoration(
@@ -449,41 +489,85 @@ class _ProviderButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Icon(_providerIcon(provider), size: 18),
-        label: Text(provider.providerName),
+        label: Text(
+          state.loading ? '${provider.providerName}…' : provider.providerName,
+        ),
         onPressed: state.loading ? null : onPressed,
       );
 }
 
-class _SourceCard extends StatelessWidget {
+class _SourceCard extends StatefulWidget {
   final AnnotationEditorProvider provider;
   final AnnotationEditorSourceResult result;
   final String selectedText;
   final AnnotationEditorProviderState state;
+  final bool initiallyExpanded;
   final VoidCallback onRefresh;
   final VoidCallback onRemove;
 
   const _SourceCard({
+    super.key,
     required this.provider,
     required this.result,
     required this.selectedText,
     required this.state,
+    required this.initiallyExpanded,
     required this.onRefresh,
     required this.onRemove,
   });
+
+  @override
+  State<_SourceCard> createState() => _SourceCardState();
+}
+
+class _SourceCardState extends State<_SourceCard> {
+  final ExpansibleController _expansionController = ExpansibleController();
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  void dispose() {
+    _expansionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SourceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.loading && !_expanded) {
+      _expanded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _expansionController.expand();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = L10n.of(context);
     return Card.outlined(
       child: ExpansionTile(
-        initiallyExpanded: true,
-        leading: Icon(_providerIcon(provider)),
-        title: Text(result.providerName),
-        subtitle: state.error == null ? null : _ErrorText(state.error!),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+        controller: _expansionController,
+        initiallyExpanded: widget.initiallyExpanded,
+        onExpansionChanged: (expanded) {
+          if (widget.state.loading && !expanded) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _expansionController.expand();
+            });
+            return;
+          }
+          setState(() => _expanded = expanded);
+        },
+        leading: Icon(_providerIcon(widget.provider)),
+        title: Row(
           children: [
-            if (state.loading)
+            Expanded(child: Text(widget.result.providerName)),
+            if (widget.state.loading)
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: SizedBox.square(
@@ -494,29 +578,38 @@ class _SourceCard extends StatelessWidget {
             else
               IconButton(
                 tooltip: l10n.commonRefresh,
-                onPressed: onRefresh,
+                onPressed: widget.onRefresh,
                 icon: const Icon(Icons.refresh),
               ),
             IconButton(
               tooltip: l10n.annotationEditorRemoveSource,
-              onPressed: onRemove,
+              onPressed: widget.onRemove,
               icon: const Icon(Icons.delete_outline),
             ),
           ],
         ),
+        subtitle:
+            widget.state.error == null ? null : _ErrorText(widget.state.error!),
+        trailing: AnimatedRotation(
+          turns: _expanded ? 0.25 : 0,
+          duration: Prefs().eInkMode
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
+          child: const Icon(Icons.chevron_right),
+        ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
-          if (provider == AnnotationEditorProvider.ai &&
-              result.commentary != null)
-            _AiAnalysis(commentary: result.commentary!)
-          else if (result.markdown?.isNotEmpty == true)
-            StyledMarkdown(data: result.markdown!)
-          else if (result.translation?.isNotEmpty == true)
+          if (widget.provider == AnnotationEditorProvider.ai &&
+              widget.result.commentary != null)
+            _AiAnalysis(commentary: widget.result.commentary!)
+          else if (widget.result.markdown?.isNotEmpty == true)
+            StyledMarkdown(data: widget.result.markdown!)
+          else if (widget.result.translation?.isNotEmpty == true)
             Align(
               alignment: Alignment.centerLeft,
-              child: SelectableText(result.translation!),
+              child: SelectableText(widget.result.translation!),
             ),
-          if (result.metadata['detectedLanguage'] case final language?)
+          if (widget.result.metadata['detectedLanguage'] case final language?)
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
@@ -524,13 +617,13 @@ class _SourceCard extends StatelessWidget {
                 child: Text(l10n.annotationEditorDetectedLanguage(language)),
               ),
             ),
-          if (provider == AnnotationEditorProvider.googleTranslate)
+          if (widget.provider == AnnotationEditorProvider.googleTranslate)
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: () async {
-                  final status =
-                      await GoogleTranslateAppService().translate(selectedText);
+                  final status = await GoogleTranslateAppService()
+                      .translate(widget.selectedText);
                   if (context.mounted &&
                       status == GoogleTranslateAppStatus.failed) {
                     AnxToast.show(l10n.googleTranslateAppLaunchFailed);
@@ -540,13 +633,13 @@ class _SourceCard extends StatelessWidget {
                 label: Text(l10n.annotationEditorOpenGoogleTranslate),
               ),
             ),
-          if (provider == AnnotationEditorProvider.ldoce)
+          if (widget.provider == AnnotationEditorProvider.ldoce)
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: () => launchUrl(
-                  Uri.parse(
-                      result.metadata['url'] ?? 'https://www.ldoceonline.com/'),
+                  Uri.parse(widget.result.metadata['url'] ??
+                      'https://www.ldoceonline.com/'),
                   mode: LaunchMode.externalApplication,
                 ),
                 icon: const Icon(Icons.open_in_new),

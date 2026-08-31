@@ -6,6 +6,7 @@ import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
+import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
@@ -64,6 +65,8 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   bool deleteConfirm = false;
   late String annoType;
   late String annoColor;
+  Set<AnnotationEditorProvider> _completedProviders = const {};
+  late bool _existingAnnotationLoaded;
 
   @override
   initState() {
@@ -71,6 +74,8 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     annoType = widget.initialType ?? Prefs().annotationType;
     annoColor = (widget.initialColor ?? Prefs().annotationColor)
         .replaceFirst(RegExp(r'^#'), '');
+    _existingAnnotationLoaded =
+        !widget.persistenceSession.hasPersistedAnnotation;
     _initializeExistingAnnotation();
   }
 
@@ -82,15 +87,30 @@ class ExcerptMenuState extends State<ExcerptMenu> {
           await canonicalAnnotationCatalog.readBook(ref.bookFingerprint);
       final annotation =
           book?.annotations.where((value) => value.ref == ref).firstOrNull;
-      if (!mounted || annotation == null) return;
+      if (!mounted) return;
+      if (annotation == null) {
+        setState(() => _existingAnnotationLoaded = true);
+        return;
+      }
+      final draft = AnnotationEditorDraft.forAnnotation(
+        selection: widget.persistenceSession.snapshot,
+        bookTitle: book?.title ?? '',
+        annotation: annotation,
+      );
       setState(() {
         annoType = annotation.localPresentation?.style.name ?? annoType;
         annoColor = annotation.localPresentation?.color ?? annoColor;
+        _completedProviders = Set.unmodifiable(draft.sourceResults.keys);
+        _existingAnnotationLoaded = true;
       });
     } catch (_) {
       // Canonical state may refresh concurrently; keep current UI defaults.
+      if (mounted) setState(() => _existingAnnotationLoaded = true);
     }
   }
+
+  bool _showProviderAction(AnnotationEditorProvider provider) =>
+      _existingAnnotationLoaded && !_completedProviders.contains(provider);
 
   Future<SelectionAnnotationHandle> _createOrResolve(
       SelectionSnapshot snapshot) async {
@@ -111,7 +131,10 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     );
   }
 
-  Future<void> _openEditor([AnnotationEditorProvider? initialProvider]) async {
+  Future<void> _openEditor({
+    AnnotationEditorProvider? initialProvider,
+    bool focusPersonalNote = false,
+  }) async {
     final modalContext = navigatorKey.currentContext;
     final player = epubPlayerKey.currentState;
     if (modalContext == null || player == null) return;
@@ -126,6 +149,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         book: book,
         session: session,
         initialProvider: initialProvider,
+        focusPersonalNote: focusPersonalNote,
       );
       if (outcome == AnnotationEditorOutcome.saved ||
           outcome == AnnotationEditorOutcome.deleted) {
@@ -156,6 +180,26 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     } else {
       annoType = resolvedType;
       annoColor = resolvedColor;
+    }
+  }
+
+  Future<void> _openDictionary() async {
+    final dictionary = ExternalDictionaryService();
+    if (!dictionary.isSupported) {
+      await _openEditor(initialProvider: AnnotationEditorProvider.ldoce);
+      return;
+    }
+    if (!await widget.prepareExternalAction()) return;
+    final result = await dictionary.lookup(widget.annoContent);
+    if (!mounted) return;
+    switch (result) {
+      case DictionaryLookupStatus.noHandlers:
+        AnxToast.show(L10n.of(context).dictionaryNoCompatibleApp);
+      case DictionaryLookupStatus.failed:
+        AnxToast.show(L10n.of(context).dictionaryLaunchFailed);
+      case DictionaryLookupStatus.unsupported:
+      case DictionaryLookupStatus.launched:
+        break;
     }
   }
 
@@ -318,28 +362,42 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         axis: widget.axis,
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.persistenceSession.hasPersistedAnnotation)
+            IconAndText(
+              compact: true,
+              onTap: () => _openEditor(focusPersonalNote: true),
+              icon: const Icon(EvaIcons.edit_2_outline),
+              text: L10n.of(context).annotationEditorEditTitle,
+            ),
+          if (_showProviderAction(AnnotationEditorProvider.ai))
+            IconAndText(
+              compact: true,
+              onTap: () => _openEditor(
+                initialProvider: AnnotationEditorProvider.ai,
+              ),
+              icon: const Icon(EvaIcons.message_circle_outline),
+              text: L10n.of(context).navBarAI,
+            ),
           IconAndText(
             compact: true,
-            onTap: () => _openEditor(AnnotationEditorProvider.ai),
-            icon: const Icon(EvaIcons.message_circle_outline),
-            text: L10n.of(context).navBarAI,
-          ),
-          IconAndText(
-            compact: true,
-            onTap: () => _openEditor(AnnotationEditorProvider.ldoce),
+            onTap: _openDictionary,
             icon: const Icon(Icons.menu_book),
             text: L10n.of(context).contextMenuDictionary,
           ),
-          IconAndText(
-            compact: true,
-            onTap: () => _openEditor(AnnotationEditorProvider.googleTranslate),
-            icon: const Icon(Icons.g_translate),
-            text: L10n.of(context).contextMenuGoogleTranslate,
-          ),
-          if (!widget.footnote)
+          if (_showProviderAction(AnnotationEditorProvider.googleTranslate))
             IconAndText(
               compact: true,
-              onTap: _openEditor,
+              onTap: () => _openEditor(
+                initialProvider: AnnotationEditorProvider.googleTranslate,
+              ),
+              icon: const Icon(Icons.g_translate),
+              text: L10n.of(context).contextMenuGoogleTranslate,
+            ),
+          if (!widget.persistenceSession.hasPersistedAnnotation &&
+              !widget.footnote)
+            IconAndText(
+              compact: true,
+              onTap: () => _openEditor(focusPersonalNote: true),
               icon: const Icon(EvaIcons.edit_2_outline),
               text: L10n.of(context).contextMenuWriteIdea,
             ),

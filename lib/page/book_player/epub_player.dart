@@ -986,6 +986,23 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     ).prepare(generation);
   }
 
+  Future<bool> prepareSelectionForInternalAction(int generation) async {
+    if (!await prepareSelectionForExternalAction(generation)) return false;
+    try {
+      await webViewController.evaluateJavascript(
+        source: 'clearSelection($generation)',
+      );
+    } catch (_) {
+      // The snapshot already belongs to Flutter and the owning document may
+      // have disappeared while the modal handoff was completing.
+    }
+    if (_selectionSession.selectionCleared(generation)) {
+      _lastSelectionAnnotationContext = null;
+      _lastSelectionLookupContext = null;
+    }
+    return true;
+  }
+
   Future<void> endSelectionAfterAnnotationSave() async {
     removeOverlay();
     _selectionSession.reset();

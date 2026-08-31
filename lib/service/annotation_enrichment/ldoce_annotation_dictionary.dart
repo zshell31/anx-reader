@@ -126,6 +126,8 @@ class LdoceAnnotationDictionaryService {
       headers: const {
         'Accept': 'text/html',
         'Accept-Language': 'en',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36',
       },
     ).timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {

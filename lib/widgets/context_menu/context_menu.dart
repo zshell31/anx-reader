@@ -118,6 +118,16 @@ Future<void> showContextMenu(
     return true;
   }
 
+  Future<bool> prepareInternalAction() async {
+    if (selectionSessionGeneration != null) {
+      return playerKey.prepareSelectionForInternalAction(
+        selectionSessionGeneration,
+      );
+    }
+    playerKey.removeOverlay();
+    return true;
+  }
+
   final decoration = BoxDecoration(
     color: Prefs().eInkMode
         ? Colors.white
@@ -157,6 +167,7 @@ Future<void> showContextMenu(
       decoration: decoration,
       onClose: onClose,
       prepareExternalAction: prepareExternalAction,
+      prepareInternalAction: prepareInternalAction,
       menuConstraints: menuConstraints,
       initialPlacement: initialPlacement,
       horizontalMargin: horizontalMargin,
@@ -264,6 +275,7 @@ class _ContextMenuOverlay extends StatefulWidget {
     required this.decoration,
     required this.onClose,
     required this.prepareExternalAction,
+    required this.prepareInternalAction,
     required this.menuConstraints,
     required this.initialPlacement,
     required this.horizontalMargin,
@@ -287,6 +299,7 @@ class _ContextMenuOverlay extends StatefulWidget {
   final BoxDecoration decoration;
   final VoidCallback onClose;
   final Future<bool> Function() prepareExternalAction;
+  final Future<bool> Function() prepareInternalAction;
   final BoxConstraints menuConstraints;
   final _MenuPlacement initialPlacement;
   final double horizontalMargin;
@@ -487,7 +500,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   prepareExternalAction:
                                       widget.prepareExternalAction,
                                   prepareInternalAction:
-                                      widget.prepareExternalAction,
+                                      widget.prepareInternalAction,
                                   footnote: widget.footnote,
                                   decoration: widget.decoration,
                                   axis: widget.axis,

@@ -145,8 +145,11 @@ thread retains its thread/message identities and appends only new messages.
 - Note: `kind=personal-note` with established deterministic/tombstone behavior.
 
 These are the protocol-v2 fields used by the inspected Lingua Reader adapter.
-The existing Lingua fixture remains supported. Dedicated bidirectional fixtures
-for every new editor output/input case are still required before completion.
+Bidirectional fixtures cover Lingua-created and Anx-created Google, LDOCE, AI
+analysis, and AI-thread payloads. A Lingua fixture is hydrated through the
+editor and saved back through its single repository boundary while preserving
+unknown document, annotation, target, selector, material, commentary,
+metadata, thread-context, and message fields.
 
 ## UI and selection lifecycle
 
@@ -186,6 +189,12 @@ body scrolls, dirty dismissal choices, post-frame initial-provider startup, and
 existing-source open without a provider call. The combined editor
 widget/controller/draft run passes 17 tests.
 
+Cross-client hardening adds explicit Lingua-to-Anx and Anx-to-Lingua fixtures
+for all editor sources and AI messages. The focused cross-client, editor draft,
+controller, and repository run passes 35 tests. This work also fixed nested
+unknown commentary retention: the editor now owns the four known commentary
+keys while carrying any future keys transparently through Save.
+
 The repository test proves that a first editor Save containing Google, LDOCE,
 AI, two follow-up exchanges, and personal note creates one annotation and local
 canonical revision 1. Existing edit tests prove the same UUID is reused and one
@@ -197,19 +206,17 @@ non-resurrection are covered.
 
 Continue with these tasks in order:
 
-1. Add explicit bidirectional Lingua fixtures for Google, LDOCE, AI analysis,
-   and AI thread, including unknown-field retention on editor Save.
-2. Add repository tests for clearing personal note through the editor Save,
+1. Add repository tests for clearing personal note through the editor Save,
    removing AI/Google independently, no-op existing Save, and concurrent unseen
    thread/material preservation.
-3. Audit the new modal strings and add localization keys instead of leaving the
+2. Audit the new modal strings and add localization keys instead of leaving the
    current English literals.
-4. Audit/remove now-obsolete fragmented selection-only persistence UI where it
+3. Audit/remove now-obsolete fragmented selection-only persistence UI where it
    is genuinely unused, while retaining external Google/Dictionary services.
-5. Run the complete `test/service/sync` suite, then full Flutter and Foliate
+4. Run the complete `test/service/sync` suite, then full Flutter and Foliate
    verification below.
-6. Fix any regression without changing protocol version 2 or bilingual files.
-7. Finish this document's test evidence/limitations and update the M4E current
+5. Fix any regression without changing protocol version 2 or bilingual files.
+6. Finish this document's test evidence/limitations and update the M4E current
    checkpoint only after all suites pass.
 
 Required final commands not yet run for this feature:
@@ -230,7 +237,6 @@ source/bundle.
 ## Known limitations at this checkpoint
 
 - Complete Flutter and Foliate suites have not yet been run after this feature.
-- Exhaustive bidirectional cross-client fixtures remain.
 - New editor strings are not yet localized.
 - Real network behavior is intentionally untested; Google/LDOCE automated tests
   use mocks/fixtures.

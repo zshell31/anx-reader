@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 2,
+  "book": {
+    "fingerprintAlgorithm": "md5",
+    "fingerprint": "fedcba9876543210fedcba9876543210",
+    "title": "Anx fixture"
+  },
+  "annotations": [
+    {
+      "id": "anx-editor-annotation",
+      "motivation": "selection",
+      "createdAt": "2026-08-21T10:00:00.000Z",
+      "updatedAt": "2026-08-21T10:04:01.000Z",
+      "target": {
+        "selectedText": "take it for granted",
+        "context": "Do not take it for granted.",
+        "chapter": "Chapter 3",
+        "selectors": [
+          {"type": "epub-cfi", "cfi": "epubcfi(/6/6!/4/2:5)"}
+        ]
+      },
+      "enrichments": [
+        {
+          "id": "translation:anx-google",
+          "kind": "translation",
+          "providerId": "google-translate",
+          "providerName": "Google Translate",
+          "translation": "считать само собой разумеющимся",
+          "metadata": {"detectedLanguage": "en"},
+          "createdAt": "2026-08-21T10:01:00.000Z",
+          "updatedAt": "2026-08-21T10:01:00.000Z"
+        },
+        {
+          "id": "dictionary:anx-ldoce",
+          "kind": "dictionary",
+          "providerId": "ldoce",
+          "providerName": "LDOCE",
+          "translation": "to expect something to be available",
+          "markdown": "**take something for granted** — to expect it to always be available",
+          "metadata": {
+            "url": "https://www.ldoceonline.com/dictionary/take-for-granted"
+          },
+          "createdAt": "2026-08-21T10:02:00.000Z",
+          "updatedAt": "2026-08-21T10:02:00.000Z"
+        },
+        {
+          "id": "ai-analysis:anx-route",
+          "kind": "ai-analysis",
+          "providerId": "configured-route",
+          "providerName": "Configured AI",
+          "translation": "воспринимать как должное",
+          "commentary": {
+            "translation": "воспринимать как должное",
+            "translationNotes": "Идиоматическая фраза.",
+            "grammar": "Verb phrase.",
+            "usage": "Neutral."
+          },
+          "createdAt": "2026-08-21T10:03:00.000Z",
+          "updatedAt": "2026-08-21T10:03:00.000Z"
+        },
+        {
+          "id": "ai-thread:anx-thread",
+          "kind": "ai-thread",
+          "contextSnapshot": {
+            "selectedText": "take it for granted",
+            "context": "Do not take it for granted.",
+            "chapter": "Chapter 3",
+            "enrichmentIds": [
+              "ai-analysis:anx-route",
+              "dictionary:anx-ldoce",
+              "translation:anx-google"
+            ]
+          },
+          "messages": [
+            {
+              "id": "ai-message:anx-user",
+              "role": "user",
+              "sequence": 0,
+              "content": "Can it sound negative?",
+              "createdAt": "2026-08-21T10:04:00.000Z",
+              "updatedAt": "2026-08-21T10:04:00.000Z"
+            },
+            {
+              "id": "ai-message:anx-assistant",
+              "role": "assistant",
+              "sequence": 1,
+              "content": "Yes, when it implies insufficient appreciation.",
+              "createdAt": "2026-08-21T10:04:01.000Z",
+              "updatedAt": "2026-08-21T10:04:01.000Z"
+            }
+          ],
+          "createdAt": "2026-08-21T10:04:00.000Z",
+          "updatedAt": "2026-08-21T10:04:01.000Z"
+        }
+      ]
+    }
+  ]
+}

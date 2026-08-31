@@ -30,12 +30,14 @@ class AnnotationEditorCommentary {
   final String? translationNotes;
   final String? grammar;
   final String? usage;
+  final Map<String, Object?> unknownFields;
 
   const AnnotationEditorCommentary({
     this.translation,
     this.translationNotes,
     this.grammar,
     this.usage,
+    this.unknownFields = const {},
   });
 
   factory AnnotationEditorCommentary.fromMap(Map<Object?, Object?> value) =>
@@ -44,9 +46,21 @@ class AnnotationEditorCommentary {
         translationNotes: _optionalText(value['translationNotes']),
         grammar: _optionalText(value['grammar']),
         usage: _optionalText(value['usage']),
+        unknownFields: Map.unmodifiable({
+          for (final entry in value.entries)
+            if (entry.key is String &&
+                !const {
+                  'translation',
+                  'translationNotes',
+                  'grammar',
+                  'usage',
+                }.contains(entry.key))
+              entry.key as String: entry.value,
+        }),
       );
 
-  Map<String, String> toMap() => {
+  Map<String, Object?> toMap() => {
+        ...unknownFields,
         if (translation?.isNotEmpty == true) 'translation': translation!,
         if (translationNotes?.isNotEmpty == true)
           'translationNotes': translationNotes!,

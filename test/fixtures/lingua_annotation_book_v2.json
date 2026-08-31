@@ -13,9 +13,16 @@
       "updatedAt": "2026-08-20T10:03:00.000Z",
       "target": {
         "selectedText": "came across",
+        "context": "I came across an old friend yesterday.",
+        "chapter": "Chapter 2",
         "selectors": [
-          {"type": "epub-cfi", "cfi": "epubcfi(/6/4!/4/2:3)"}
-        ]
+          {
+            "type": "epub-cfi",
+            "cfi": "epubcfi(/6/4!/4/2:3)",
+            "futureSelectorField": "preserve"
+          }
+        ],
+        "futureTargetField": {"preserve": true}
       },
       "enrichments": [
         {
@@ -24,6 +31,10 @@
           "providerId": "google-translate",
           "providerName": "Google Translate",
           "translation": "случайно встретил",
+          "metadata": {
+            "detectedLanguage": "en",
+            "futureMetadataField": "preserve"
+          },
           "createdAt": "2026-08-20T10:01:00.000Z",
           "updatedAt": "2026-08-20T10:01:00.000Z",
           "futureMaterialField": {"preserve": true}
@@ -49,10 +60,49 @@
             "translation": "случайно встретил",
             "translationNotes": "Фразовый глагол.",
             "grammar": "Past simple.",
-            "usage": "Neutral."
+            "usage": "Neutral.",
+            "futureCommentaryField": "preserve"
           },
           "createdAt": "2026-08-20T10:03:00.000Z",
-          "updatedAt": "2026-08-20T10:03:00.000Z"
+          "updatedAt": "2026-08-20T10:03:00.000Z",
+          "futureAiField": ["preserve"]
+        },
+        {
+          "id": "lingua-thread",
+          "kind": "ai-thread",
+          "contextSnapshot": {
+            "selectedText": "came across",
+            "context": "I came across an old friend yesterday.",
+            "chapter": "Chapter 2",
+            "enrichmentIds": [
+              "lingua-ai",
+              "lingua-dictionary",
+              "lingua-translation"
+            ],
+            "futureContextField": {"preserve": true}
+          },
+          "messages": [
+            {
+              "id": "lingua-message-user",
+              "role": "user",
+              "sequence": 0,
+              "content": "Is it formal?",
+              "createdAt": "2026-08-20T10:04:00.000Z",
+              "updatedAt": "2026-08-20T10:04:00.000Z",
+              "futureMessageField": "preserve"
+            },
+            {
+              "id": "lingua-message-assistant",
+              "role": "assistant",
+              "sequence": 1,
+              "content": "It is neutral.",
+              "createdAt": "2026-08-20T10:04:01.000Z",
+              "updatedAt": "2026-08-20T10:04:01.000Z"
+            }
+          ],
+          "createdAt": "2026-08-20T10:04:00.000Z",
+          "updatedAt": "2026-08-20T10:04:01.000Z",
+          "futureThreadField": ["preserve"]
         }
       ],
       "futureAnnotationField": ["preserve"]

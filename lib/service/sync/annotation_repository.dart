@@ -36,7 +36,7 @@ class AnnotationEditorMaterialInput {
   final String kind;
   final String? translation;
   final String? markdown;
-  final Map<String, String> commentary;
+  final Map<String, Object?> commentary;
   final Map<String, String> metadata;
 
   const AnnotationEditorMaterialInput({
@@ -646,12 +646,12 @@ class AnnotationRepository {
   void _setOptionalMap(
     Map<String, dynamic> target,
     String key,
-    Map<String, String> value,
+    Map<String, Object?> value,
   ) {
     if (value.isEmpty) {
       target.remove(key);
     } else {
-      target[key] = Map<String, String>.from(value);
+      target[key] = Map<String, Object?>.from(value);
     }
   }
 

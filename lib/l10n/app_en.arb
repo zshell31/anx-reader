@@ -928,5 +928,36 @@
       "count": {"type": "int"}
     }
   },
-  "translationCacheBookUnavailable": "The book fingerprint could not be calculated; no persistent cache was changed."
+  "translationCacheBookUnavailable": "The book fingerprint could not be calculated; no persistent cache was changed.",
+  "annotationEditorUnsavedTitle": "Save annotation changes?",
+  "annotationEditorUnsavedMessage": "Provider results, AI answers, and note changes have not been saved.",
+  "annotationEditorDiscard": "Discard",
+  "annotationEditorDeleteTitle": "Delete annotation?",
+  "annotationEditorDeleteMessage": "The highlight and every saved source, note, and AI message will be deleted.",
+  "annotationEditorNewTitle": "New annotation",
+  "annotationEditorEditTitle": "Edit annotation",
+  "annotationEditorContext": "Context",
+  "annotationEditorAddSource": "Add source",
+  "annotationEditorPersonalNote": "Personal note",
+  "annotationEditorPersonalNoteHint": "Association, context, or mnemonic",
+  "annotationEditorAiChat": "AI chat",
+  "annotationEditorAiChatEmpty": "Ask about the phrase, translations, grammar, or dictionary material.",
+  "annotationEditorQuestionHint": "Ask a follow-up question…",
+  "annotationEditorSend": "Send",
+  "annotationEditorDelete": "Delete annotation",
+  "annotationEditorRemoveSource": "Remove source",
+  "annotationEditorDetectedLanguage": "Detected language: {language}",
+  "@annotationEditorDetectedLanguage": {
+    "placeholders": {
+      "language": {"type": "String"}
+    }
+  },
+  "annotationEditorOpenGoogleTranslate": "Open in Google Translate",
+  "annotationEditorOpenLdoce": "Open in LDOCE",
+  "annotationEditorSectionTranslation": "Translation",
+  "annotationEditorSectionNotes": "Notes",
+  "annotationEditorSectionGrammar": "Grammar",
+  "annotationEditorSectionUsage": "Usage",
+  "annotationEditorRoleAi": "AI",
+  "annotationEditorRoleYou": "You"
 }

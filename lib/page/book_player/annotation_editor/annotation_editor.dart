@@ -1,4 +1,5 @@
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_controller.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
@@ -143,25 +144,24 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
     }
     if (_closePromptOpen) return;
     _closePromptOpen = true;
+    final l10n = L10n.of(context);
     final action = await showDialog<_UnsavedAction>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Save annotation changes?'),
-        content: const Text(
-          'Provider results, AI answers, and note changes have not been saved.',
-        ),
+        title: Text(l10n.annotationEditorUnsavedTitle),
+        content: Text(l10n.annotationEditorUnsavedMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, _UnsavedAction.cancel),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, _UnsavedAction.discard),
-            child: const Text('Discard'),
+            child: Text(l10n.annotationEditorDiscard),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, _UnsavedAction.save),
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ],
       ),
@@ -178,21 +178,20 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   }
 
   Future<void> _delete() async {
+    final l10n = L10n.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete annotation?'),
-        content: const Text(
-          'The highlight and every saved source, note, and AI message will be deleted.',
-        ),
+        title: Text(l10n.annotationEditorDeleteTitle),
+        content: Text(l10n.annotationEditorDeleteMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -210,6 +209,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final theme = Theme.of(context);
+    final l10n = L10n.of(context);
     final eInk = Prefs().eInkMode;
     return PopScope(
       canPop: false,
@@ -230,10 +230,14 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
             child: Scaffold(
               appBar: AppBar(
                 automaticallyImplyLeading: false,
-                title: Text(draft.isNew ? 'New annotation' : 'Edit annotation'),
+                title: Text(
+                  draft.isNew
+                      ? l10n.annotationEditorNewTitle
+                      : l10n.annotationEditorEditTitle,
+                ),
                 actions: [
                   IconButton(
-                    tooltip: 'Close',
+                    tooltip: l10n.close,
                     onPressed: controller.saving ? null : _requestClose,
                     icon: const Icon(Icons.close),
                   ),
@@ -261,7 +265,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                         true)
                       ExpansionTile(
                         tilePadding: EdgeInsets.zero,
-                        title: const Text('Context'),
+                        title: Text(l10n.annotationEditorContext),
                         children: [
                           Align(
                             alignment: Alignment.centerLeft,
@@ -272,7 +276,10 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                         ],
                       ),
                     const SizedBox(height: 12),
-                    Text('Add source', style: theme.textTheme.titleMedium),
+                    Text(
+                      l10n.annotationEditorAddSource,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -300,24 +307,28 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                         ),
                       ],
                     const SizedBox(height: 20),
-                    Text('Personal note', style: theme.textTheme.titleMedium),
+                    Text(
+                      l10n.annotationEditorPersonalNote,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _noteController,
                       minLines: 3,
                       maxLines: 8,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Association, context, or mnemonic',
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: l10n.annotationEditorPersonalNoteHint,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text('AI chat', style: theme.textTheme.titleMedium),
+                    Text(
+                      l10n.annotationEditorAiChat,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     if (draft.aiMessages.isEmpty)
-                      const Text(
-                        'Ask about the phrase, translations, grammar, or dictionary material.',
-                      ),
+                      Text(l10n.annotationEditorAiChatEmpty),
                     for (final message in draft.aiMessages)
                       _ChatMessage(message: message),
                     if (controller.chatError case final error?)
@@ -332,16 +343,16 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                             minLines: 1,
                             maxLines: 5,
                             enabled: !controller.chatLoading,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: 'Ask a follow-up question…',
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              hintText: l10n.annotationEditorQuestionHint,
                             ),
                             onSubmitted: (_) => _sendQuestion(),
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
-                          tooltip: 'Send',
+                          tooltip: l10n.annotationEditorSend,
                           onPressed:
                               controller.chatLoading ? null : _sendQuestion,
                           icon: controller.chatLoading
@@ -375,12 +386,12 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                           TextButton.icon(
                             onPressed: controller.saving ? null : _delete,
                             icon: const Icon(Icons.delete_outline),
-                            label: const Text('Delete annotation'),
+                            label: Text(l10n.annotationEditorDelete),
                           ),
                         const Spacer(),
                         TextButton(
                           onPressed: controller.saving ? null : _requestClose,
-                          child: const Text('Cancel'),
+                          child: Text(l10n.commonCancel),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
@@ -394,7 +405,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Save'),
+                              : Text(l10n.commonSave),
                         ),
                       ],
                     ),
@@ -461,88 +472,91 @@ class _SourceCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Card.outlined(
-        child: ExpansionTile(
-          initiallyExpanded: true,
-          leading: Icon(_providerIcon(provider)),
-          title: Text(result.providerName),
-          subtitle: state.error == null ? null : _ErrorText(state.error!),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (state.loading)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else
-                IconButton(
-                  tooltip: 'Refresh',
-                  onPressed: onRefresh,
-                  icon: const Icon(Icons.refresh),
-                ),
-              IconButton(
-                tooltip: 'Remove source',
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  Widget build(BuildContext context) {
+    final l10n = L10n.of(context);
+    return Card.outlined(
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        leading: Icon(_providerIcon(provider)),
+        title: Text(result.providerName),
+        subtitle: state.error == null ? null : _ErrorText(state.error!),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (provider == AnnotationEditorProvider.ai &&
-                result.commentary != null)
-              _AiAnalysis(commentary: result.commentary!)
-            else if (result.markdown?.isNotEmpty == true)
-              StyledMarkdown(data: result.markdown!)
-            else if (result.translation?.isNotEmpty == true)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SelectableText(result.translation!),
-              ),
-            if (result.metadata['detectedLanguage'] case final language?)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('Detected language: $language'),
+            if (state.loading)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+              )
+            else
+              IconButton(
+                tooltip: l10n.commonRefresh,
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
               ),
-            if (provider == AnnotationEditorProvider.googleTranslate)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    final status = await GoogleTranslateAppService()
-                        .translate(selectedText);
-                    if (context.mounted &&
-                        status == GoogleTranslateAppStatus.failed) {
-                      AnxToast.show('Unable to open Google Translate');
-                    }
-                  },
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open in Google Translate'),
-                ),
-              ),
-            if (provider == AnnotationEditorProvider.ldoce)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => launchUrl(
-                    Uri.parse(result.metadata['url'] ??
-                        'https://www.ldoceonline.com/'),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open in LDOCE'),
-                ),
-              ),
+            IconButton(
+              tooltip: l10n.annotationEditorRemoveSource,
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline),
+            ),
           ],
         ),
-      );
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          if (provider == AnnotationEditorProvider.ai &&
+              result.commentary != null)
+            _AiAnalysis(commentary: result.commentary!)
+          else if (result.markdown?.isNotEmpty == true)
+            StyledMarkdown(data: result.markdown!)
+          else if (result.translation?.isNotEmpty == true)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(result.translation!),
+            ),
+          if (result.metadata['detectedLanguage'] case final language?)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(l10n.annotationEditorDetectedLanguage(language)),
+              ),
+            ),
+          if (provider == AnnotationEditorProvider.googleTranslate)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () async {
+                  final status =
+                      await GoogleTranslateAppService().translate(selectedText);
+                  if (context.mounted &&
+                      status == GoogleTranslateAppStatus.failed) {
+                    AnxToast.show(l10n.googleTranslateAppLaunchFailed);
+                  }
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: Text(l10n.annotationEditorOpenGoogleTranslate),
+              ),
+            ),
+          if (provider == AnnotationEditorProvider.ldoce)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse(
+                      result.metadata['url'] ?? 'https://www.ldoceonline.com/'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.open_in_new),
+                label: Text(l10n.annotationEditorOpenLdoce),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AiAnalysis extends StatelessWidget {
@@ -551,23 +565,26 @@ class _AiAnalysis extends StatelessWidget {
   const _AiAnalysis({required this.commentary});
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final section in <(String, String?)>[
-            ('Translation', commentary.translation),
-            ('Notes', commentary.translationNotes),
-            ('Grammar', commentary.grammar),
-            ('Usage', commentary.usage),
-          ])
-            if (section.$2?.isNotEmpty == true) ...[
-              Text(section.$1, style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
-              StyledMarkdown(data: section.$2!),
-              const SizedBox(height: 12),
-            ],
-        ],
-      );
+  Widget build(BuildContext context) {
+    final l10n = L10n.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in <(String, String?)>[
+          (l10n.annotationEditorSectionTranslation, commentary.translation),
+          (l10n.annotationEditorSectionNotes, commentary.translationNotes),
+          (l10n.annotationEditorSectionGrammar, commentary.grammar),
+          (l10n.annotationEditorSectionUsage, commentary.usage),
+        ])
+          if (section.$2?.isNotEmpty == true) ...[
+            Text(section.$1, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            StyledMarkdown(data: section.$2!),
+            const SizedBox(height: 12),
+          ],
+      ],
+    );
+  }
 }
 
 class _ChatMessage extends StatelessWidget {
@@ -576,23 +593,28 @@ class _ChatMessage extends StatelessWidget {
   const _ChatMessage({required this.message});
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.role == 'assistant' ? 'AI' : 'You',
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-            const SizedBox(height: 2),
-            if (message.role == 'assistant')
-              StyledMarkdown(data: message.content)
-            else
-              SelectableText(message.content),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final l10n = L10n.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.role == 'assistant'
+                ? l10n.annotationEditorRoleAi
+                : l10n.annotationEditorRoleYou,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 2),
+          if (message.role == 'assistant')
+            StyledMarkdown(data: message.content)
+          else
+            SelectableText(message.content),
+        ],
+      ),
+    );
+  }
 }
 
 class _ErrorText extends StatelessWidget {

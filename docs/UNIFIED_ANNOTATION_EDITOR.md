@@ -204,6 +204,13 @@ cross-client, widget, controller, and draft run passes 44 tests. Draft baseline
 IDs ensure that stale removal intent cannot tombstone entities introduced after
 the editor opened.
 
+The modal no longer contains user-facing English literals. It uses existing
+common actions plus dedicated annotation-editor localization keys, with English
+template text and Russian translations. Other locales use the repository's
+established generated English fallback and are listed in the generated
+untranslated-message report. A sixth focused test verifies the Russian editor
+strings through the generated localization class.
+
 The repository test proves that a first editor Save containing Google, LDOCE,
 AI, two follow-up exchanges, and personal note creates one annotation and local
 canonical revision 1. Existing edit tests prove the same UUID is reused and one
@@ -215,14 +222,12 @@ non-resurrection are covered.
 
 Continue with these tasks in order:
 
-1. Audit the new modal strings and add localization keys instead of leaving the
-   current English literals.
-2. Audit/remove now-obsolete fragmented selection-only persistence UI where it
+1. Audit/remove now-obsolete fragmented selection-only persistence UI where it
    is genuinely unused, while retaining external Google/Dictionary services.
-3. Run the complete `test/service/sync` suite, then full Flutter and Foliate
+2. Run the complete `test/service/sync` suite, then full Flutter and Foliate
    verification below.
-4. Fix any regression without changing protocol version 2 or bilingual files.
-5. Finish this document's test evidence/limitations and update the M4E current
+3. Fix any regression without changing protocol version 2 or bilingual files.
+4. Finish this document's test evidence/limitations and update the M4E current
    checkpoint only after all suites pass.
 
 Required final commands not yet run for this feature:
@@ -243,7 +248,6 @@ source/bundle.
 ## Known limitations at this checkpoint
 
 - Complete Flutter and Foliate suites have not yet been run after this feature.
-- New editor strings are not yet localized.
 - Real network behavior is intentionally untested; Google/LDOCE automated tests
   use mocks/fixtures.
 - The Google endpoint is unofficial and LDOCE HTML can evolve.

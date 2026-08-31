@@ -887,5 +887,37 @@
    "aiModelSwitchTitle": "Сменить модель",
    "aiModelEnterManually": "Введите название модели",
    "aiModelOrSelectBelow": "Или выберите из списка:",
-   "aiChatFontSize": "Размер шрифта"
+   "aiChatFontSize": "Размер шрифта",
+   "googleTranslateAppLaunchFailed": "Не удалось открыть Google Переводчик.",
+   "annotationEditorUnsavedTitle": "Сохранить изменения аннотации?",
+   "annotationEditorUnsavedMessage": "Результаты источников, ответы ИИ и изменения заметки не сохранены.",
+   "annotationEditorDiscard": "Отбросить",
+   "annotationEditorDeleteTitle": "Удалить аннотацию?",
+   "annotationEditorDeleteMessage": "Выделение, все сохранённые источники, заметка и сообщения ИИ будут удалены.",
+   "annotationEditorNewTitle": "Новая аннотация",
+   "annotationEditorEditTitle": "Изменить аннотацию",
+   "annotationEditorContext": "Контекст",
+   "annotationEditorAddSource": "Добавить источник",
+   "annotationEditorPersonalNote": "Личная заметка",
+   "annotationEditorPersonalNoteHint": "Ассоциация, контекст или мнемоника",
+   "annotationEditorAiChat": "Чат с ИИ",
+   "annotationEditorAiChatEmpty": "Спросите о фразе, переводах, грамматике или словарном материале.",
+   "annotationEditorQuestionHint": "Задайте уточняющий вопрос…",
+   "annotationEditorSend": "Отправить",
+   "annotationEditorDelete": "Удалить аннотацию",
+   "annotationEditorRemoveSource": "Удалить источник",
+   "annotationEditorDetectedLanguage": "Определённый язык: {language}",
+   "@annotationEditorDetectedLanguage": {
+     "placeholders": {
+       "language": {"type": "String"}
+     }
+   },
+   "annotationEditorOpenGoogleTranslate": "Открыть в Google Переводчике",
+   "annotationEditorOpenLdoce": "Открыть в LDOCE",
+   "annotationEditorSectionTranslation": "Перевод",
+   "annotationEditorSectionNotes": "Примечания",
+   "annotationEditorSectionGrammar": "Грамматика",
+   "annotationEditorSectionUsage": "Употребление",
+   "annotationEditorRoleAi": "ИИ",
+   "annotationEditorRoleYou": "Вы"
 }

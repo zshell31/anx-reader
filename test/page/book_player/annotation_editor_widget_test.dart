@@ -1,4 +1,6 @@
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/l10n/generated/L10n.dart';
+import 'package:anx_reader/l10n/generated/L10n_ru.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_controller.dart';
@@ -150,6 +152,15 @@ void main() {
     expect(find.text('Edit annotation'), findsOneWidget);
     expect(google.calls, 0);
   });
+
+  test('editor has generated Russian localization strings', () {
+    final l10n = L10nRu();
+
+    expect(l10n.annotationEditorNewTitle, 'Новая аннотация');
+    expect(l10n.annotationEditorAddSource, 'Добавить источник');
+    expect(l10n.annotationEditorPersonalNote, 'Личная заметка');
+    expect(l10n.annotationEditorAiChat, 'Чат с ИИ');
+  });
 }
 
 Future<void> _openDialog(
@@ -159,8 +170,11 @@ Future<void> _openDialog(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: L10n.localizationsDelegates,
+      supportedLocales: L10n.supportedLocales,
       home: Builder(
         builder: (context) => TextButton(
+          key: const Key('open-editor'),
           onPressed: () => showDialog<Object?>(
             context: context,
             barrierDismissible: false,
@@ -174,7 +188,8 @@ Future<void> _openDialog(
       ),
     ),
   );
-  await tester.tap(find.text('Open editor'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('open-editor')));
   await tester.pump();
 }
 

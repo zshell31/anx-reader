@@ -1299,20 +1299,21 @@ Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed work: Bilingual translation provider liveness and bounded
-current-page/next-page scheduling stabilization
+Last completed work: Selection-owned tap suppression, awaited external-action
+preparation, and redundant manual Translate action removal
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`33de3e13 fix: isolate concurrent AI stream subscriptions`
-Documentation checkpoint: This section records the diagnosed presentation
-race, document lifecycle, element in-flight strategy, renderer-owned cleanup,
-retry policy, strict-MIME opening failure, never-settling provider root cause,
-bounded queue, concurrent runner ownership, exact paragraph before/after
-evidence, and manual-device checklist.
-Repository state: Clean after the stabilization documentation commit
-Next submilestone: Manual bilingual/device verification and merge review
-Next concrete tasks: Execute the manual Android/device checklist, then perform
-merge review. Do not claim device verification until those checks are run.
+`8389675c fix: harden selection tap and external action lifecycle`
+Documentation checkpoint: This section and the regression record below cover
+the Android Range-collapse/click race, one-shot gesture ownership, awaited
+external-provider handoff, resume reconciliation, and toolbar cleanup. The
+bilingual/full-text translation pipeline remains unchanged.
+Repository state: Clean after the selection stabilization documentation commit
+Next submilestone: Manual selection/external-action and bilingual/device
+verification, then merge review
+Next concrete tasks: Execute both manual Android/device checklists, then
+continue merge review. Do not claim device verification until those checks are
+run.
 Known failing tests: None
 Known limitations: Presentation LWW uses wall-clock timestamps; presentation
 document/reset records have no compaction; coincident annotation ranges have no
@@ -1356,3 +1357,114 @@ tests under `assets/foliate-js/test/`, and the runtime paths in
 - `showContextMenu` can currently auto-create a canonical annotation when
   `autoMarkSelection` is enabled, meaning merely opening transient selection UI
   can mutate the annotation repository.
+
+## Post-M4E selection device-regression stabilization
+
+- Status: IMPLEMENTED; MANUAL VERIFICATION REQUIRED
+- Implementation commit:
+  `8389675c fix: harden selection tap and external action lifecycle`
+- Scope: transient selection gesture ownership, external selection-action
+  lifecycle, and removal of the redundant manual selection Translate action.
+  Canonical persistence, annotation identity, protocol v2, bilingual/full-text
+  translation, `translator.js`, persistent translation cache, and translation
+  WebDAV synchronization are unchanged.
+
+### Page-turn double handling: exact cause and correction
+
+`book.js` correctly captured the active Range and SelectionSession generation
+on capture-phase `pointerdown`. The normal reader click path in `view.js`,
+however, later decided whether to emit `click-view` solely from the live DOM
+selection. Android can collapse the Range after `pointerdown` and before
+`pointerup`/`click`. The selection lifecycle then cleared generation N, while
+the later click saw no Range and was independently emitted as a page-turn/menu
+tap. One physical gesture therefore entered both lifecycles.
+
+`SelectionGestureOwnership` now records only the owning content `Document`,
+pointer ID, current SelectionSession generation, and terminal pointer
+coordinates. It is not a second selection session or generation counter. A
+capture-phase document click listener consumes exactly the matching click once,
+even when `selectionchange` already cleared `pendingPointer` before
+`pointerup`. A new independent `pointerdown`, `pointercancel`, `pagehide`, or
+content-document replacement invalidates stale ownership. There is no timer,
+delay, or debounce window. Flutter's page-turn handler also refuses a click
+while its generation bridge still knows a transient selection is active; JS
+remains the primary ordering boundary.
+
+### External selection action: exact stale-overlay path and correction
+
+Google Translate and External Dictionary previously called synchronous
+`onClose()` and immediately invoked the Android PROCESS_TEXT gateway.
+`onClose()` removed the Flutter entry and changed the Flutter bridge, but its
+generation-scoped JavaScript `hideSelectionActions` evaluation was
+fire-and-forget. Android `startActivity` could therefore suspend the app before
+the cross-layer transition completed, leaving Flutter and the WebView disagreeing
+about whether generation N was `ACTIONS_VISIBLE`. There was no explicit resume
+reconciliation for an interrupted handoff.
+
+`prepareSelectionForExternalAction(generation)` is now the completed boundary
+before any external launcher. It synchronously claims only a matching
+`ACTIONS_VISIBLE` request, transitions Flutter to `SELECTED`, and removes the
+generation-tagged `OverlayEntry` and both overlay references. It then awaits
+the JS `hideSelectionActions(generation)` call. A false result or exception is
+safe when the JS session/document already ended, and late generation-N cleanup
+cannot remove or hide N+1. On resume, the player only removes an overlay that
+has no matching valid actions-visible bridge request; it never reconstructs or
+automatically opens actions.
+
+The common boundary is used for Google Translate, External Dictionary, web
+search, and Share. AI remains an internal workflow with its existing
+selection-persistence ownership. If the DOM Range survives an external action,
+the session remains `SELECTED` and a deliberate later tap can request actions
+again. If Android collapses it, the normal generation-scoped clear converges to
+`IDLE`. Launch failure leaves the overlay closed and the bridge coherent.
+
+The manual selection action labelled `Translate` with `Icons.translate` was
+removed. The visible Google Translate action remains. Existing
+`autoTranslateSelection` behavior and the underlying internal translation
+service remain present; no bilingual/full-text translation code was modified.
+
+### Automated verification
+
+- Configured Foliate `npm test`: 67 of 67 passed, including nine new
+  deterministic gesture tests for outside/inside taps, visible-action hiding,
+  native Range collapse, one-shot next-tap behavior, cancellation, identity
+  mismatch, and document replacement.
+- Configured Foliate `npm run build`: succeeded and regenerated
+  `assets/foliate-js/dist/bundle.js`; Webpack emitted the same three known
+  top-level-await target warnings.
+- Focused Flutter selection bridge, canonical mutation boundary, Google
+  Translate PROCESS_TEXT, and External Dictionary run: 39 of 39 passed.
+- Full `flutter test --no-pub`: 294 of 294 passed.
+- Targeted Flutter analysis: no new production issue; the two reported
+  `reading_page.dart` informational lints predate this change.
+- Full `flutter analyze --no-pub`: zero errors, zero warnings, and the same 42
+  repository informational lints documented by earlier stabilization work.
+
+### Selection and external-action Android/device checklist
+
+Status: **MANUAL VERIFICATION REQUIRED**. Codex did not execute these checks.
+
+1. Select text.
+2. Tap previous-page zone outside selection.
+   Expected: selection clears, page does NOT turn.
+3. Tap previous-page zone again.
+   Expected: page turns normally.
+4. Select text and tap next-page zone outside selection.
+   Expected: selection clears, page does NOT turn.
+5. Tap selected text.
+   Expected: actions open, page does NOT turn.
+6. Tap selected text again.
+   Expected: actions hide, selection remains.
+7. With actions visible, tap outside.
+   Expected: actions and selection disappear, page does NOT turn.
+8. Open actions -> Google Translate.
+9. Verify Anx action overlay is gone before/while Translate opens.
+10. Close Google Translate.
+11. Verify no stuck Anx action buttons.
+12. If selection survives, tap it to reopen actions normally.
+13. Repeat Google Translate launch/return several times.
+14. Repeat with external Dictionary.
+15. Repeat near left/right page-turn zones.
+16. Verify normal page turning still works when there is no active selection.
+17. Verify the manual Translate button is no longer present.
+18. Verify bilingual mode still works unchanged.

@@ -2,7 +2,7 @@
 
 ## Status checkpoint
 
-Status: **IMPLEMENTATION CHECKPOINT — CONTINUE IN A NEW SESSION**
+Status: **AUTOMATED VERIFICATION COMPLETE — MANUAL DEVICE VERIFICATION REQUIRED**
 
 Branch: `feature/m4e-canonical-annotation-ux`
 
@@ -13,10 +13,15 @@ Implemented commits:
 - `773f7e2d feat: persist unified annotation editor state`
 - `01da9917 feat: add unified annotation editor and AI chat`
 - `eed0fb69 feat: route selection enrichments through annotation editor`
+- `1c785129 test: cover unified annotation editor widgets`
+- `a7051117 test: harden annotation editor cross-client fixtures`
+- `73780aeb fix: preserve concurrent annotation editor state`
+- `72b5d3bd feat: localize unified annotation editor`
+- `720fadb3 refactor: remove fragmented selection editors`
 
-This checkpoint is intentionally not a completion claim. The core feature is
-implemented and focused tests pass, but the complete verification and remaining
-compatibility hardening listed below still need to be finished.
+The implementation and required automated hardening are complete. This is not
+a manual verification or merge claim: the Android/device checklist below has
+not been executed.
 
 ## Goal and reference behavior
 
@@ -225,17 +230,22 @@ Save advances the canonical revision exactly once. Removal, Cancel/no-write,
 unknown-field retention, stable IDs/creation times, and tombstone
 non-resurrection are covered.
 
-## Remaining automated work
+## Final automated verification
 
-Continue with these tasks in order:
+Completed after all hardening commits:
 
-1. Run the complete `test/service/sync` suite, then full Flutter and Foliate
-   verification below.
-2. Fix any regression without changing protocol version 2 or bilingual files.
-3. Finish this document's test evidence/limitations and update the M4E current
-   checkpoint only after all suites pass.
+- complete `test/service/sync`: 202 tests passed;
+- complete `flutter test --no-pub`: 336 tests passed;
+- complete `flutter analyze --no-pub`: 42 repository-wide informational lints,
+  zero errors and zero warnings, matching the documented baseline;
+- Foliate configured `npm test`: 67 tests passed;
+- Foliate configured `npm run build`: succeeded and reproduced the checked-in
+  bundle with the same three documented top-level-await target warnings;
+- `dart format .`: 570 files checked; it normalized one tracked pre-existing
+  assertion layout in `open_reader_annotation_refresh_test.dart`;
+- final `git diff --check`: passed.
 
-Required final commands not yet run for this feature:
+Commands executed:
 
 ```bash
 dart format .
@@ -250,9 +260,8 @@ Do not hand-edit `assets/foliate-js/dist/bundle.js`. The current implementation
 did not modify bilingual translator/cache/fingerprint/WebDAV code or Foliate
 source/bundle.
 
-## Known limitations at this checkpoint
+## Known limitations
 
-- Complete Flutter and Foliate suites have not yet been run after this feature.
 - Real network behavior is intentionally untested; Google/LDOCE automated tests
   use mocks/fixtures.
 - The Google endpoint is unofficial and LDOCE HTML can evolve.
@@ -303,5 +312,5 @@ Codex did not perform these device checks:
     overlay.
 37. Verify bilingual mode still works.
 
-Branch readiness at this checkpoint: **ready for continued automated
-hardening, not yet ready for final manual verification sign-off**.
+Branch readiness: **ready for manual verification, not yet ready for manual
+verification sign-off or merge**.

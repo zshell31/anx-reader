@@ -1303,21 +1303,21 @@ Branch readiness: Ready for manual verification / merge review
 
 ## Current checkpoint
 
-Last completed work: Selection-owned tap suppression, awaited external-action
-preparation, and redundant manual Translate action removal
+Last completed work: Unified annotation editor implementation and automated
+hardening; detailed evidence is in `docs/UNIFIED_ANNOTATION_EDITOR.md`
 Current branch: `feature/m4e-canonical-annotation-ux`
 Last implementation commit:
-`8389675c fix: harden selection tap and external action lifecycle`
-Documentation checkpoint: This section and the regression record below cover
-the Android Range-collapse/click race, one-shot gesture ownership, awaited
-external-provider handoff, resume reconciliation, and toolbar cleanup. The
-bilingual/full-text translation pipeline remains unchanged.
-Repository state: Clean after the selection stabilization documentation commit
-Next submilestone: Manual selection/external-action and bilingual/device
-verification, then merge review
-Next concrete tasks: Execute both manual Android/device checklists, then
-continue merge review. Do not claim device verification until those checks are
-run.
+`720fadb3 refactor: remove fragmented selection editors`
+Documentation checkpoint: The unified editor now has widget coverage,
+bidirectional Lingua fixtures, stale-save concurrency protection, localized
+strings, obsolete selection-editor cleanup, and complete Flutter/Foliate
+verification. Protocol v2 and the bilingual/full-text translation pipeline
+remain unchanged.
+Repository state: Clean at the final automated-verification checkpoint
+Next submilestone: Manual unified-editor, selection/external-action, and
+bilingual/device verification, then merge review
+Next concrete tasks: Execute all three manual Android/device checklists, then
+continue merge review. Do not claim device verification until those checks run.
 Known failing tests: None
 Known limitations: Presentation LWW uses wall-clock timestamps; presentation
 document/reset records have no compaction; coincident annotation ranges have no

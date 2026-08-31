@@ -35,8 +35,7 @@ void main() {
     expect(player, contains('annotationId: id'));
     expect(player, isNot(contains('annotationRefForNativeId')));
     expect(excerpt, contains('annotationRepository.tombstoneAnnotation(ref)'));
-    expect(foliate,
-        contains('annotationForRemoval(this.annotationsById, id)'));
+    expect(foliate, contains('annotationForRemoval(this.annotationsById, id)'));
     expect(foliate, isNot(contains('this.annotationsByValue.get(cfi)')));
   });
 

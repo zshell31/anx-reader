@@ -167,7 +167,88 @@ void main() {
     expect(draft.aiMessages.map((message) => message.content),
         ['Why?', 'Because.']);
   });
+
+  test('newer tombstones do not resurrect older material or AI thread', () {
+    final annotation = const CanonicalAnnotationReadAdapter().read({
+      'schemaVersion': 2,
+      'book': {
+        'fingerprintAlgorithm': 'md5',
+        'fingerprint': fingerprint,
+      },
+      'annotations': [
+        {
+          'id': 'annotation-a',
+          'motivation': 'selection',
+          'createdAt': '2026-01-01T00:00:00.000Z',
+          'updatedAt': '2026-01-01T00:03:00.000Z',
+          'target': {
+            'selectedText': 'take it for granted',
+            'selectors': [
+              {'type': 'epub-cfi', 'cfi': 'epubcfi(/6/2!/4/2:1)'},
+            ],
+          },
+          'enrichments': [
+            _translation('active', '2026-01-01T00:01:00.000Z'),
+            _translation(
+              'deleted',
+              '2026-01-01T00:03:00.000Z',
+              deleted: true,
+            ),
+            _thread('active', '2026-01-01T00:01:00.000Z'),
+            _thread(
+              'deleted',
+              '2026-01-01T00:03:00.000Z',
+              deleted: true,
+            ),
+          ],
+        },
+      ],
+    }).single;
+    final draft = AnnotationEditorDraft.forAnnotation(
+      selection: selection(),
+      bookTitle: 'Book',
+      annotation: annotation,
+    );
+
+    expect(draft.sourceResults, isEmpty);
+    expect(draft.aiThreadId, isNull);
+    expect(draft.aiMessages, isEmpty);
+  });
 }
+
+Map<String, Object?> _translation(
+  String id,
+  String updatedAt, {
+  bool deleted = false,
+}) =>
+    {
+      'id': 'translation:$id',
+      'kind': 'translation',
+      'providerId': 'google-translate',
+      'providerName': 'Google Translate',
+      'translation': id,
+      'createdAt': '2026-01-01T00:01:00.000Z',
+      'updatedAt': updatedAt,
+      if (deleted) 'deletedAt': updatedAt,
+    };
+
+Map<String, Object?> _thread(
+  String id,
+  String updatedAt, {
+  bool deleted = false,
+}) =>
+    {
+      'id': 'ai-thread:$id',
+      'kind': 'ai-thread',
+      'contextSnapshot': {
+        'selectedText': 'take it for granted',
+        'enrichmentIds': <Object>[],
+      },
+      'messages': <Object>[],
+      'createdAt': '2026-01-01T00:01:00.000Z',
+      'updatedAt': updatedAt,
+      if (deleted) 'deletedAt': updatedAt,
+    };
 
 AnnotationEditorDraft _existingDraft() {
   final document = {

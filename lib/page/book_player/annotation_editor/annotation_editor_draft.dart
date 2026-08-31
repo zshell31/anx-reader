@@ -221,26 +221,29 @@ class AnnotationEditorDraft {
     required AnnotationUiModel annotation,
   }) {
     final results = <AnnotationEditorProvider, AnnotationEditorSourceResult>{};
+    final materialCandidates =
+        <AnnotationEditorProvider, List<AnnotationEnrichmentView>>{};
     final threads = <AnnotationEnrichmentView>[];
-    for (final enrichment in annotation.activeEnrichments) {
+    for (final enrichment in annotation.allEnrichments) {
       if (enrichment.kind == 'ai-thread') {
         threads.add(enrichment);
         continue;
       }
       final provider = _providerFor(enrichment);
       if (provider == null) continue;
-      final existing = results[provider];
-      if (existing == null ||
-          enrichment.updatedAt.isAfter(existing.updatedAt!)) {
-        results[provider] =
-            AnnotationEditorSourceResult.fromEnrichment(enrichment);
+      materialCandidates.putIfAbsent(provider, () => []).add(enrichment);
+    }
+    for (final entry in materialCandidates.entries) {
+      entry.value.sort(_compareEnrichmentViews);
+      final winner = entry.value.last;
+      if (!winner.isTombstoned) {
+        results[entry.key] =
+            AnnotationEditorSourceResult.fromEnrichment(winner);
       }
     }
-    threads.sort((left, right) {
-      final time = left.updatedAt.compareTo(right.updatedAt);
-      return time != 0 ? time : left.id.compareTo(right.id);
-    });
-    final thread = threads.lastOrNull;
+    threads.sort(_compareEnrichmentViews);
+    final thread =
+        threads.lastOrNull?.isTombstoned == true ? null : threads.lastOrNull;
     final messages =
         thread == null ? <AnnotationEditorMessage>[] : _messages(thread);
     return AnnotationEditorDraft._(
@@ -441,3 +444,12 @@ DateTime? _optionalDate(Object? value) {
   if (value is! String) return null;
   return DateTime.tryParse(value);
 }
+
+int _compareEnrichmentViews(
+  AnnotationEnrichmentView left,
+  AnnotationEnrichmentView right,
+) =>
+    compareCanonicalEntityRecency(
+      left.data.cast<String, dynamic>(),
+      right.data.cast<String, dynamic>(),
+    );

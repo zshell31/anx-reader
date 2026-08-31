@@ -6,8 +6,6 @@ import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
-import 'package:anx_reader/widgets/context_menu/reader_note_menu.dart';
-import 'package:anx_reader/widgets/context_menu/translation_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
@@ -161,7 +159,6 @@ Future<void> showContextMenu(
       prepareExternalAction: prepareExternalAction,
       menuConstraints: menuConstraints,
       initialPlacement: initialPlacement,
-      showTranslationDefault: Prefs().autoTranslateSelection,
       horizontalMargin: horizontalMargin,
       verticalMargin: verticalMargin,
       gap: gap,
@@ -269,7 +266,6 @@ class _ContextMenuOverlay extends StatefulWidget {
     required this.prepareExternalAction,
     required this.menuConstraints,
     required this.initialPlacement,
-    required this.showTranslationDefault,
     required this.horizontalMargin,
     required this.verticalMargin,
     required this.gap,
@@ -293,7 +289,6 @@ class _ContextMenuOverlay extends StatefulWidget {
   final Future<bool> Function() prepareExternalAction;
   final BoxConstraints menuConstraints;
   final _MenuPlacement initialPlacement;
-  final bool showTranslationDefault;
   final double horizontalMargin;
   final double verticalMargin;
   final double gap;
@@ -308,13 +303,9 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   final GlobalKey _menuKey = GlobalKey();
   final GlobalKey<ExcerptMenuState> _excerptMenuKey =
       GlobalKey<ExcerptMenuState>();
-  final GlobalKey<ReaderNoteMenuState> _readerNoteMenuKey =
-      GlobalKey<ReaderNoteMenuState>();
 
   late Offset _position;
   late bool _reverse;
-  late bool _showTranslationMenu;
-  bool _showReaderNoteMenu = false;
   bool _waitingForFirstMeasurement = true;
   late BoxConstraints _menuConstraints;
   late double _bottomInset;
@@ -326,7 +317,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     WidgetsBinding.instance.addObserver(this);
     _position = widget.initialPlacement.offset;
     _reverse = widget.initialPlacement.shouldReverse;
-    _showTranslationMenu = widget.showTranslationDefault;
     _persistenceSession = SelectionPersistenceSession(
       SelectionSnapshot(
         selectedText: widget.annoContent,
@@ -453,43 +443,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     }
   }
 
-  void _toggleReaderNoteMenu({bool? show}) {
-    final target = show ?? !_showReaderNoteMenu;
-    setState(() {
-      _showReaderNoteMenu = target;
-    });
-    _scheduleRecalculate(
-      delay: _showReaderNoteMenu
-          ? const Duration(milliseconds: 300)
-          : Duration.zero,
-    );
-  }
-
-  Future<void> _openReaderNoteMenu(String? personalNote) async {
-    _toggleReaderNoteMenu(show: true);
-    if (_readerNoteMenuKey.currentState == null) {
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-    await _readerNoteMenuKey.currentState?.showNoteDialog(personalNote);
-    _scheduleRecalculate(delay: const Duration(milliseconds: 300));
-  }
-
-  void _handleReaderNoteVisibilityChange(bool visible) {
-    if (_showReaderNoteMenu == visible) {
-      return;
-    }
-    setState(() {
-      _showReaderNoteMenu = visible;
-    });
-    _scheduleRecalculate(
-      delay: visible ? const Duration(milliseconds: 300) : Duration.zero,
-    );
-  }
-
-  void _handleReaderNoteSizeChanged() {
-    _scheduleRecalculate();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -533,10 +486,10 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   onClose: widget.onClose,
                                   prepareExternalAction:
                                       widget.prepareExternalAction,
+                                  prepareInternalAction:
+                                      widget.prepareExternalAction,
                                   footnote: widget.footnote,
                                   decoration: widget.decoration,
-                                  toggleReaderNoteMenu: _toggleReaderNoteMenu,
-                                  openReaderNoteMenu: _openReaderNoteMenu,
                                   axis: widget.axis,
                                   reverse: _reverse,
                                 ),
@@ -544,45 +497,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                             ),
                           ],
                         ),
-                        if (_showReaderNoteMenu) ...[
-                          const SizedBox.square(dimension: 10),
-                          AxisFlex(
-                            axis: widget.axis,
-                            children: [
-                              ReaderNoteMenu(
-                                key: _readerNoteMenuKey,
-                                initialValue: null,
-                                decoration: widget.decoration,
-                                axis: widget.axis,
-                                onVisibilityChange:
-                                    _handleReaderNoteVisibilityChange,
-                                onSizeChanged: _handleReaderNoteSizeChanged,
-                                onSave: (value) async {
-                                  await _excerptMenuKey.currentState
-                                      ?.savePersonalNote(value);
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (_showTranslationMenu) ...[
-                          const SizedBox.square(dimension: 10),
-                          AxisFlex(
-                            axis: widget.axis,
-                            children: [
-                              TranslationMenu(
-                                content: widget.annoContent,
-                                decoration: widget.decoration,
-                                axis: widget.axis,
-                                lookupContext: widget.lookupContext,
-                                onSave: (translation) async {
-                                  await _excerptMenuKey.currentState
-                                      ?.saveTranslation(translation);
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
                   ),

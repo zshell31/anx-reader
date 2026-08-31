@@ -94,6 +94,8 @@ class AnnotationEnrichmentView {
       ? (data['commentary'] as Map).cast<String, Object?>()
       : null;
 
+  bool get isTombstoned => data.containsKey('deletedAt');
+
   String? commentaryValue(String field) {
     final value = commentary?[field];
     return value is String ? value : null;
@@ -140,6 +142,7 @@ class AnnotationUiModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<AnnotationEnrichmentView> activeEnrichments;
+  final List<AnnotationEnrichmentView> allEnrichments;
   final AnnotationEnrichmentView? effectivePersonalNote;
   final AnnotationCapability navigationCapability;
   final AnnotationCapability renderingCapability;
@@ -157,6 +160,7 @@ class AnnotationUiModel {
     required this.createdAt,
     required this.updatedAt,
     required this.activeEnrichments,
+    required this.allEnrichments,
     required this.effectivePersonalNote,
     required this.navigationCapability,
     required this.renderingCapability,
@@ -247,6 +251,7 @@ class CanonicalAnnotationReadAdapter {
       createdAt: DateTime.parse(annotation['createdAt'] as String),
       updatedAt: DateTime.parse(annotation['updatedAt'] as String),
       activeEnrichments: activeAnnotationEnrichments(annotation),
+      allEnrichments: allAnnotationEnrichments(annotation),
       effectivePersonalNote: effectivePersonalNote(annotation),
       navigationCapability: capabilities.navigation,
       renderingCapability: capabilities.rendering,
@@ -283,6 +288,14 @@ List<AnnotationEnrichmentView> activeAnnotationEnrichments(
   final enrichments = (annotation['enrichments'] as List)
       .cast<Map<String, dynamic>>()
       .where((enrichment) => !isProtocolEntityTombstoned(enrichment))
+      .map(AnnotationEnrichmentView._);
+  return List.unmodifiable(enrichments);
+}
+
+List<AnnotationEnrichmentView> allAnnotationEnrichments(
+    Map<String, dynamic> annotation) {
+  final enrichments = (annotation['enrichments'] as List)
+      .cast<Map<String, dynamic>>()
       .map(AnnotationEnrichmentView._);
   return List.unmodifiable(enrichments);
 }

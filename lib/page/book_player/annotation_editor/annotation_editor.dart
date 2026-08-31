@@ -293,6 +293,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                         _SourceCard(
                           provider: provider,
                           result: result,
+                          selectedText: draft.selection.selectedText,
                           state: draft.stateFor(provider),
                           onRefresh: () => controller.runProvider(provider),
                           onRemove: () => controller.removeProvider(provider),
@@ -445,6 +446,7 @@ class _ProviderButton extends StatelessWidget {
 class _SourceCard extends StatelessWidget {
   final AnnotationEditorProvider provider;
   final AnnotationEditorSourceResult result;
+  final String selectedText;
   final AnnotationEditorProviderState state;
   final VoidCallback onRefresh;
   final VoidCallback onRemove;
@@ -452,6 +454,7 @@ class _SourceCard extends StatelessWidget {
   const _SourceCard({
     required this.provider,
     required this.result,
+    required this.selectedText,
     required this.state,
     required this.onRefresh,
     required this.onRemove,
@@ -514,7 +517,7 @@ class _SourceCard extends StatelessWidget {
                 child: TextButton.icon(
                   onPressed: () async {
                     final status = await GoogleTranslateAppService()
-                        .translate(result.translation ?? '');
+                        .translate(selectedText);
                     if (context.mounted &&
                         status == GoogleTranslateAppStatus.failed) {
                       AnxToast.show('Unable to open Google Translate');

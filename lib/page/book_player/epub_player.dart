@@ -986,6 +986,14 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     ).prepare(generation);
   }
 
+  Future<void> endSelectionAfterAnnotationSave() async {
+    removeOverlay();
+    _selectionSession.reset();
+    _lastSelectionAnnotationContext = null;
+    _lastSelectionLookupContext = null;
+    await webViewController.evaluateJavascript(source: 'clearSelection()');
+  }
+
   void reconcileSelectionOverlay() {
     final generation = contextMenuSelectionSessionGeneration;
     if (generation != null &&

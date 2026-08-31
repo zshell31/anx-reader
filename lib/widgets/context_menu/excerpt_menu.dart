@@ -1,18 +1,14 @@
-import 'dart:io';
-
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/constants/note_annotations.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
+import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
-import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
-import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
-import 'package:anx_reader/service/translate/google_translate_app.dart';
-import 'package:anx_reader/utils/env_var.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/book_share/excerpt_share_service.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
@@ -37,8 +33,7 @@ class ExcerptMenu extends StatefulWidget {
   final Future<bool> Function() prepareExternalAction;
   final bool footnote;
   final BoxDecoration decoration;
-  final void Function({bool? show}) toggleReaderNoteMenu;
-  final Future<void> Function(String? personalNote) openReaderNoteMenu;
+  final Future<bool> Function() prepareInternalAction;
   final Axis axis;
   final bool reverse;
 
@@ -56,8 +51,7 @@ class ExcerptMenu extends StatefulWidget {
     required this.prepareExternalAction,
     required this.footnote,
     required this.decoration,
-    required this.toggleReaderNoteMenu,
-    required this.openReaderNoteMenu,
+    required this.prepareInternalAction,
     required this.axis,
     required this.reverse,
   });
@@ -68,7 +62,6 @@ class ExcerptMenu extends StatefulWidget {
 
 class ExcerptMenuState extends State<ExcerptMenu> {
   bool deleteConfirm = false;
-  String? _currentPersonalNote;
   late String annoType;
   late String annoColor;
 
@@ -91,13 +84,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
           book?.annotations.where((value) => value.ref == ref).firstOrNull;
       if (!mounted || annotation == null) return;
       setState(() {
-        _currentPersonalNote = annotation.effectivePersonalNote?.content;
         annoType = annotation.localPresentation?.style.name ?? annoType;
         annoColor = annotation.localPresentation?.color ?? annoColor;
       });
-      if (!widget.footnote && _currentPersonalNote?.isNotEmpty == true) {
-        await widget.openReaderNoteMenu(_currentPersonalNote);
-      }
     } catch (_) {
       // Canonical state may refresh concurrently; keep current UI defaults.
     }
@@ -122,33 +111,32 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     );
   }
 
-  Future<void> savePersonalNote(String value) async {
-    await widget.persistenceSession.persistWithFirstSave(
-      createAndSave: (snapshot) async {
-        final mutation =
-            await annotationRepository.createAnnotationWithPersonalNote(
-                _canonicalCreation(snapshot), value);
-        return SelectionFirstSaveResult(
-            SelectionAnnotationHandle(ref: mutation), mutation);
-      },
-      save: (ref) => annotationRepository.setPersonalNote(ref, value),
-    );
-    _currentPersonalNote = value.trim();
-    await epubPlayerKey.currentState!.refreshAnnotations();
-  }
-
-  Future<void> saveTranslation(String value) async {
-    await widget.persistenceSession.persistWithFirstSave(
-      createAndSave: (snapshot) async {
-        final mutation =
-            await annotationRepository.createAnnotationWithTranslation(
-                _canonicalCreation(snapshot), value);
-        return SelectionFirstSaveResult(
-            SelectionAnnotationHandle(ref: mutation), mutation);
-      },
-      save: (ref) => annotationRepository.saveTranslation(ref, value),
-    );
-    await epubPlayerKey.currentState!.refreshAnnotations();
+  Future<void> _openEditor([AnnotationEditorProvider? initialProvider]) async {
+    final modalContext = navigatorKey.currentContext;
+    final player = epubPlayerKey.currentState;
+    if (modalContext == null || player == null) return;
+    final wasNew = widget.persistenceSession.annotationRef == null;
+    final session = widget.persistenceSession;
+    final book = player.book;
+    if (!await widget.prepareInternalAction()) return;
+    if (!modalContext.mounted) return;
+    try {
+      final outcome = await showAnnotationEditor(
+        context: modalContext,
+        book: book,
+        session: session,
+        initialProvider: initialProvider,
+      );
+      if (outcome == AnnotationEditorOutcome.saved ||
+          outcome == AnnotationEditorOutcome.deleted) {
+        await player.refreshAnnotations();
+      }
+      if (wasNew && outcome == AnnotationEditorOutcome.saved) {
+        await player.endSelectionAfterAnnotationSave();
+      }
+    } catch (error) {
+      if (modalContext.mounted) AnxToast.show(error.toString());
+    }
   }
 
   Future<void> _persistNote({String? color, String? type}) async {
@@ -330,84 +318,28 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         axis: widget.axis,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (EnvVar.enableAIFeature)
-            IconAndText(
-              compact: true,
-              onTap: () {
-                widget.onClose();
-                final key = readingPageKey.currentState;
-                if (key != null) {
-                  final aiContext = SelectionAiPersistenceContext.canonical(
-                    session: widget.persistenceSession,
-                    createAnnotation: _createOrResolve,
-                  );
-                  key.showAiChat(
-                    content: aiContext.initialPrompt,
-                    sendImmediate: true,
-                    selectionContext: aiContext,
-                  );
-                }
-              },
-              icon: const Icon(EvaIcons.message_circle_outline),
-              text: L10n.of(context).navBarAI,
-            ),
-          // External Android dictionary
-          if (Platform.isAndroid)
-            IconAndText(
-              compact: true,
-              onTap: () async {
-                if (!await widget.prepareExternalAction()) return;
-                final result = await ExternalDictionaryService()
-                    .lookup(widget.annoContent);
-                if (!context.mounted) return;
-                switch (result) {
-                  case DictionaryLookupStatus.noHandlers:
-                    AnxToast.show(
-                      L10n.of(context).dictionaryNoCompatibleApp,
-                    );
-                  case DictionaryLookupStatus.failed:
-                    AnxToast.show(L10n.of(context).dictionaryLaunchFailed);
-                  case DictionaryLookupStatus.unsupported:
-                  case DictionaryLookupStatus.launched:
-                    break;
-                }
-              },
-              icon: const Icon(Icons.menu_book),
-              text: L10n.of(context).contextMenuDictionary,
-            ),
-          // Official Google Translate Android app
-          if (Platform.isAndroid)
-            IconAndText(
-              compact: true,
-              onTap: () async {
-                if (!await widget.prepareExternalAction()) return;
-                final result = await GoogleTranslateAppService()
-                    .translate(widget.annoContent);
-                if (!context.mounted) return;
-                switch (result) {
-                  case GoogleTranslateAppStatus.notInstalled:
-                    AnxToast.show(
-                      L10n.of(context).googleTranslateAppNotInstalled,
-                    );
-                  case GoogleTranslateAppStatus.failed:
-                    AnxToast.show(
-                      L10n.of(context).googleTranslateAppLaunchFailed,
-                    );
-                  case GoogleTranslateAppStatus.unsupported:
-                  case GoogleTranslateAppStatus.clipboardFallback:
-                  case GoogleTranslateAppStatus.launched:
-                    break;
-                }
-              },
-              icon: const Icon(Icons.g_translate),
-              text: L10n.of(context).contextMenuGoogleTranslate,
-            ),
+          IconAndText(
+            compact: true,
+            onTap: () => _openEditor(AnnotationEditorProvider.ai),
+            icon: const Icon(EvaIcons.message_circle_outline),
+            text: L10n.of(context).navBarAI,
+          ),
+          IconAndText(
+            compact: true,
+            onTap: () => _openEditor(AnnotationEditorProvider.ldoce),
+            icon: const Icon(Icons.menu_book),
+            text: L10n.of(context).contextMenuDictionary,
+          ),
+          IconAndText(
+            compact: true,
+            onTap: () => _openEditor(AnnotationEditorProvider.googleTranslate),
+            icon: const Icon(Icons.g_translate),
+            text: L10n.of(context).contextMenuGoogleTranslate,
+          ),
           if (!widget.footnote)
             IconAndText(
               compact: true,
-              onTap: () async {
-                await widget.openReaderNoteMenu(_currentPersonalNote);
-              },
+              onTap: _openEditor,
               icon: const Icon(EvaIcons.edit_2_outline),
               text: L10n.of(context).contextMenuWriteIdea,
             ),

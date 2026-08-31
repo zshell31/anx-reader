@@ -41,24 +41,27 @@ void main() {
   });
 
   test('selection save workflow uses canonical identities', () {
-    final source =
+    final menu =
         File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
-    expect(source, contains('annotationRepository.saveTranslation(ref'));
-    expect(source, contains('annotationRepository.setPersonalNote(ref'));
-    expect(source, contains('annotationRepository.updatePresentation('));
-    expect(source, contains('annotationRepository.tombstoneAnnotation('));
-    expect(source, contains('hasPersistedAnnotation'));
-    expect(source,
-        contains('final ref = widget.persistenceSession.annotationRef'));
+    final editor = File(
+            'lib/page/book_player/annotation_editor/annotation_editor_controller.dart')
+        .readAsStringSync();
+    expect(menu, contains('showAnnotationEditor('));
+    expect(editor, contains('annotationRepository.saveAnnotationEditorDraft'));
+    expect(menu, contains('annotationRepository.updatePresentation('));
+    expect(menu, contains('annotationRepository.tombstoneAnnotation('));
+    expect(menu, contains('hasPersistedAnnotation'));
     expect(
-      source,
+        menu, contains('final ref = widget.persistenceSession.annotationRef'));
+    expect(
+      menu,
       isNot(contains(
           'await widget.persistenceSession.ensureAnnotation(\n        _createOrResolve,\n      );\n      await annotationRepository.tombstoneAnnotation')),
     );
-    expect(source, isNot(contains('saveTranslationForNativeId')));
-    expect(source, isNot(contains('setPersonalNoteForNativeId')));
-    expect(source, isNot(contains('updatePresentationForNativeId')));
-    expect(source, isNot(contains('tombstoneAnnotationForBookNote')));
+    expect(menu, isNot(contains('saveTranslationForNativeId')));
+    expect(menu, isNot(contains('setPersonalNoteForNativeId')));
+    expect(menu, isNot(contains('updatePresentationForNativeId')));
+    expect(menu, isNot(contains('tombstoneAnnotationForBookNote')));
   });
 
   test('Notes and semantic consumers read canonical annotations only', () {
@@ -156,23 +159,23 @@ void main() {
     expect(excerptSource, isNot(contains('context: snapshot.lookupContext')));
   });
 
-  test('selection-origin AI carries optional context and explicit save actions',
-      () {
+  test('selection enrichments route through one draft and explicit Save', () {
     final menu =
         File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
-    final chat = File('lib/widgets/ai/ai_chat_stream.dart').readAsStringSync();
-    final context =
-        File('lib/page/book_player/selection_ai_persistence_context.dart')
-            .readAsStringSync();
+    final controller = File(
+            'lib/page/book_player/annotation_editor/annotation_editor_controller.dart')
+        .readAsStringSync();
+    final draft = File(
+            'lib/page/book_player/annotation_editor/annotation_editor_draft.dart')
+        .readAsStringSync();
 
-    expect(menu, contains('SelectionAiPersistenceContext.canonical'));
-    expect(menu, contains('selectionContext: aiContext'));
-    expect(menu, contains('content: aiContext.initialPrompt'));
-    expect(context, contains('session.snapshot.lookupContext'));
-    expect(context, contains('session.persist('));
-    expect(chat, contains("label: const Text('Save analysis')"));
-    expect(chat, contains("label: const Text('Save conversation')"));
-    expect(chat, contains('widget.selectionContext != null'));
+    expect(menu, contains('AnnotationEditorProvider.ai'));
+    expect(menu, contains('AnnotationEditorProvider.googleTranslate'));
+    expect(menu, contains('AnnotationEditorProvider.ldoce'));
+    expect(menu, contains('initialProvider: initialProvider'));
+    expect(controller, contains('draft.selection.lookupContext'));
+    expect(controller, contains('saveAnnotationEditorDraft'));
+    expect(draft, contains('None of these operations persist canonical state'));
   });
 
   test('rendered annotation taps use a bridge path distinct from selections',
@@ -190,16 +193,15 @@ void main() {
             contains("callFlutter('onSelectionActionsRequested', annotation")));
   });
 
-  test('external lookup actions prepare selection and manual Translate is gone',
-      () {
+  test('lookup actions prepare selection then open the unified editor', () {
     final excerptSource =
         File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
     final contextMenuSource =
         File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
 
     expect(excerptSource, contains('contextMenuGoogleTranslate'));
-    expect(excerptSource, contains('ExternalDictionaryService'));
-    expect(excerptSource, contains('prepareExternalAction'));
+    expect(excerptSource, contains('showAnnotationEditor('));
+    expect(excerptSource, contains('prepareInternalAction'));
     expect(contextMenuSource, contains('prepareSelectionForExternalAction'));
     expect(excerptSource, isNot(contains('contextMenuTranslate')));
     expect(excerptSource, isNot(contains('Icons.translate')));

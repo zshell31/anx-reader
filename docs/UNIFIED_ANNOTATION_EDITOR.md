@@ -71,7 +71,9 @@ updated. Genuinely new entities receive UUIDs. Removed material is tombstoned.
 A tombstoned entity is never resurrected; a later intentional result gets a new
 ID. Unknown annotation, enrichment, thread, message, selector, and context
 fields are retained. Existing messages not present in a stale editor snapshot
-are retained rather than overwritten.
+are retained rather than overwritten. The editor also carries the material and
+thread IDs observed when it opened, so a stale Save tombstones only entities it
+actually saw and preserves concurrently introduced material or threads.
 
 Editing only the personal note does not write Anx presentation state.
 
@@ -195,6 +197,13 @@ controller, and repository run passes 35 tests. This work also fixed nested
 unknown commentary retention: the editor now owns the four known commentary
 keys while carrying any future keys transparently through Save.
 
+Repository hardening adds explicit editor-Save coverage for personal-note
+clearing, independent AI and Google removal, true no-op saves, and concurrent
+unseen material/thread/message preservation. The combined repository,
+cross-client, widget, controller, and draft run passes 44 tests. Draft baseline
+IDs ensure that stale removal intent cannot tombstone entities introduced after
+the editor opened.
+
 The repository test proves that a first editor Save containing Google, LDOCE,
 AI, two follow-up exchanges, and personal note creates one annotation and local
 canonical revision 1. Existing edit tests prove the same UUID is reused and one
@@ -206,17 +215,14 @@ non-resurrection are covered.
 
 Continue with these tasks in order:
 
-1. Add repository tests for clearing personal note through the editor Save,
-   removing AI/Google independently, no-op existing Save, and concurrent unseen
-   thread/material preservation.
-2. Audit the new modal strings and add localization keys instead of leaving the
+1. Audit the new modal strings and add localization keys instead of leaving the
    current English literals.
-3. Audit/remove now-obsolete fragmented selection-only persistence UI where it
+2. Audit/remove now-obsolete fragmented selection-only persistence UI where it
    is genuinely unused, while retaining external Google/Dictionary services.
-4. Run the complete `test/service/sync` suite, then full Flutter and Foliate
+3. Run the complete `test/service/sync` suite, then full Flutter and Foliate
    verification below.
-5. Fix any regression without changing protocol version 2 or bilingual files.
-6. Finish this document's test evidence/limitations and update the M4E current
+4. Fix any regression without changing protocol version 2 or bilingual files.
+5. Finish this document's test evidence/limitations and update the M4E current
    checkpoint only after all suites pass.
 
 Required final commands not yet run for this feature:

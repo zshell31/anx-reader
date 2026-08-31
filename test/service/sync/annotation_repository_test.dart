@@ -545,6 +545,338 @@ void main() {
     );
   });
 
+  test('editor Save clears personal note with its stable tombstone', () async {
+    final ref = await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        creation: creation(),
+        personalNote: 'remember',
+      ),
+    );
+    var annotation = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    final note = (annotation['enrichments'] as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((item) => item['kind'] == 'personal-note');
+    final noteId = note['id'];
+
+    await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(existingRef: ref, personalNote: ''),
+    );
+
+    annotation = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    final cleared = (annotation['enrichments'] as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((item) => item['kind'] == 'personal-note');
+    expect(cleared['id'], noteId);
+    expect(cleared['content'], '');
+    expect(cleared, contains('deletedAt'));
+  });
+
+  test('editor removes AI and Google independently', () async {
+    final ref = await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        creation: creation(),
+        materials: const [
+          AnnotationEditorMaterialInput(
+            providerId: 'google-translate',
+            providerName: 'Google Translate',
+            kind: 'translation',
+            translation: 'google',
+          ),
+          AnnotationEditorMaterialInput(
+            providerId: 'ldoce',
+            providerName: 'LDOCE',
+            kind: 'dictionary',
+            markdown: 'dictionary',
+          ),
+          AnnotationEditorMaterialInput(
+            providerId: 'route',
+            providerName: 'AI',
+            kind: 'ai-analysis',
+            commentary: {'grammar': 'grammar'},
+          ),
+        ],
+      ),
+    );
+    var annotation = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    final initial =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    final google = initial.singleWhere((item) => item['kind'] == 'translation');
+    final dictionary =
+        initial.singleWhere((item) => item['kind'] == 'dictionary');
+    final ai = initial.singleWhere((item) => item['kind'] == 'ai-analysis');
+    final observedIds = initial.map((item) => item['id'] as String).toSet();
+
+    await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        existingRef: ref,
+        observedMaterialIds: observedIds,
+        materials: [
+          AnnotationEditorMaterialInput(
+            enrichmentId: google['id'] as String,
+            providerId: 'google-translate',
+            providerName: 'Google Translate',
+            kind: 'translation',
+            translation: 'google',
+          ),
+          AnnotationEditorMaterialInput(
+            enrichmentId: dictionary['id'] as String,
+            providerId: 'ldoce',
+            providerName: 'LDOCE',
+            kind: 'dictionary',
+            markdown: 'dictionary',
+          ),
+        ],
+      ),
+    );
+    annotation = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    var materials =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    expect(materials.singleWhere((item) => item['id'] == ai['id']),
+        contains('deletedAt'));
+    expect(materials.singleWhere((item) => item['id'] == google['id']),
+        isNot(contains('deletedAt')));
+
+    await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        existingRef: ref,
+        observedMaterialIds: observedIds,
+        materials: [
+          AnnotationEditorMaterialInput(
+            enrichmentId: dictionary['id'] as String,
+            providerId: 'ldoce',
+            providerName: 'LDOCE',
+            kind: 'dictionary',
+            markdown: 'dictionary',
+          ),
+        ],
+      ),
+    );
+    annotation = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    materials =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    expect(materials.singleWhere((item) => item['id'] == google['id']),
+        contains('deletedAt'));
+    expect(materials.singleWhere((item) => item['id'] == dictionary['id']),
+        isNot(contains('deletedAt')));
+  });
+
+  test('no-op existing editor Save writes no revision or notification',
+      () async {
+    final ref = await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        creation: creation(),
+        materials: const [
+          AnnotationEditorMaterialInput(
+            providerId: 'google-translate',
+            providerName: 'Google Translate',
+            kind: 'translation',
+            translation: 'same',
+          ),
+        ],
+        personalNote: 'same note',
+        aiMessages: const [
+          AnnotationEditorMessageInput(
+            role: 'user',
+            content: 'Why?',
+            sequence: 0,
+          ),
+          AnnotationEditorMessageInput(
+            role: 'assistant',
+            content: 'Because.',
+            sequence: 1,
+          ),
+        ],
+      ),
+    );
+    final before = (await shared.annotationDocument(fingerprint))!;
+    final annotation = annotationOf(before, ref.annotationId);
+    final enrichments =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    final translation =
+        enrichments.singleWhere((item) => item['kind'] == 'translation');
+    final thread =
+        enrichments.singleWhere((item) => item['kind'] == 'ai-thread');
+    final messages = (thread['messages'] as List).cast<Map<String, dynamic>>();
+    final revision =
+        (await shared.documentSnapshot('annotations', fingerprint))!
+            .localRevision;
+    semanticNotifications.clear();
+
+    expect(
+      await repository.saveAnnotationEditorDraft(
+        AnnotationEditorSaveInput(
+          existingRef: ref,
+          observedMaterialIds: {translation['id'] as String},
+          observedAiThreadIds: {thread['id'] as String},
+          materials: [
+            AnnotationEditorMaterialInput(
+              enrichmentId: translation['id'] as String,
+              providerId: 'google-translate',
+              providerName: 'Google Translate',
+              kind: 'translation',
+              translation: 'same',
+            ),
+          ],
+          personalNote: 'same note',
+          aiThreadId: thread['id'] as String,
+          aiMessages: [
+            for (final message in messages)
+              AnnotationEditorMessageInput(
+                messageId: message['id'] as String,
+                role: message['role'] as String,
+                content: message['content'] as String,
+                sequence: message['sequence'] as int,
+                createdAt: DateTime.parse(message['createdAt'] as String),
+              ),
+          ],
+        ),
+      ),
+      ref,
+    );
+
+    expect(await shared.annotationDocument(fingerprint), before);
+    expect(
+      (await shared.documentSnapshot('annotations', fingerprint))!
+          .localRevision,
+      revision,
+    );
+    expect(semanticNotifications, isEmpty);
+  });
+
+  test('stale editor Save preserves concurrently unseen material and thread',
+      () async {
+    final ref = await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        creation: creation(),
+        materials: const [
+          AnnotationEditorMaterialInput(
+            providerId: 'google-translate',
+            providerName: 'Google Translate',
+            kind: 'translation',
+            translation: 'initial',
+          ),
+        ],
+        aiMessages: const [
+          AnnotationEditorMessageInput(
+            role: 'user',
+            content: 'Why?',
+            sequence: 0,
+          ),
+          AnnotationEditorMessageInput(
+            role: 'assistant',
+            content: 'Because.',
+            sequence: 1,
+          ),
+        ],
+      ),
+    );
+    var document = (await shared.annotationDocument(fingerprint))!;
+    final annotation = annotationOf(document, ref.annotationId);
+    final enrichments =
+        (annotation['enrichments'] as List).cast<Map<String, dynamic>>();
+    final originalMaterial =
+        enrichments.singleWhere((item) => item['kind'] == 'translation');
+    final originalThread =
+        enrichments.singleWhere((item) => item['kind'] == 'ai-thread');
+    final originalMessages =
+        (originalThread['messages'] as List).cast<Map<String, dynamic>>();
+    final observedMaterialIds = {originalMaterial['id'] as String};
+    final observedThreadIds = {originalThread['id'] as String};
+    const concurrentTimestamp = '2026-01-02T03:04:06.000Z';
+    (originalThread['messages'] as List).add({
+      'id': 'concurrent-message',
+      'role': 'system',
+      'sequence': 2,
+      'content': 'Concurrent context',
+      'createdAt': concurrentTimestamp,
+      'updatedAt': concurrentTimestamp,
+    });
+    enrichments.addAll([
+      {
+        'id': 'concurrent-google',
+        'kind': 'translation',
+        'providerId': 'google-translate',
+        'providerName': 'Google Translate',
+        'translation': 'concurrent',
+        'createdAt': concurrentTimestamp,
+        'updatedAt': concurrentTimestamp,
+      },
+      {
+        'id': 'concurrent-thread',
+        'kind': 'ai-thread',
+        'contextSnapshot': {
+          'selectedText': 'selected text',
+          'enrichmentIds': <Object>[],
+        },
+        'messages': <Object>[],
+        'createdAt': concurrentTimestamp,
+        'updatedAt': concurrentTimestamp,
+      },
+    ]);
+    await shared.putAnnotationDocument(document);
+
+    await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        existingRef: ref,
+        observedMaterialIds: observedMaterialIds,
+        observedAiThreadIds: observedThreadIds,
+        materials: [
+          AnnotationEditorMaterialInput(
+            enrichmentId: originalMaterial['id'] as String,
+            providerId: 'google-translate',
+            providerName: 'Google Translate',
+            kind: 'translation',
+            translation: 'initial',
+          ),
+        ],
+        aiThreadId: originalThread['id'] as String,
+        aiMessages: [
+          for (final message in originalMessages.take(2))
+            AnnotationEditorMessageInput(
+              messageId: message['id'] as String,
+              role: message['role'] as String,
+              content: message['content'] as String,
+              sequence: message['sequence'] as int,
+              createdAt: DateTime.parse(message['createdAt'] as String),
+            ),
+        ],
+      ),
+    );
+
+    document = (await shared.annotationDocument(fingerprint))!;
+    final saved = annotationOf(document, ref.annotationId);
+    final savedEnrichments =
+        (saved['enrichments'] as List).cast<Map<String, dynamic>>();
+    expect(
+      savedEnrichments.singleWhere((item) => item['id'] == 'concurrent-google'),
+      isNot(contains('deletedAt')),
+    );
+    final concurrentThread = savedEnrichments
+        .singleWhere((item) => item['id'] == 'concurrent-thread');
+    expect(concurrentThread, isNot(contains('deletedAt')));
+    final savedOriginalThread = savedEnrichments
+        .singleWhere((item) => item['id'] == originalThread['id']);
+    expect(
+      (savedOriginalThread['messages'] as List).map((message) => message['id']),
+      contains('concurrent-message'),
+    );
+  });
+
   test('personal note edit and clear preserve unknown canonical data',
       () async {
     final ref = await repository.createAnnotation(creation());

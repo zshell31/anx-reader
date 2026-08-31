@@ -209,6 +209,8 @@ class AnnotationEditorController extends ChangeNotifier {
         ],
         personalNote: draft.personalNote,
         aiThreadId: draft.aiThreadId,
+        observedMaterialIds: draft.observedMaterialIds,
+        observedAiThreadIds: draft.observedAiThreadIds,
         aiMessages: [
           for (final message in draft.aiMessages)
             AnnotationEditorMessageInput(

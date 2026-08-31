@@ -73,6 +73,8 @@ class AnnotationEditorSaveInput {
   final List<AnnotationEditorMaterialInput> materials;
   final String personalNote;
   final String? aiThreadId;
+  final Set<String>? observedMaterialIds;
+  final Set<String>? observedAiThreadIds;
   final List<AnnotationEditorMessageInput> aiMessages;
 
   const AnnotationEditorSaveInput({
@@ -81,6 +83,8 @@ class AnnotationEditorSaveInput {
     this.materials = const [],
     this.personalNote = '',
     this.aiThreadId,
+    this.observedMaterialIds,
+    this.observedAiThreadIds,
     this.aiMessages = const [],
   });
 }
@@ -359,7 +363,12 @@ class AnnotationRepository {
     final enrichments = (binding.annotation['enrichments'] as List)
         .cast<Map<String, dynamic>>();
     final timestamp = _nextTimestamp(binding.annotation, after: enrichments);
-    _reconcileEditorMaterials(enrichments, input.materials, timestamp);
+    _reconcileEditorMaterials(
+      enrichments,
+      input.materials,
+      input.observedMaterialIds,
+      timestamp,
+    );
     _reconcileEditorPersonalNote(
       enrichments,
       binding.annotationId,
@@ -370,6 +379,7 @@ class AnnotationRepository {
       enrichments,
       binding.annotation,
       input.aiThreadId,
+      input.observedAiThreadIds,
       input.aiMessages,
       timestamp,
     );
@@ -411,6 +421,7 @@ class AnnotationRepository {
   void _reconcileEditorMaterials(
     List<Map<String, dynamic>> enrichments,
     List<AnnotationEditorMaterialInput> desired,
+    Set<String>? observedIds,
     String timestamp,
   ) {
     final desiredBySlot = {
@@ -450,6 +461,9 @@ class AnnotationRepository {
       }
       for (final candidate in candidates) {
         if (candidate == winner || isProtocolEntityTombstoned(candidate)) {
+          continue;
+        }
+        if (observedIds != null && !observedIds.contains(candidate['id'])) {
           continue;
         }
         candidate['updatedAt'] = timestamp;
@@ -529,6 +543,7 @@ class AnnotationRepository {
     List<Map<String, dynamic>> enrichments,
     Map<String, dynamic> annotation,
     String? desiredThreadId,
+    Set<String>? observedIds,
     List<AnnotationEditorMessageInput> messages,
     String timestamp,
   ) {
@@ -542,6 +557,9 @@ class AnnotationRepository {
     }
     if (messages.isEmpty) {
       for (final candidate in candidates) {
+        if (observedIds != null && !observedIds.contains(candidate['id'])) {
+          continue;
+        }
         if (!isProtocolEntityTombstoned(candidate)) {
           candidate['updatedAt'] = timestamp;
           candidate['deletedAt'] = timestamp;
@@ -612,6 +630,9 @@ class AnnotationRepository {
     if (canonicalJson(target) != threadBefore) target['updatedAt'] = timestamp;
     for (final candidate in candidates) {
       if (candidate != target && !isProtocolEntityTombstoned(candidate)) {
+        if (observedIds != null && !observedIds.contains(candidate['id'])) {
+          continue;
+        }
         candidate['updatedAt'] = timestamp;
         candidate['deletedAt'] = timestamp;
       }

@@ -195,6 +195,8 @@ class AnnotationEditorDraft {
   final Map<AnnotationEditorProvider, AnnotationEditorSourceResult>
       sourceResults;
   final List<AnnotationEditorMessage> aiMessages;
+  final Set<String> observedMaterialIds;
+  final Set<String> observedAiThreadIds;
   final Map<AnnotationEditorProvider, AnnotationEditorProviderState>
       providerStates;
 
@@ -208,6 +210,8 @@ class AnnotationEditorDraft {
     required this.personalNote,
     required this.sourceResults,
     required this.aiMessages,
+    required this.observedMaterialIds,
+    required this.observedAiThreadIds,
     required this.providerStates,
     this.aiThreadId,
     this.aiThreadCreatedAt,
@@ -226,6 +230,8 @@ class AnnotationEditorDraft {
         personalNote: '',
         sourceResults: {},
         aiMessages: [],
+        observedMaterialIds: const {},
+        observedAiThreadIds: const {},
         providerStates: _emptyProviderStates(),
       );
 
@@ -267,6 +273,14 @@ class AnnotationEditorDraft {
       personalNote: annotation.effectivePersonalNote?.content ?? '',
       sourceResults: results,
       aiMessages: messages,
+      observedMaterialIds: Set.unmodifiable(
+        materialCandidates.values
+            .expand((candidates) => candidates)
+            .map((candidate) => candidate.id),
+      ),
+      observedAiThreadIds: Set.unmodifiable(
+        threads.map((candidate) => candidate.id),
+      ),
       providerStates: _emptyProviderStates(),
       aiThreadId: thread?.id,
       aiThreadCreatedAt: thread?.createdAt,

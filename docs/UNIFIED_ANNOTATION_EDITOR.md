@@ -211,6 +211,13 @@ established generated English fallback and are listed in the generated
 untranslated-message report. A sixth focused test verifies the Russian editor
 strings through the generated localization class.
 
+The post-routing audit found two unreachable fragmented selection widgets:
+`TranslationMenu` and `ReaderNoteMenu`. They had no imports or construction
+sites after toolbar actions moved to the unified editor, so both were removed
+and an architecture guard now keeps them absent. The shared internal
+translation pipeline, Google PROCESS_TEXT integration, external Dictionary
+service, canonical Notes-page editor, and their active APIs remain intact.
+
 The repository test proves that a first editor Save containing Google, LDOCE,
 AI, two follow-up exchanges, and personal note creates one annotation and local
 canonical revision 1. Existing edit tests prove the same UUID is reused and one
@@ -222,12 +229,10 @@ non-resurrection are covered.
 
 Continue with these tasks in order:
 
-1. Audit/remove now-obsolete fragmented selection-only persistence UI where it
-   is genuinely unused, while retaining external Google/Dictionary services.
-2. Run the complete `test/service/sync` suite, then full Flutter and Foliate
+1. Run the complete `test/service/sync` suite, then full Flutter and Foliate
    verification below.
-3. Fix any regression without changing protocol version 2 or bilingual files.
-4. Finish this document's test evidence/limitations and update the M4E current
+2. Fix any regression without changing protocol version 2 or bilingual files.
+3. Finish this document's test evidence/limitations and update the M4E current
    checkpoint only after all suites pass.
 
 Required final commands not yet run for this feature:

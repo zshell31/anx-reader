@@ -6,6 +6,7 @@ void main() {
   test('production semantic mutation call sites do not bypass repository', () {
     const semanticCallSites = [
       'lib/widgets/context_menu/excerpt_menu.dart',
+      'lib/page/book_player/annotation_editor/annotation_editor_controller.dart',
       'lib/providers/book_notes.dart',
       'lib/providers/bookmark.dart',
     ];
@@ -18,10 +19,20 @@ void main() {
       expect(forbidden.hasMatch(source), isFalse, reason: path);
       expect(source, contains('annotationRepository'), reason: path);
     }
-    final editor = File('lib/widgets/context_menu/reader_note_menu.dart')
-        .readAsStringSync();
-    expect(forbidden.hasMatch(editor), isFalse);
-    expect(editor, contains('widget.onSave'));
+  });
+
+  test('obsolete fragmented selection editors remain removed', () {
+    for (final path in const [
+      'lib/widgets/context_menu/translation_menu.dart',
+      'lib/widgets/context_menu/reader_note_menu.dart',
+    ]) {
+      expect(File(path).existsSync(), isFalse, reason: path);
+    }
+    final menu =
+        File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
+    expect(menu, contains('showAnnotationEditor('));
+    expect(menu, contains('contextMenuGoogleTranslate'));
+    expect(menu, contains('contextMenuDictionary'));
   });
 
   test('transient selection lifecycle has no annotation mutation dependency',
@@ -73,7 +84,7 @@ void main() {
       'lib/widgets/book_notes/book_note_tile.dart',
       'lib/widgets/book_notes/book_notes_list.dart',
       'lib/widgets/context_menu/excerpt_menu.dart',
-      'lib/widgets/context_menu/reader_note_menu.dart',
+      'lib/page/book_player/annotation_editor/annotation_editor.dart',
       'lib/service/notes/export_notes.dart',
       'lib/dao/search_repository.dart',
       'lib/service/ai/tools/repository/notes_repository.dart',

@@ -4,6 +4,7 @@ console.log('AnxUA', navigator.userAgent)
 import './view.js'
 import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
+import { SelectionGestureOwnership } from './selection-gesture.mjs'
 import { buildRangeSentenceContext } from './sentence-context.mjs'
 import {
   annotationForRemoval,
@@ -116,6 +117,7 @@ const selectionCoordinator = {
   nextNodeId: 0,
   payload: null,
   pendingPointer: null,
+  gestureOwnership: new SelectionGestureOwnership(),
   interactionOwner: null,
   activeView: null,
   autoPageByView: new WeakMap(),
@@ -255,6 +257,13 @@ const setSelectionHandler = (view, doc, index) => {
     coordinator.interactionOwner = doc;
     const range = getSelectionRange(doc.getSelection());
     const session = coordinator.machine.current;
+    coordinator.gestureOwnership.beginPointer(
+      doc,
+      e.pointerId,
+      session?.owner === doc ? session.generation : null,
+      e.clientX,
+      e.clientY,
+    );
     if (!range || session?.owner !== doc) {
       coordinator.pendingPointer = {
         doc,
@@ -279,6 +288,7 @@ const setSelectionHandler = (view, doc, index) => {
   }, true);
 
   doc.addEventListener('pointercancel', e => {
+    coordinator.gestureOwnership.cancelPointer(doc, e.pointerId);
     const pending = coordinator.pendingPointer;
     if (pending?.doc !== doc || pending.pointerId !== e.pointerId) return;
     pending.cancelled = true;
@@ -290,6 +300,11 @@ const setSelectionHandler = (view, doc, index) => {
   });
 
   doc.addEventListener('pointerup', e => {
+    // The collapsed-selection callback may already have ended the session and
+    // cleared pendingPointer. Gesture ownership must nevertheless observe the
+    // physical pointer end so its following click remains consumable.
+    coordinator.gestureOwnership.endPointer(
+      doc, e.pointerId, e.clientX, e.clientY);
     const pending = coordinator.pendingPointer;
     if (pending?.doc !== doc || pending.pointerId !== e.pointerId) return;
     coordinator.pendingPointer = null;
@@ -327,6 +342,15 @@ const setSelectionHandler = (view, doc, index) => {
     doc.getSelection().removeAllRanges();
     endSelectionSession(view, doc, pending.generation);
   });
+
+  // view.js owns normal reader clicks. Intercept exactly the click paired with
+  // a pointer gesture that started while this Document owned a selection,
+  // even if Android collapsed the live Range before pointerup or click.
+  doc.addEventListener('click', e => {
+    if (!coordinator.gestureOwnership.consumeClick(doc, e)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
 
   // Suppress only the platform context menu. Selection creation/update remains
   // driven by selectionchange and never becomes an action-menu request.
@@ -428,6 +452,7 @@ const setSelectionHandler = (view, doc, index) => {
   }
 
   doc.defaultView?.addEventListener('pagehide', () => {
+    coordinator.gestureOwnership.invalidateOwner(doc);
     endSelectionSession(view, doc);
   }, { once: true });
 }
@@ -1207,6 +1232,9 @@ class Reader {
   #onLoad({ detail: { doc, index } }) {
     const coordinator = getSelectionCoordinator(this.view)
     const current = coordinator.machine.current
+    if (this.#doc && this.#doc !== doc) {
+      coordinator.gestureOwnership.invalidateOwner(this.#doc)
+    }
     if (current && current.owner !== doc && coordinator.activeView === this.view) {
       endSelectionSession(this.view, current.owner, current.generation)
     }

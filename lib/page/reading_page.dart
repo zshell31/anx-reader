@@ -301,6 +301,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.resumed:
+        epubPlayerKey.currentState?.reconcileSelectionOverlay();
         if (!_readTimeWatch.isRunning) {
           _readTimeWatch.start();
         }

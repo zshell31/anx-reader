@@ -515,6 +515,16 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   void onClick(Map<String, dynamic> location) {
     readingPageKey.currentState?.resetAwakeTimer();
+    // JS owns pointer gesture classification. This is a defense-in-depth guard
+    // against ever deliberately turning a page for a click that reaches the
+    // bridge while Flutter still knows a selection session is active.
+    if (_selectionSession.phase != SelectionSessionBridgePhase.idle) {
+      if (_selectionSession.phase ==
+          SelectionSessionBridgePhase.actionsVisible) {
+        dismissContextMenu();
+      }
+      return;
+    }
     if (contextMenuEntry != null) {
       dismissContextMenu();
       return;
@@ -961,6 +971,27 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     webViewController.evaluateJavascript(
       source: 'hideSelectionActions($generation)',
     );
+  }
+
+  Future<bool> prepareSelectionForExternalAction(int generation) async {
+    return SelectionExternalActionPreparation(
+      state: _selectionSession,
+      removeOverlay: (matchingGeneration) => removeOverlay(
+        selectionSessionGeneration: matchingGeneration,
+      ),
+      hideActionsInJavaScript: (matchingGeneration) =>
+          webViewController.evaluateJavascript(
+        source: 'hideSelectionActions($matchingGeneration)',
+      ),
+    ).prepare(generation);
+  }
+
+  void reconcileSelectionOverlay() {
+    final generation = contextMenuSelectionSessionGeneration;
+    if (generation != null &&
+        !_selectionSession.hasActionsVisibleFor(generation)) {
+      removeOverlay(selectionSessionGeneration: generation);
+    }
   }
 
   void dismissContextMenu() {

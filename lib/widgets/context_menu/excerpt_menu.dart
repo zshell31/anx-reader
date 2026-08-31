@@ -34,9 +34,9 @@ class ExcerptMenu extends StatefulWidget {
   final String? initialColor;
   final SelectionPersistenceSession persistenceSession;
   final Function() onClose;
+  final Future<bool> Function() prepareExternalAction;
   final bool footnote;
   final BoxDecoration decoration;
-  final Function() toggleTranslationMenu;
   final void Function({bool? show}) toggleReaderNoteMenu;
   final Future<void> Function(String? personalNote) openReaderNoteMenu;
   final Axis axis;
@@ -53,9 +53,9 @@ class ExcerptMenu extends StatefulWidget {
     this.initialColor,
     required this.persistenceSession,
     required this.onClose,
+    required this.prepareExternalAction,
     required this.footnote,
     required this.decoration,
-    required this.toggleTranslationMenu,
     required this.toggleReaderNoteMenu,
     required this.openReaderNoteMenu,
     required this.axis,
@@ -270,11 +270,12 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         }
         break;
       case _SecondarySelectionAction.search:
+        if (!await widget.prepareExternalAction()) return;
         await launchUrl(
           Uri.parse('https://www.bing.com/search?q=${widget.annoContent}'),
           mode: LaunchMode.externalApplication,
         );
-        break;
+        return;
       case _SecondarySelectionAction.narrate:
         final playerState = epubPlayerKey.currentState;
         if (playerState == null) return;
@@ -288,14 +289,16 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         break;
       case _SecondarySelectionAction.share:
         if (!context.mounted) return;
-        ExcerptShareService.showShareExcerpt(
+        if (!await widget.prepareExternalAction()) return;
+        if (!context.mounted) return;
+        await ExcerptShareService.showShareExcerpt(
           context: context,
           bookTitle: epubPlayerKey.currentState!.book.title,
           author: epubPlayerKey.currentState!.book.author,
           excerpt: widget.annoContent,
           chapter: epubPlayerKey.currentState!.chapterTitle,
         );
-        break;
+        return;
     }
     widget.onClose();
   }
@@ -353,7 +356,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
             IconAndText(
               compact: true,
               onTap: () async {
-                widget.onClose();
+                if (!await widget.prepareExternalAction()) return;
                 final result = await ExternalDictionaryService()
                     .lookup(widget.annoContent);
                 if (!context.mounted) return;
@@ -377,7 +380,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
             IconAndText(
               compact: true,
               onTap: () async {
-                widget.onClose();
+                if (!await widget.prepareExternalAction()) return;
                 final result = await GoogleTranslateAppService()
                     .translate(widget.annoContent);
                 if (!context.mounted) return;
@@ -399,12 +402,6 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(Icons.g_translate),
               text: L10n.of(context).contextMenuGoogleTranslate,
             ),
-          IconAndText(
-            compact: true,
-            onTap: widget.toggleTranslationMenu,
-            icon: const Icon(Icons.translate),
-            text: L10n.of(context).contextMenuTranslate,
-          ),
           if (!widget.footnote)
             IconAndText(
               compact: true,

@@ -189,4 +189,19 @@ void main() {
         isNot(
             contains("callFlutter('onSelectionActionsRequested', annotation")));
   });
+
+  test('external lookup actions prepare selection and manual Translate is gone',
+      () {
+    final excerptSource =
+        File('lib/widgets/context_menu/excerpt_menu.dart').readAsStringSync();
+    final contextMenuSource =
+        File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
+
+    expect(excerptSource, contains('contextMenuGoogleTranslate'));
+    expect(excerptSource, contains('ExternalDictionaryService'));
+    expect(excerptSource, contains('prepareExternalAction'));
+    expect(contextMenuSource, contains('prepareSelectionForExternalAction'));
+    expect(excerptSource, isNot(contains('contextMenuTranslate')));
+    expect(excerptSource, isNot(contains('Icons.translate')));
+  });
 }

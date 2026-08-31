@@ -110,6 +110,16 @@ Future<void> showContextMenu(
     }
   }
 
+  Future<bool> prepareExternalAction() async {
+    if (selectionSessionGeneration != null) {
+      return playerKey.prepareSelectionForExternalAction(
+        selectionSessionGeneration,
+      );
+    }
+    playerKey.removeOverlay();
+    return true;
+  }
+
   final decoration = BoxDecoration(
     color: Prefs().eInkMode
         ? Colors.white
@@ -148,6 +158,7 @@ Future<void> showContextMenu(
       annotationColor: annotationColor,
       decoration: decoration,
       onClose: onClose,
+      prepareExternalAction: prepareExternalAction,
       menuConstraints: menuConstraints,
       initialPlacement: initialPlacement,
       showTranslationDefault: Prefs().autoTranslateSelection,
@@ -255,6 +266,7 @@ class _ContextMenuOverlay extends StatefulWidget {
     this.annotationColor,
     required this.decoration,
     required this.onClose,
+    required this.prepareExternalAction,
     required this.menuConstraints,
     required this.initialPlacement,
     required this.showTranslationDefault,
@@ -278,6 +290,7 @@ class _ContextMenuOverlay extends StatefulWidget {
   final String? annotationColor;
   final BoxDecoration decoration;
   final VoidCallback onClose;
+  final Future<bool> Function() prepareExternalAction;
   final BoxConstraints menuConstraints;
   final _MenuPlacement initialPlacement;
   final bool showTranslationDefault;
@@ -440,13 +453,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     }
   }
 
-  void _toggleTranslationMenu() {
-    setState(() {
-      _showTranslationMenu = !_showTranslationMenu;
-    });
-    _scheduleRecalculate();
-  }
-
   void _toggleReaderNoteMenu({bool? show}) {
     final target = show ?? !_showReaderNoteMenu;
     setState(() {
@@ -525,9 +531,10 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   initialColor: widget.annotationColor,
                                   persistenceSession: _persistenceSession,
                                   onClose: widget.onClose,
+                                  prepareExternalAction:
+                                      widget.prepareExternalAction,
                                   footnote: widget.footnote,
                                   decoration: widget.decoration,
-                                  toggleTranslationMenu: _toggleTranslationMenu,
                                   toggleReaderNoteMenu: _toggleReaderNoteMenu,
                                   openReaderNoteMenu: _openReaderNoteMenu,
                                   axis: widget.axis,

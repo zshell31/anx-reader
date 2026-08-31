@@ -1,5 +1,9 @@
 # M4E — Canonical Annotation UX, BookNote Removal, and Selection Workflow
 
+> Follow-up work replacing fragmented enrichment actions with one draft-first
+> editor is checkpointed in [UNIFIED_ANNOTATION_EDITOR.md](UNIFIED_ANNOTATION_EDITOR.md).
+> That document is not a redesign of the completed M4E architecture.
+
 This document is the durable source of truth for M4E. A new work session must
 read it completely, inspect the latest 20 commits and the worktree status, then
 continue from the first incomplete submilestone and the Current checkpoint.

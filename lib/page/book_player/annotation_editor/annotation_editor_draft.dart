@@ -279,8 +279,10 @@ class AnnotationEditorDraft {
     AnnotationEditorSourceResult result,
   ) {
     if (!_accepts(request)) return false;
-    if (result.providerId != request.provider.providerId ||
-        result.kind != request.provider.kind) {
+    final providerMatches = request.provider == AnnotationEditorProvider.ai
+        ? result.providerId.isNotEmpty
+        : result.providerId == request.provider.providerId;
+    if (!providerMatches || result.kind != request.provider.kind) {
       throw ArgumentError('Provider result identity does not match request');
     }
     final previous = sourceResults[request.provider];

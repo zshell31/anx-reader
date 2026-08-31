@@ -29,6 +29,62 @@ class AiThreadMessageInput {
   const AiThreadMessageInput({required this.role, required this.content});
 }
 
+class AnnotationEditorMaterialInput {
+  final String? enrichmentId;
+  final String providerId;
+  final String providerName;
+  final String kind;
+  final String? translation;
+  final String? markdown;
+  final Map<String, String> commentary;
+  final Map<String, String> metadata;
+
+  const AnnotationEditorMaterialInput({
+    this.enrichmentId,
+    required this.providerId,
+    required this.providerName,
+    required this.kind,
+    this.translation,
+    this.markdown,
+    this.commentary = const {},
+    this.metadata = const {},
+  });
+}
+
+class AnnotationEditorMessageInput {
+  final String? messageId;
+  final String role;
+  final String content;
+  final int sequence;
+  final DateTime? createdAt;
+
+  const AnnotationEditorMessageInput({
+    this.messageId,
+    required this.role,
+    required this.content,
+    required this.sequence,
+    this.createdAt,
+  });
+}
+
+class AnnotationEditorSaveInput {
+  final CanonicalSelectionCreation? creation;
+  final AnnotationRef? existingRef;
+  final List<AnnotationEditorMaterialInput> materials;
+  final String personalNote;
+  final String? aiThreadId;
+  final List<AnnotationEditorMessageInput> aiMessages;
+
+  const AnnotationEditorSaveInput({
+    this.creation,
+    this.existingRef,
+    this.materials = const [],
+    this.personalNote = '',
+    this.aiThreadId,
+    this.aiMessages = const [],
+  });
+}
+
 const _anxProviderId = 'anx-reader';
 const _anxProviderName = 'Anx Reader';
 
@@ -78,6 +134,10 @@ class AnnotationRepository {
 
   Future<AnnotationRef> createAnnotation(CanonicalSelectionCreation input) =>
       _enqueue(() => _createCanonicalAnnotation(input));
+
+  Future<AnnotationRef> saveAnnotationEditorDraft(
+          AnnotationEditorSaveInput input) =>
+      _enqueue(() => _saveAnnotationEditorDraft(input));
 
   Future<AnnotationRef> createAnnotationWithTranslation(
     CanonicalSelectionCreation input,
@@ -247,6 +307,352 @@ class AnnotationRepository {
     await _commit(fingerprint, document);
     return AnnotationRef(
         bookFingerprint: fingerprint, annotationId: annotationId);
+  }
+
+  Future<AnnotationRef> _saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput input) async {
+    if ((input.creation == null) == (input.existingRef == null)) {
+      throw ArgumentError(
+        'Exactly one of creation or existingRef must be supplied',
+      );
+    }
+    _validateEditorInput(input);
+    final _CanonicalBinding binding;
+    final AnnotationRef ref;
+    if (input.existingRef case final existing?) {
+      binding = await _canonicalBindingByRef(existing);
+      _ensureAlive(binding.annotation);
+      ref = existing;
+    } else {
+      final creation = input.creation!;
+      final fingerprint = _fingerprint(creation.book);
+      _epubCfi(creation.epubCfi);
+      final timestamp = canonicalWireTimestamp(now());
+      final annotationId = uuid.v4();
+      final document = await _document(creation.book, fingerprint);
+      final annotation = <String, dynamic>{
+        'id': annotationId,
+        'motivation': 'selection',
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+        'target': <String, dynamic>{
+          'selectedText': creation.selectedText,
+          'chapter': creation.chapter,
+          if (creation.context?.trim().isNotEmpty == true)
+            'context': creation.context,
+          'selectors': [
+            {'type': 'epub-cfi', 'cfi': creation.epubCfi.trim()}
+          ],
+        },
+        'enrichments': <Object>[],
+      };
+      (document['annotations'] as List).add(annotation);
+      binding =
+          _CanonicalBinding(fingerprint, annotationId, document, annotation);
+      ref = AnnotationRef(
+        bookFingerprint: fingerprint,
+        annotationId: annotationId,
+      );
+    }
+
+    final before = canonicalJson(binding.annotation);
+    final enrichments = (binding.annotation['enrichments'] as List)
+        .cast<Map<String, dynamic>>();
+    final timestamp = _nextTimestamp(binding.annotation, after: enrichments);
+    _reconcileEditorMaterials(enrichments, input.materials, timestamp);
+    _reconcileEditorPersonalNote(
+      enrichments,
+      binding.annotationId,
+      input.personalNote.trim(),
+      timestamp,
+    );
+    _reconcileEditorThread(
+      enrichments,
+      binding.annotation,
+      input.aiThreadId,
+      input.aiMessages,
+      timestamp,
+    );
+    final changed = canonicalJson(binding.annotation) != before;
+    if (input.existingRef == null || changed) {
+      binding.annotation['updatedAt'] = timestamp;
+      await _commit(binding.fingerprint, binding.document);
+    }
+    return ref;
+  }
+
+  void _validateEditorInput(AnnotationEditorSaveInput input) {
+    final slots = <String>{};
+    for (final material in input.materials) {
+      if (!const {'translation', 'dictionary', 'ai-analysis'}
+          .contains(material.kind)) {
+        throw ArgumentError.value(material.kind, 'kind');
+      }
+      final slot = _editorMaterialSlot(material.kind, material.providerId);
+      if (!slots.add(slot)) {
+        throw ArgumentError('Only one editor result is allowed per slot');
+      }
+      _validateMaterial({
+        'kind': material.kind,
+        'translation': material.translation,
+        'markdown': material.markdown,
+        'commentary': material.commentary,
+      });
+    }
+    for (final message in input.aiMessages) {
+      if (!const {'system', 'user', 'assistant'}.contains(message.role) ||
+          message.content.trim().isEmpty ||
+          message.sequence < 0) {
+        throw ArgumentError('Invalid editor AI message');
+      }
+    }
+  }
+
+  void _reconcileEditorMaterials(
+    List<Map<String, dynamic>> enrichments,
+    List<AnnotationEditorMaterialInput> desired,
+    String timestamp,
+  ) {
+    final desiredBySlot = {
+      for (final material in desired)
+        _editorMaterialSlot(material.kind, material.providerId): material,
+    };
+    for (final slot in const {
+      'translation:google-translate',
+      'dictionary:ldoce',
+      'ai-analysis',
+    }) {
+      final candidates = enrichments
+          .where((item) => _editorMaterialSlotForEntity(item) == slot)
+          .toList();
+      final material = desiredBySlot[slot];
+      Map<String, dynamic>? winner;
+      if (material != null && material.enrichmentId != null) {
+        winner = candidates
+            .where((item) => item['id'] == material.enrichmentId)
+            .firstOrNull;
+        if (winner != null && isProtocolEntityTombstoned(winner)) {
+          winner = null;
+        }
+      }
+      if (material != null) {
+        if (winner == null && material.enrichmentId == null) {
+          final ordered = candidates.toList()
+            ..sort(compareCanonicalEntityRecency);
+          final current = ordered.lastOrNull;
+          if (current != null && !isProtocolEntityTombstoned(current)) {
+            winner = current;
+          }
+        }
+        winner ??= _newEditorMaterial(material, timestamp);
+        if (!enrichments.contains(winner)) enrichments.add(winner);
+        _patchEditorMaterial(winner, material, timestamp);
+      }
+      for (final candidate in candidates) {
+        if (candidate == winner || isProtocolEntityTombstoned(candidate)) {
+          continue;
+        }
+        candidate['updatedAt'] = timestamp;
+        candidate['deletedAt'] = timestamp;
+      }
+    }
+  }
+
+  Map<String, dynamic> _newEditorMaterial(
+    AnnotationEditorMaterialInput material,
+    String timestamp,
+  ) =>
+      <String, dynamic>{
+        'id': '${material.kind}:${uuid.v4()}',
+        'kind': material.kind,
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+
+  void _patchEditorMaterial(
+    Map<String, dynamic> target,
+    AnnotationEditorMaterialInput material,
+    String timestamp,
+  ) {
+    final before = canonicalJson(target);
+    target['kind'] = material.kind;
+    target['providerId'] = material.providerId;
+    target['providerName'] = material.providerName;
+    _setOptional(target, 'translation', material.translation?.trim());
+    _setOptional(target, 'markdown', material.markdown?.trim());
+    _setOptionalMap(target, 'commentary', material.commentary);
+    _setOptionalMap(target, 'metadata', material.metadata);
+    target.remove('deletedAt');
+    if (canonicalJson(target) != before) target['updatedAt'] = timestamp;
+  }
+
+  void _reconcileEditorPersonalNote(
+    List<Map<String, dynamic>> enrichments,
+    String annotationId,
+    String value,
+    String timestamp,
+  ) {
+    final candidates = enrichments
+        .where((item) => item['kind'] == 'personal-note')
+        .toList()
+      ..sort(compareCanonicalEntityRecency);
+    final latest = candidates.lastOrNull;
+    if (value.isEmpty) {
+      if (latest != null && !isProtocolEntityTombstoned(latest)) {
+        latest['content'] = '';
+        latest['updatedAt'] = timestamp;
+        latest['deletedAt'] = timestamp;
+      }
+      return;
+    }
+    Map<String, dynamic>? target = latest;
+    if (target == null || isProtocolEntityTombstoned(target)) {
+      final deterministicId = 'personal-note:$annotationId';
+      target = <String, dynamic>{
+        'id': candidates.any((item) => item['id'] == deterministicId)
+            ? '$deterministicId:${uuid.v4()}'
+            : deterministicId,
+        'kind': 'personal-note',
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+      enrichments.add(target);
+    }
+    if (target['content'] != value || target.containsKey('deletedAt')) {
+      target['content'] = value;
+      target['updatedAt'] = timestamp;
+    }
+    target.remove('deletedAt');
+  }
+
+  void _reconcileEditorThread(
+    List<Map<String, dynamic>> enrichments,
+    Map<String, dynamic> annotation,
+    String? desiredThreadId,
+    List<AnnotationEditorMessageInput> messages,
+    String timestamp,
+  ) {
+    final candidates =
+        enrichments.where((item) => item['kind'] == 'ai-thread').toList();
+    Map<String, dynamic>? target;
+    if (desiredThreadId != null) {
+      target =
+          candidates.where((item) => item['id'] == desiredThreadId).firstOrNull;
+      if (target != null && isProtocolEntityTombstoned(target)) target = null;
+    }
+    if (messages.isEmpty) {
+      for (final candidate in candidates) {
+        if (!isProtocolEntityTombstoned(candidate)) {
+          candidate['updatedAt'] = timestamp;
+          candidate['deletedAt'] = timestamp;
+        }
+      }
+      return;
+    }
+    target ??= <String, dynamic>{
+      'id': 'ai-thread:${uuid.v4()}',
+      'kind': 'ai-thread',
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+      'contextSnapshot': <String, dynamic>{},
+      'messages': <Object>[],
+    };
+    if (!enrichments.contains(target)) enrichments.add(target);
+    final threadBefore = canonicalJson(target);
+    final existingMessages = (target['messages'] as List?)
+            ?.whereType<Map>()
+            .map((value) => value.cast<String, dynamic>())
+            .toList() ??
+        <Map<String, dynamic>>[];
+    final patched = <Map<String, dynamic>>[];
+    for (final message in messages) {
+      Map<String, dynamic>? entity;
+      if (message.messageId != null) {
+        entity = existingMessages
+            .where((item) => item['id'] == message.messageId)
+            .firstOrNull;
+        if (entity != null && isProtocolEntityTombstoned(entity)) entity = null;
+      }
+      entity ??= <String, dynamic>{
+        'id': 'ai-message:${uuid.v4()}',
+        'createdAt': canonicalWireTimestamp(message.createdAt ?? now()),
+      };
+      final messageBefore = canonicalJson(entity);
+      entity['role'] = message.role;
+      entity['sequence'] = message.sequence;
+      entity['content'] = message.content.trim();
+      entity.remove('deletedAt');
+      if (canonicalJson(entity) != messageBefore) {
+        entity['updatedAt'] = timestamp;
+      }
+      patched.add(entity);
+    }
+    final patchedIds = patched.map((item) => item['id']).toSet();
+    patched.addAll(
+      existingMessages.where((item) => !patchedIds.contains(item['id'])),
+    );
+    target['messages'] = patched;
+    target['contextSnapshot'] = <String, dynamic>{
+      ...?target['contextSnapshot'] as Map<String, dynamic>?,
+      'selectedText': (annotation['target'] as Map)['selectedText'],
+      if ((annotation['target'] as Map)['context'] case final String context)
+        'context': context,
+      if ((annotation['target'] as Map)['chapter'] case final String chapter)
+        'chapter': chapter,
+      'enrichmentIds': enrichments
+          .where((item) =>
+              !isProtocolEntityTombstoned(item) &&
+              const {'translation', 'dictionary', 'ai-analysis'}
+                  .contains(item['kind']))
+          .map((item) => item['id'] as String)
+          .toList()
+        ..sort(),
+    };
+    target.remove('deletedAt');
+    if (canonicalJson(target) != threadBefore) target['updatedAt'] = timestamp;
+    for (final candidate in candidates) {
+      if (candidate != target && !isProtocolEntityTombstoned(candidate)) {
+        candidate['updatedAt'] = timestamp;
+        candidate['deletedAt'] = timestamp;
+      }
+    }
+  }
+
+  String _editorMaterialSlot(String kind, String providerId) {
+    if (kind == 'ai-analysis') return 'ai-analysis';
+    return '$kind:$providerId';
+  }
+
+  String? _editorMaterialSlotForEntity(Map<String, dynamic> entity) {
+    if (entity['kind'] == 'ai-analysis') return 'ai-analysis';
+    if (entity['kind'] == 'translation' &&
+        entity['providerId'] == 'google-translate') {
+      return 'translation:google-translate';
+    }
+    if (entity['kind'] == 'dictionary' && entity['providerId'] == 'ldoce') {
+      return 'dictionary:ldoce';
+    }
+    return null;
+  }
+
+  void _setOptional(Map<String, dynamic> target, String key, String? value) {
+    if (value?.isNotEmpty == true) {
+      target[key] = value;
+    } else {
+      target.remove(key);
+    }
+  }
+
+  void _setOptionalMap(
+    Map<String, dynamic> target,
+    String key,
+    Map<String, String> value,
+  ) {
+    if (value.isEmpty) {
+      target.remove(key);
+    } else {
+      target[key] = Map<String, String>.from(value);
+    }
   }
 
   Future<AnnotationRef> _saveMaterial(AnnotationRef ref,

@@ -180,6 +180,12 @@ Completed during this checkpoint:
 - `dart format` on every touched Dart file;
 - `git diff --check` before each phase commit.
 
+Widget hardening completed after the checkpoint adds 5 tests covering all
+three source cards at phone and desktop widths, sticky actions while the editor
+body scrolls, dirty dismissal choices, post-frame initial-provider startup, and
+existing-source open without a provider call. The combined editor
+widget/controller/draft run passes 17 tests.
+
 The repository test proves that a first editor Save containing Google, LDOCE,
 AI, two follow-up exchanges, and personal note creates one annotation and local
 canonical revision 1. Existing edit tests prove the same UUID is reused and one
@@ -191,21 +197,19 @@ non-resurrection are covered.
 
 Continue with these tasks in order:
 
-1. Add widget tests for responsive card coexistence, sticky actions, dirty
-   dismissal, initial provider after first frame, and existing-open no-call.
-2. Add explicit bidirectional Lingua fixtures for Google, LDOCE, AI analysis,
+1. Add explicit bidirectional Lingua fixtures for Google, LDOCE, AI analysis,
    and AI thread, including unknown-field retention on editor Save.
-3. Add repository tests for clearing personal note through the editor Save,
+2. Add repository tests for clearing personal note through the editor Save,
    removing AI/Google independently, no-op existing Save, and concurrent unseen
    thread/material preservation.
-4. Audit the new modal strings and add localization keys instead of leaving the
+3. Audit the new modal strings and add localization keys instead of leaving the
    current English literals.
-5. Audit/remove now-obsolete fragmented selection-only persistence UI where it
+4. Audit/remove now-obsolete fragmented selection-only persistence UI where it
    is genuinely unused, while retaining external Google/Dictionary services.
-6. Run the complete `test/service/sync` suite, then full Flutter and Foliate
+5. Run the complete `test/service/sync` suite, then full Flutter and Foliate
    verification below.
-7. Fix any regression without changing protocol version 2 or bilingual files.
-8. Finish this document's test evidence/limitations and update the M4E current
+6. Fix any regression without changing protocol version 2 or bilingual files.
+7. Finish this document's test evidence/limitations and update the M4E current
    checkpoint only after all suites pass.
 
 Required final commands not yet run for this feature:
@@ -226,7 +230,7 @@ source/bundle.
 ## Known limitations at this checkpoint
 
 - Complete Flutter and Foliate suites have not yet been run after this feature.
-- Dedicated widget and exhaustive bidirectional cross-client fixtures remain.
+- Exhaustive bidirectional cross-client fixtures remain.
 - New editor strings are not yet localized.
 - Real network behavior is intentionally untested; Google/LDOCE automated tests
   use mocks/fixtures.

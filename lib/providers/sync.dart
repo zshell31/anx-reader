@@ -92,10 +92,10 @@ class Sync extends _$Sync {
       await _syncSharedLibraryAssets(client);
       try {
         await TranslationCacheSyncService(client: client).sync();
-      } catch (error, stackTrace) {
+      } catch (error) {
         AnxLog.warning(
             'Translation cache sync failed; shared domains remain safe: '
-            '$error\n$stackTrace');
+            '${error.runtimeType}');
       }
       ref?.read(bookListProvider.notifier).refresh();
       ref?.read(groupDaoProvider.notifier).refresh();
@@ -103,8 +103,8 @@ class Sync extends _$Sync {
       if (Prefs().syncCompletedToast) {
         AnxToast.show(L10n.of(navigatorKey.currentContext!).webdavSyncComplete);
       }
-    } catch (error, stackTrace) {
-      AnxLog.severe('Automatic shared-state sync failed: $error\n$stackTrace');
+    } catch (error) {
+      AnxLog.severe('Automatic shared-state sync failed: ${error.runtimeType}');
     } finally {
       state = state.copyWith(isSyncing: false);
     }
@@ -200,7 +200,7 @@ class Sync extends _$Sync {
       try {
         await downloadBook(await bookDao.selectBookById(id));
       } catch (error) {
-        AnxLog.warning('Book asset download failed localBook=$id: $error');
+        AnxLog.warning('Book asset download failed: ${error.runtimeType}');
       }
     }
   }

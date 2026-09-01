@@ -597,8 +597,8 @@ At the end of every M4E session:
   annotation repository, projection metadata in the shared-state database, and
   their startup/sync callbacks. They are retained only so M4E.10 can replace
   legacy-installation bootstrap safely before removing the entire runtime
-  projection stack. Remote shared-library/catalog discovery remains outside
-  M4E; canonical documents already present locally are preserved and shown.
+  projection stack. Remote shared-library/catalog discovery remained outside
+  M4E; it is now supplied by the later automatic shared-state migration.
 - Acceptance checklist:
   - [x] Migrate per-book and reading-page Notes lists, tiles, details/editing,
     personal notes, selection, deletion, navigation, export, statistics, and
@@ -970,8 +970,9 @@ no Lingua Reader change were required.
 - Manual Android/device verification is still required; no device checks are
   claimed by this review.
 - Unbound canonical documents are supported once discovered or imported.
-  WebDAV listing/discovery for arbitrary remote-only books remains a later
-  milestone and was intentionally not added here.
+  WebDAV listing/discovery for arbitrary remote-only books was intentionally
+  not added in M4E and is now implemented by the automatic shared-state
+  runtime.
 - The prior M4E limitations remain: presentation ordering uses device clocks
   and has no compaction, coincident marks have no chooser, external provider
   apps cannot return savable results, selection cannot span EPUB spine DOM
@@ -1323,10 +1324,10 @@ Known limitations: Presentation LWW uses wall-clock timestamps; presentation
 document/reset records have no compaction; coincident annotation ranges have no
 chooser UI; external provider apps cannot return savable result payloads;
 selection cannot span separate EPUB spine DOM documents; there is no automated
-Android native-handle gesture harness; physical legacy tables may remain as
-migration-only input; and remote-only WebDAV book discovery remains out of
-scope. Local `develop` still has the previously documented divergence from
-`origin/develop`.
+Android native-handle gesture harness; and physical legacy tables may remain as
+migration-only input. Remote-only WebDAV book discovery was later implemented
+by the automatic shared-state migration. Local `develop` still has the
+previously documented divergence from `origin/develop`.
 Important files for review: final architecture coverage under
 `test/service/sync/final_annotation_architecture_test.dart`, the acceptance
 coverage under `test/service/sync/` and `test/page/book_player/`, the Foliate

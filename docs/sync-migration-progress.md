@@ -19,7 +19,7 @@
 | 5. Groups, tags, themes | completed | Added UUID records/mappings, explicit relations, tombstones, portable theme projection and mutation hooks. |
 | 6. Retire database sync | completed | Directionless shared-domain sync is the only normal path; whole-database replacement and projection-driven deletion are removed. |
 | 7. Automatic integration and diagnostics | completed | Added collection discovery, lifecycle run coalescing, aggregate summaries and privacy-safe diagnostics. |
-| 8. Documentation and validation | not_started | Refresh all sync docs and complete end-to-end validation. |
+| 8. Documentation and validation | completed | Reconciled active paths/behavior, sanitized remaining logs, and completed repository-wide automated validation. |
 
 ## Current audit (baseline database version 8; current version 9)
 
@@ -45,7 +45,7 @@
 ## Architecture decisions
 
 - Extend the existing `shared_documents`, `sync_outbox`, and `sync_metadata` tables; do not introduce another synchronization database.
-- Documents are small and independently mergeable. Remote roots are under `anx/shared/v1/`; immutable book assets are under `anx/assets/books/md5/`.
+- Documents are small and independently mergeable. New domain documents are under `<shared root>/shared/v1/` (the root defaults to `Lingua Reader`); immutable book assets are under `anx/assets/books/md5/`.
 - Conditional `If-None-Match` / strong-ETag `If-Match` writes remain the concurrency boundary. HTTP 412 causes GET, domain merge, and retry.
 - `SharedDocumentSyncCoordinator` owns generic CAS/outbox/ETag/single-flight/retry mechanics. `AnnotationSyncCoordinator` is a compatibility facade supplying annotation defaults; domain protocols still own decoding, validation, merge and projection.
 - Version stamps are UTC timestamp plus a persisted stable device UUID tie-breaker. Comparison is lexicographic by instant then device ID.
@@ -64,7 +64,7 @@
 ## Important files inspected/changed
 
 - Inspected `lib/dao/database.dart`, database version/migrations and all DAOs/models for books, reading time, groups, tags, themes and notes.
-- Inspected `lib/providers/sync.dart`, `lib/service/database_sync_manager.dart`, shared-state database, annotation coordinator/runtime/protocol, conditional WebDAV transport and translation-cache sync.
+- Inspected `lib/providers/sync.dart`, the now-retired `lib/service/database_sync_manager.dart`, shared-state database, annotation coordinator/runtime/protocol, conditional WebDAV transport and translation-cache sync.
 - Changed this progress document and `docs/sync-architecture.md`.
 - Milestone 1: `annotation_sync_coordinator.dart` now exposes the reusable core; `shared_document_sync_coordinator.dart` is the domain-neutral import boundary; compatibility callers remain unchanged.
 - Milestone 2: added domain stamps, catalog/reading protocols, repository/projection, sync service, startup bootstrap and real reader-progress mutation integration.
@@ -73,6 +73,7 @@
 - Milestone 5: added organization protocols/repository/coordinators, v9 mapping tables, UUIDv5 legacy bootstrap, projections to groups/tag sentinel rows/themes, and immediate DAO/provider mutation hooks.
 - Milestone 6: replaced the normal sync provider with a directionless shared-domain/assets/cache pipeline, removed database timestamp direction selection and replacement, removed projection-driven remote deletion, and retained WebDAV configuration, manual **Sync now**, local asset release/download, and explicit ZIP backup import/export.
 - Milestone 7: added depth-one WebDAV collection discovery for flat and nested domains, unioned remote identities into every coordinator, coalesced overlapping lifecycle triggers with one follow-up pass, aggregated all domain statuses/counts, and exposed count-only diagnostics without document IDs, paths, credentials or content.
+- Milestone 8: reconciled annotation/architecture/triage documentation with the active configurable-root layout, renamed the settings field to **Shared data folder**, removed raw identities/exceptions from remaining sync logs, and added a privacy regression boundary.
 
 ## Tests by milestone
 
@@ -84,15 +85,19 @@
 - Milestone 5: organization/shared-state/library tests passed (29 tests in the combined regression pass); targeted analyzer passed with no issues; Dart format passed.
 - Milestone 6: database migration, runtime-boundary, coordinator, catalog/asset, reading-activity, organization and retirement tests passed; targeted analyzer reported only existing `use_build_context_synchronously` info diagnostics in touched UI/service files; Dart format and `git diff --check` passed. The broader sync suite had 228 passing tests and one unrelated pre-existing JavaScript-selection source-contract failure in `annotation_mutation_boundary_test.dart`.
 - Milestone 7: automatic-integration, WebDAV transport, coordinator, catalog/asset, reading-activity, organization, runtime-boundary, retirement and migration tests passed (92 tests); targeted analyzer reported only the existing settings-page `use_build_context_synchronously` info diagnostic; Dart format and `git diff --check` passed.
+- Milestone 8: the final migration regression selection passed 93 tests; repository-wide `flutter analyze --no-fatal-infos` completed with no errors or warnings (43 informational lints); the full Flutter suite passed 377 of 378 tests, with the sole failure being the pre-existing Foliate source-contract assertion described below; Foliate passed all 73 package tests and its production bundle built with three existing top-level-await target warnings; `flutter build apk --debug --no-pub` produced `app-debug.apk` with the existing SDK 35/36 plugin warning.
 
 ## Known limitations / unresolved issues
 
 - Existing books without a valid fingerprint cannot be published until their fingerprint is calculated.
 - Cover sharing is deliberately omitted because covers can be regenerated from verified book bytes. Immutable assets are retained after tombstones; no garbage collection is implemented.
+- Live two-device WebDAV interoperability and Android UI behavior still require manual device testing; no device result is claimed by this automated migration.
+- `test/service/sync/annotation_mutation_boundary_test.dart` expects the absent Foliate source string `const inside = pointIsInsideRange(...)`; this untouched source-contract test fails while the actual Foliate selection tests pass.
+- Android plugins `haptic_feedback` and `in_app_purchase_android` request compile SDK 36 while the project uses 35. The debug APK still builds successfully.
 
 ## Exact next step
 
-Commit Milestone 7, then complete Milestone 8 documentation and end-to-end validation without merging into `develop`.
+Review the completed feature branch and perform the live two-device/manual Android checklist when infrastructure is available. Do not merge into `develop` as part of this migration run.
 
 ## Milestone commits
 
@@ -103,3 +108,4 @@ Commit Milestone 7, then complete Milestone 8 documentation and end-to-end valid
 - Milestone 4: `0b8b33b2 feat(sync): synchronize reading activity events`.
 - Milestone 5: `90cf6ddc feat(sync): synchronize library organization and themes`.
 - Milestone 6: `d47db1fc refactor(sync): retire whole-database synchronization`.
+- Milestone 7: `117e0fad feat(sync): automate discovery and diagnostics`.

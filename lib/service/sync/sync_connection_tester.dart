@@ -28,9 +28,9 @@ class SyncConnectionTester {
       return SyncTestResult.success(
           L10n.of(navigatorKey.currentContext!).connectionSuccessful);
     } catch (e) {
-      final errorMessage = '${getErrorMessage(e)}\n$e';
-      AnxLog.severe(
-          '${protocol.displayName} connection test failed: $errorMessage');
+      final errorMessage = getErrorMessage(e);
+      AnxLog.severe('${protocol.displayName} connection test failed: '
+          '${e.runtimeType}');
       return SyncTestResult.failure(errorMessage);
     }
   }
@@ -57,9 +57,9 @@ class SyncConnectionTester {
       return SyncTestResult.success(
           L10n.of(navigatorKey.currentContext!).connectionSuccessful);
     } catch (e) {
-      final errorMessage = '${getErrorMessage(e)}\n$e';
-      AnxLog.severe(
-          '${protocol.displayName} full connection test failed: $errorMessage');
+      final errorMessage = getErrorMessage(e);
+      AnxLog.severe('${protocol.displayName} full connection test failed: '
+          '${e.runtimeType}');
       return SyncTestResult.failure(errorMessage);
     }
   }

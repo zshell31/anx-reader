@@ -436,7 +436,7 @@ void showWebdavDialog(BuildContext context) {
               webdavUsernameController),
           buildTextField(L10n.of(context).settingsSyncWebdavPassword,
               webdavPasswordController),
-          buildTextField('Shared annotation folder', annotationRootController),
+          buildTextField('Shared data folder', annotationRootController),
           StreamBuilder<void>(
             stream: annotationSyncRuntime.statusChanges,
             builder: (context, _) => FutureBuilder(

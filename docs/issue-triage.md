@@ -159,12 +159,12 @@ gh issue view NUM -R Anxcye/anx-reader --json labels
 | Custom storage path error | #745 | — | #839 | open | P2 | 3 | `storage_migration.dart` | DB file locked during migration on Windows | Close/release DB before migration; add rollback |
 | WebDAV custom folder | #758 | — | — | open | P3 | 3 | `webdav_client.dart`, `sync.dart` | Remote path hardcoded to `/anx/data/file` | Add remote path config input in settings |
 | ZSpace WebDAV connection | #890 | — | — | open | P2 | 3 | `webdav_client.dart` (testFullCapabilities) | ZSpace returns non-standard 201 on MKCOL | Relax directory creation error check |
-| Sync data loss | #911 | #911 | — | open | P1 | 4 | `sync.dart` (syncDatabase, determineSyncDirection) | Full-DB overwrite mode, no record-level merge | Design incremental merge sync (mid-term CRDT) |
+| Sync data loss | #911 | #911 | — | open | P1 | 4 | `service/sync/`, `providers/sync.dart` | Feature branch replaces full-DB overwrite with mergeable domain documents | Validate migration branch, then update/close issue after merge |
 | WebDAV upload fail | #912 | — | — | open | P2 | 3 | `webdav_client.dart` (uploadFile) | DELETE not supported by some servers → 405 | Try PUT overwrite first, fallback to DELETE+PUT |
-| Single book sync | #898 | — | #911 | open | P3 | 4 | `sync.dart`, `book_notes.dart` | No per-book granularity in sync | Implement per-book export as data safety net |
+| Single book sync | #898 | — | #911 | open | P3 | 4 | `service/sync/library_*`, `annotation_*` | Feature branch synchronizes per-book documents and immutable assets | Validate UX and update issue after merge |
 | Storage migration empty dir | #839 | — | #745 | open | P1 | 2 | `storage_migration.dart` | Migration requires empty target dir; user can't migrate to existing data dir | Allow merge mode, not just empty dir |
 | WebDAV 302 redirect | #345 | — | #760 | open | P2 | 3 | `webdav_client.dart`, `sync.dart` | 302 redirect not followed during sync | Add redirect following in HTTP client |
-| WebDAV sync time | #588 | — | #911 | open | P3 | 3 | `sync.dart`, `database.dart` | Sync uses file mtime; cd2 upload delay causes false conflicts | Store sync timestamp in DB |
+| WebDAV sync time | #588 | — | #911 | open | P3 | 3 | `service/sync/domain_stamp.dart` | Feature branch removes database-mtime direction selection | Validate cross-device convergence and update issue after merge |
 
 ### AI / Custom API Cluster
 

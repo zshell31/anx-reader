@@ -19,4 +19,21 @@ void main() {
         File('lib/service/database_sync_manager.dart').existsSync(), isFalse);
     expect(File('lib/enums/sync_direction.dart').existsSync(), isFalse);
   });
+
+  test('ordinary sync diagnostics do not interpolate private identities', () {
+    for (final path in [
+      'lib/providers/sync.dart',
+      'lib/service/sync/annotation_sync_runtime.dart',
+      'lib/service/sync/translation_cache_sync_service.dart',
+      'lib/service/sync/sync_connection_tester.dart',
+    ]) {
+      final source = File(path).readAsStringSync();
+      expect(source, isNot(contains(r'for $fingerprint')),
+          reason: '$path must not log book fingerprints');
+      expect(source, isNot(contains(r'$error\n$stack')),
+          reason: '$path must not log raw errors or stack traces');
+      expect(source, isNot(contains(r'localBook=$id')),
+          reason: '$path must not log device-local book IDs');
+    }
+  });
 }

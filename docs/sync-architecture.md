@@ -1,6 +1,7 @@
 # Shared-state synchronization architecture
 
-> This document defines the migration target. While the migration progress file shows a milestone as incomplete, the corresponding section here is planned rather than active behavior.
+This document describes the active synchronization architecture on
+`feature/automatic-shared-state-sync`.
 
 ## Boundary and goals
 
@@ -21,17 +22,21 @@ portable domain mutation
 All identifiers are safe path segments. JSON is canonicalized before writes.
 
 ```text
-anx/shared/v1/catalog/books/<md5>.json
-anx/shared/v1/reading-state/<md5>.json
-anx/shared/v1/reading-activity/<md5>/<yyyy-mm-dd>.json
-anx/shared/v1/groups/<uuid>.json
-anx/shared/v1/tags/<uuid>.json
-anx/shared/v1/book-tags/<md5>/<uuid>.json
-anx/shared/v1/themes/<uuid>.json
-anx/annotations/<md5>.json                 (existing annotation protocol)
-anx/translation-cache/<md5>.json           (existing independent cache)
-anx/assets/books/md5/<md5>                 (immutable, verified bytes)
+<shared root>/annotations/<md5>.json
+<shared root>/anx/annotation-presentations.json
+<shared root>/shared/v1/catalog/books/<md5>.json
+<shared root>/shared/v1/reading-state/<md5>.json
+<shared root>/shared/v1/reading-activity/<md5>/<yyyy-mm-dd>.json
+<shared root>/shared/v1/groups/<uuid>.json
+<shared root>/shared/v1/tags/<uuid>.json
+<shared root>/shared/v1/book-tags/<md5>/<uuid>.json
+<shared root>/shared/v1/themes/<uuid>.json
+anx/data/translation-cache/v1/<md5>.json    (independent merge cache)
+anx/assets/books/md5/<md5>                  (immutable, verified bytes)
 ```
+
+The configurable shared root defaults to `Lingua Reader` for annotation
+interoperability. Asset/cache paths use the WebDAV account base directly.
 
 Every new JSON document has an integer `schemaVersion` and explicit identity fields. Portable identities are lowercase book fingerprints, shared UUIDs, and document IDs. SQLite IDs, file paths, cover paths, provider credentials, note contents in logs, and device UI state are never protocol identities.
 

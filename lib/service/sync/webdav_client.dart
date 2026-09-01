@@ -50,7 +50,8 @@ class WebdavClient extends SyncClientBase {
         AnxLog.warning('WebDAV ping failed, retrying... ($count)');
         count++;
         if (count >= 3) {
-          AnxLog.severe('WebDAV ping failed after 3 attempts: $e');
+          AnxLog.severe(
+              'WebDAV ping failed after 3 attempts: ${e.runtimeType}');
           rethrow;
         }
       }
@@ -85,7 +86,8 @@ class WebdavClient extends SyncClientBase {
         await mkdirAll(testDir);
         AnxLog.info('WebDAV full test: Created remote directory');
       } catch (e) {
-        AnxLog.severe('WebDAV full test: Failed to create directory: $e');
+        AnxLog.severe('WebDAV full test: Failed to create directory: '
+            '${e.runtimeType}');
         throw Exception('Failed to create test directory');
       }
 
@@ -94,7 +96,8 @@ class WebdavClient extends SyncClientBase {
         await uploadFile(localTestFile.path, testFile, replace: true);
         AnxLog.info('WebDAV full test: Uploaded test file');
       } catch (e) {
-        AnxLog.severe('WebDAV full test: Failed to upload file: $e');
+        AnxLog.severe(
+            'WebDAV full test: Failed to upload file: ${e.runtimeType}');
         throw Exception('Failed to upload test file');
       }
 
@@ -107,8 +110,7 @@ class WebdavClient extends SyncClientBase {
         AnxLog.info('WebDAV full test: Downloaded test file');
 
         if (downloadedContent != testContent) {
-          AnxLog.severe(
-              'WebDAV full test: Content mismatch\nExpected: $testContent\nGot: $downloadedContent');
+          AnxLog.severe('WebDAV full test: Content mismatch');
           throw Exception('Test file content mismatch, data integrity issue');
         }
         AnxLog.info('WebDAV full test: Content verification passed');
@@ -116,7 +118,8 @@ class WebdavClient extends SyncClientBase {
         if (e.toString().contains('content mismatch')) {
           rethrow;
         }
-        AnxLog.severe('WebDAV full test: Failed to download file: $e');
+        AnxLog.severe(
+            'WebDAV full test: Failed to download file: ${e.runtimeType}');
         throw Exception('Failed to download test file');
       }
 
@@ -125,7 +128,8 @@ class WebdavClient extends SyncClientBase {
         await remove(testFile);
         AnxLog.info('WebDAV full test: Deleted remote test file');
       } catch (e) {
-        AnxLog.warning('WebDAV full test: Failed to delete test file: $e');
+        AnxLog.warning('WebDAV full test: Failed to delete test file: '
+            '${e.runtimeType}');
         // Don't throw here, test is essentially successful
       }
 
@@ -158,7 +162,8 @@ class WebdavClient extends SyncClientBase {
           await downloadTestFile.delete();
         }
       } catch (cleanupError) {
-        AnxLog.warning('WebDAV full test: Cleanup error: $cleanupError');
+        AnxLog.warning(
+            'WebDAV full test: Cleanup error: ${cleanupError.runtimeType}');
       }
       rethrow;
     }
@@ -209,7 +214,7 @@ class WebdavClient extends SyncClientBase {
       try {
         await remove(_safeEncodePath(remotePath));
       } catch (e) {
-        AnxLog.severe('Failed to remove file\n$e');
+        AnxLog.severe('Failed to remove file: ${e.runtimeType}');
       }
     }
 

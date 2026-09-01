@@ -44,9 +44,9 @@ class TranslationCacheSyncService {
           () =>
               _syncBook(fingerprint, remoteFingerprints.contains(fingerprint)),
         );
-      } catch (error, stack) {
+      } catch (error) {
         AnxLog.warning(
-            'Translation cache sync failed for $fingerprint: $error\n$stack');
+            'Translation cache document sync failed: ${error.runtimeType}');
       }
     }
   }
@@ -64,12 +64,12 @@ class TranslationCacheSyncService {
               'Translation cache remote book identity mismatch; skipping');
           return;
         }
-      } on UnsupportedError catch (error) {
-        AnxLog.warning('$error; translation cache document was not merged');
+      } on UnsupportedError {
+        AnxLog.warning('Unsupported translation cache document was not merged');
         return;
       } catch (error) {
         AnxLog.warning(
-            'Invalid remote translation cache for $fingerprint: $error');
+            'Invalid remote translation cache: ${error.runtimeType}');
         return;
       }
     }
@@ -79,8 +79,8 @@ class TranslationCacheSyncService {
       remoteDocument?.entries ?? const <TranslationCacheEntry>[],
     );
     if (result.hasIdentityConflict) {
-      AnxLog.severe(
-          'Translation cache request-key collision for book $fingerprint; both documents were left in place');
+      AnxLog.severe('Translation cache request-key collision; '
+          'both documents were left in place');
       return;
     }
     final localState = <String, String>{

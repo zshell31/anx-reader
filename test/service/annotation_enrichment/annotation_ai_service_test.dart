@@ -30,7 +30,7 @@ void main() {
       generate: (messages, _) async {
         prompt = messages.single.contentAsString;
         return '''```json
-{"translation":"переклад","translationNotes":"нотатки","grammar":"граматика","usage":"вживання"}
+{"translation":"переклад","translationNotes":"нотатки","grammar":"граматика","usage":"вживання","chunks":[{"canonicalForm":"have one's suspicions","surfaceForm":"had your suspicions","meaning":"мати підозри","type":"expression","examples":["I've had my suspicions for a while."]}]}
 ```''';
       },
     );
@@ -50,6 +50,32 @@ void main() {
     expect(result.commentary?.translationNotes, 'нотатки');
     expect(result.commentary?.grammar, 'граматика');
     expect(result.commentary?.usage, 'вживання');
+    expect(result.commentary?.chunks?.single.toMap(), {
+      'canonicalForm': "have one's suspicions",
+      'surfaceForm': 'had your suspicions',
+      'meaning': 'мати підозри',
+      'type': 'expression',
+      'examples': ["I've had my suspicions for a while."],
+    });
+    expect(prompt, contains('0-5 chunks'));
+    expect(prompt, contains('transferable grammar'));
+  });
+
+  test('old analysis without chunks still decodes', () async {
+    final service = AnnotationAiService(
+      resolveRoute: () => _route(),
+      generate: (_, __) async =>
+          '{"translation":"переклад","translationNotes":"","grammar":"","usage":""}',
+    );
+    final result = await service.analyze(
+      selectedText: 'text',
+      context: null,
+      bookTitle: 'Book',
+      chapter: '',
+      targetLanguageCode: 'uk',
+      targetLanguageName: 'Українська',
+    );
+    expect(result.commentary?.chunks, isNull);
   });
 
   test('follow-up receives prior conversation and all draft materials',

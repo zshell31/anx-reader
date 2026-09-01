@@ -915,6 +915,7 @@
    "annotationEditorOpenGoogleTranslate": "Открыть в Google Переводчике",
    "annotationEditorOpenLdoce": "Открыть в LDOCE",
    "annotationEditorSectionTranslation": "Перевод",
+   "annotationEditorSectionChunks": "Ключевые chunks",
    "annotationEditorSectionNotes": "Примечания",
    "annotationEditorSectionGrammar": "Грамматика",
    "annotationEditorSectionUsage": "Употребление",

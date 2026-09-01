@@ -52,6 +52,15 @@ class AnnotationAiService {
       translationNotes: _text(payload['translationNotes']),
       grammar: _text(payload['grammar']),
       usage: _text(payload['usage']),
+      chunks: payload['chunks'] is List
+          ? (payload['chunks'] as List)
+              .whereType<Map>()
+              .map((item) => AiChunk.fromMap(item))
+              .where((item) =>
+                  item.canonicalForm.isNotEmpty && item.meaning.isNotEmpty)
+              .take(5)
+              .toList(growable: false)
+          : null,
     );
     if (commentary.toMap().isEmpty) {
       throw const FormatException('AI returned an empty annotation analysis.');
@@ -99,10 +108,12 @@ String buildAnnotationAnalysisPrompt({
   required String targetLanguageCode,
   required String targetLanguageName,
 }) =>
-    '''Analyze the selected book text for a language learner.
+    '''Analyze the selected book text as one practical, learning-oriented analysis.
 Write every explanatory value in $targetLanguageName ($targetLanguageCode).
 Do not default to English unless that is the configured target language.
-Return only one JSON object with string fields: translation, translationNotes, grammar, usage.
+Prioritize: (1) a natural translation, (2) genuinely reusable chunks, (3) transferable grammar and lexical patterns, (4) useful nuance, register and collocation, then (5) short examples. Keep translationNotes, grammar and usage concise and consistent with the chunks. Prefer explaining how a pattern transfers to new sentences over naming grammar for its own sake.
+Return only one JSON object with string fields translation, translationNotes, grammar and usage, plus a chunks array.
+Return 0-5 chunks; zero is valid, so never invent items to fill the list. Extract only collocations, fixed or semi-fixed expressions, phrasal verbs, idioms, and productive grammatical or lexical patterns that are genuinely worth remembering. Avoid trivial compositional phrases and ordinary standalone words. Generalize tense, person and number where appropriate. canonicalForm is the reusable learning form; surfaceForm may be the source form. Avoid duplicate variants and do not canonize accidental or questionable wording. meaning is a short learner-facing meaning or translation. type, surfaceForm and examples are optional; type is one of collocation, expression, phrasal_verb, idiom or pattern; examples contains at most two short natural examples demonstrating the same meaning.
 
 Selected text:
 ${selectedText.trim()}

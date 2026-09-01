@@ -61,6 +61,15 @@
             "translationNotes": "Фразовый глагол.",
             "grammar": "Past simple.",
             "usage": "Neutral.",
+            "chunks": [
+              {
+                "canonicalForm": "come across someone",
+                "surfaceForm": "came across an old friend",
+                "meaning": "случайно встретить кого-либо",
+                "type": "phrasal_verb",
+                "examples": ["I came across Maya at the station."]
+              }
+            ],
             "futureCommentaryField": "preserve"
           },
           "createdAt": "2026-08-20T10:03:00.000Z",

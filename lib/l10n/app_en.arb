@@ -955,6 +955,7 @@
   "annotationEditorOpenGoogleTranslate": "Open in Google Translate",
   "annotationEditorOpenLdoce": "Open in LDOCE",
   "annotationEditorSectionTranslation": "Translation",
+  "annotationEditorSectionChunks": "Useful chunks",
   "annotationEditorSectionNotes": "Notes",
   "annotationEditorSectionGrammar": "Grammar",
   "annotationEditorSectionUsage": "Usage",

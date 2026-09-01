@@ -41,6 +41,15 @@ void main() {
         'Фразовый глагол.');
     expect(byKind['ai-analysis']?.commentaryValue('grammar'), 'Past simple.');
     expect(byKind['ai-analysis']?.commentaryValue('usage'), 'Neutral.');
+    expect(byKind['ai-analysis']?.commentary?['chunks'], [
+      {
+        'canonicalForm': 'come across someone',
+        'surfaceForm': 'came across an old friend',
+        'meaning': 'случайно встретить кого-либо',
+        'type': 'phrasal_verb',
+        'examples': ['I came across Maya at the station.'],
+      },
+    ]);
     expect(byKind['ai-thread']?.data['messages'], hasLength(2));
   });
 
@@ -93,6 +102,11 @@ void main() {
     expect(
       draft.sourceResults[AnnotationEditorProvider.ai]?.commentary?.grammar,
       'Past simple.',
+    );
+    expect(
+      draft.sourceResults[AnnotationEditorProvider.ai]?.commentary?.chunks
+          ?.single.canonicalForm,
+      'come across someone',
     );
     expect(draft.aiThreadId, 'lingua-thread');
     expect(
@@ -194,6 +208,15 @@ void main() {
           enrichments.singleWhere((item) => item['id'] == 'lingua-ai');
       expect(analysis['futureAiField'], ['preserve']);
       expect(analysis['commentary']['futureCommentaryField'], 'preserve');
+      expect(analysis['commentary']['chunks'], [
+        {
+          'canonicalForm': 'come across someone',
+          'surfaceForm': 'came across an old friend',
+          'meaning': 'случайно встретить кого-либо',
+          'type': 'phrasal_verb',
+          'examples': ['I came across Maya at the station.'],
+        },
+      ]);
       final thread =
           enrichments.singleWhere((item) => item['id'] == 'lingua-thread');
       expect(thread['futureThreadField'], ['preserve']);

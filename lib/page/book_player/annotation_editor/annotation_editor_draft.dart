@@ -5,6 +5,56 @@ import 'package:anx_reader/service/sync/annotation_read_model.dart';
 
 enum AnnotationEditorProvider { googleTranslate, ldoce, ai }
 
+const _aiChunkTypes = {
+  'collocation',
+  'expression',
+  'phrasal_verb',
+  'idiom',
+  'pattern',
+};
+
+class AiChunk {
+  final String canonicalForm;
+  final String? surfaceForm;
+  final String meaning;
+  final String? type;
+  final List<String>? examples;
+
+  const AiChunk({
+    required this.canonicalForm,
+    this.surfaceForm,
+    required this.meaning,
+    this.type,
+    this.examples,
+  });
+
+  factory AiChunk.fromMap(Map<Object?, Object?> value) => AiChunk(
+        canonicalForm: _optionalText(value['canonicalForm']) ?? '',
+        surfaceForm: _optionalText(value['surfaceForm']),
+        meaning: _optionalText(value['meaning']) ?? '',
+        type: value['type'] is String &&
+                _aiChunkTypes.contains((value['type'] as String).trim())
+            ? (value['type'] as String).trim()
+            : null,
+        examples: value['examples'] is List
+            ? (value['examples'] as List)
+                .whereType<String>()
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .take(2)
+                .toList(growable: false)
+            : null,
+      );
+
+  Map<String, Object?> toMap() => {
+        'canonicalForm': canonicalForm,
+        if (surfaceForm?.isNotEmpty == true) 'surfaceForm': surfaceForm!,
+        'meaning': meaning,
+        if (type != null) 'type': type!,
+        if (examples?.isNotEmpty == true) 'examples': examples,
+      };
+}
+
 extension AnnotationEditorProviderIdentity on AnnotationEditorProvider {
   String get providerId => switch (this) {
         AnnotationEditorProvider.googleTranslate => 'google-translate',
@@ -30,6 +80,7 @@ class AnnotationEditorCommentary {
   final String? translationNotes;
   final String? grammar;
   final String? usage;
+  final List<AiChunk>? chunks;
   final Map<String, Object?> unknownFields;
 
   const AnnotationEditorCommentary({
@@ -37,6 +88,7 @@ class AnnotationEditorCommentary {
     this.translationNotes,
     this.grammar,
     this.usage,
+    this.chunks,
     this.unknownFields = const {},
   });
 
@@ -46,6 +98,15 @@ class AnnotationEditorCommentary {
         translationNotes: _optionalText(value['translationNotes']),
         grammar: _optionalText(value['grammar']),
         usage: _optionalText(value['usage']),
+        chunks: value['chunks'] is List
+            ? (value['chunks'] as List)
+                .whereType<Map>()
+                .map((item) => AiChunk.fromMap(item))
+                .where((item) =>
+                    item.canonicalForm.isNotEmpty && item.meaning.isNotEmpty)
+                .take(5)
+                .toList(growable: false)
+            : null,
         unknownFields: Map.unmodifiable({
           for (final entry in value.entries)
             if (entry.key is String &&
@@ -54,6 +115,7 @@ class AnnotationEditorCommentary {
                   'translationNotes',
                   'grammar',
                   'usage',
+                  'chunks',
                 }.contains(entry.key))
               entry.key as String: entry.value,
         }),
@@ -66,6 +128,8 @@ class AnnotationEditorCommentary {
           'translationNotes': translationNotes!,
         if (grammar?.isNotEmpty == true) 'grammar': grammar!,
         if (usage?.isNotEmpty == true) 'usage': usage!,
+        if (chunks?.isNotEmpty == true)
+          'chunks': chunks!.map((item) => item.toMap()).toList(growable: false),
       };
 }
 

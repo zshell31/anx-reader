@@ -692,21 +692,71 @@ class _AiAnalysis extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final section in <(String, String?)>[
-          (l10n.annotationEditorSectionTranslation, commentary.translation),
-          (l10n.annotationEditorSectionNotes, commentary.translationNotes),
-          (l10n.annotationEditorSectionGrammar, commentary.grammar),
-          (l10n.annotationEditorSectionUsage, commentary.usage),
+        for (final section in <(String, String?, bool)>[
+          (
+            l10n.annotationEditorSectionTranslation,
+            commentary.translation,
+            false
+          ),
+          if (commentary.chunks?.isNotEmpty == true)
+            (l10n.annotationEditorSectionChunks, '', true),
+          (
+            l10n.annotationEditorSectionNotes,
+            commentary.translationNotes,
+            false
+          ),
+          (l10n.annotationEditorSectionGrammar, commentary.grammar, false),
+          (l10n.annotationEditorSectionUsage, commentary.usage, false),
         ])
-          if (section.$2?.isNotEmpty == true) ...[
+          if (section.$2?.isNotEmpty == true || section.$3) ...[
             Text(section.$1, style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
-            StyledMarkdown(data: section.$2!),
+            if (section.$3)
+              _AiChunks(chunks: commentary.chunks!)
+            else
+              StyledMarkdown(data: section.$2!),
             const SizedBox(height: 12),
           ],
       ],
     );
   }
+}
+
+class _AiChunks extends StatelessWidget {
+  final List<AiChunk> chunks;
+
+  const _AiChunks({required this.chunks});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final chunk in chunks) ...[
+            Text.rich(TextSpan(
+              style: Theme.of(context).textTheme.bodyMedium,
+              children: [
+                TextSpan(
+                  text: chunk.canonicalForm,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (chunk.surfaceForm?.isNotEmpty == true &&
+                    chunk.surfaceForm != chunk.canonicalForm)
+                  TextSpan(
+                    text: ' (${chunk.surfaceForm})',
+                    style: const TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                TextSpan(text: ' — ${chunk.meaning}'),
+              ],
+            )),
+            for (final example in chunk.examples ?? const <String>[])
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 2),
+                child: Text('• $example'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      );
 }
 
 class _ChatMessage extends StatelessWidget {

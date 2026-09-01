@@ -62,6 +62,42 @@ void main() {
     }
   });
 
+  testWidgets('AI analysis renders structured chunks', (tester) async {
+    final draft = AnnotationEditorDraft.forSelection(
+      selection: _selection(),
+      bookTitle: 'Book',
+    );
+    final request = draft.startProvider(AnnotationEditorProvider.ai);
+    draft.completeProvider(
+      request,
+      const AnnotationEditorSourceResult(
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        kind: 'ai-analysis',
+        commentary: AnnotationEditorCommentary(
+          chunks: [
+            AiChunk(
+              canonicalForm: "have one's suspicions",
+              surfaceForm: 'had your suspicions',
+              meaning: 'иметь подозрения',
+              examples: ["I've had my suspicions for a while."],
+            ),
+          ],
+        ),
+      ),
+    );
+    final controller = _controller(draft: draft);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    await tester.tap(find.text('OpenAI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Useful chunks'), findsOneWidget);
+    expect(
+      find.textContaining("have one's suspicions", findRichText: true),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('existing annotation opens at full width and scroll offset zero',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));

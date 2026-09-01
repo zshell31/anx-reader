@@ -766,7 +766,9 @@ class AnnotationRepository {
       ...(enrichment['commentary'] is Map
           ? (enrichment['commentary'] as Map).values
           : const <Object?>[]),
-    ].any((value) => value is String && value.trim().isNotEmpty);
+    ].any((value) =>
+        value is String && value.trim().isNotEmpty ||
+        value is List && value.isNotEmpty);
     if (!hasPayload) {
       throw ArgumentError('material enrichment must contain semantic content');
     }

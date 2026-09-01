@@ -23,6 +23,32 @@ AnnotationEditorSourceResult google(String text) =>
     );
 
 void main() {
+  test('commentary chunks encode, decode, and retain optional fields', () {
+    final commentary = AnnotationEditorCommentary.fromMap({
+      'translation': 'перевод',
+      'chunks': [
+        {
+          'canonicalForm': "have one's suspicions",
+          'surfaceForm': 'had your suspicions',
+          'meaning': 'иметь подозрения',
+          'type': 'expression',
+          'examples': ["I've had my suspicions for a while."],
+        },
+        {
+          'canonicalForm': 'have long + past participle',
+          'meaning': 'давно что-либо делать',
+        },
+      ],
+    });
+    expect(AnnotationEditorCommentary.fromMap(commentary.toMap()).toMap(),
+        commentary.toMap());
+    expect(commentary.chunks, hasLength(2));
+    expect(commentary.chunks?.first.surfaceForm, 'had your suspicions');
+    expect(commentary.chunks?.last.type, isNull);
+    expect(AnnotationEditorCommentary.fromMap({'translation': 'old'}).chunks,
+        isNull);
+  });
+
   test('new draft provider exploration and cancellation perform no writes', () {
     var canonicalWrites = 0;
     var outboxWrites = 0;

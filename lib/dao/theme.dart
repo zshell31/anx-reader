@@ -2,6 +2,7 @@ import 'package:anx_reader/dao/base_dao.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/read_theme.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 
 class ThemeDao extends BaseDao {
@@ -9,8 +10,10 @@ class ThemeDao extends BaseDao {
 
   static const String table = 'tb_themes';
 
-  Future<int> insertTheme(ReadTheme readTheme) {
-    return insert(table, readTheme.toMap());
+  Future<int> insertTheme(ReadTheme readTheme) async {
+    final id = await insert(table, readTheme.toMap());
+    annotationSyncRuntime.notifyOrganizationMutation();
+    return id;
   }
 
   Future<List<ReadTheme>> selectThemes() {
@@ -31,6 +34,8 @@ class ThemeDao extends BaseDao {
       return;
     }
 
+    await annotationSyncRuntime.tombstoneTheme(id);
+
     await delete(
       table,
       where: 'id = ?',
@@ -45,6 +50,7 @@ class ThemeDao extends BaseDao {
       where: 'id = ?',
       whereArgs: [readTheme.id],
     );
+    annotationSyncRuntime.notifyOrganizationMutation();
   }
 
   Future<ReadTheme> selectReadThemeById(int id) async {

@@ -16,12 +16,12 @@
 | 2. Library and reading position | completed | Added v1 per-book catalog/reading-state protocols, deterministic merges, projection, bootstrap and runtime wiring. |
 | 3. Library assets | completed | Added immutable MD5-addressed upload/download, verification, path-independent binding and deletion safety. |
 | 4. Reading activity | completed | Added bounded immutable session-event documents, union merge, deterministic legacy import and statistics projection. |
-| 5. Groups, tags, themes | not_started | UUID identities, tombstones, mappings and projections. |
+| 5. Groups, tags, themes | completed | Added UUID records/mappings, explicit relations, tombstones, portable theme projection and mutation hooks. |
 | 6. Retire database sync | not_started | Remove direction choice and whole-database/file sync from normal behavior. |
 | 7. Automatic integration and diagnostics | not_started | Lifecycle orchestration, coalescing, summaries and privacy-safe logs. |
 | 8. Documentation and validation | not_started | Refresh all sync docs and complete end-to-end validation. |
 
-## Current audit (database version 8)
+## Current audit (baseline database version 8; current version 9)
 
 | Existing state | Classification | Migration rule |
 | --- | --- | --- |
@@ -53,12 +53,13 @@
 - Catalog projection may create a pathless local row for a remote-only live record; Milestone 3 binds verified content-addressed bytes and a device-local path.
 - Reading activity uses bounded per-book/day documents containing immutable UUID events; merge is set union by event ID.
 - Reading event ID collisions with differing payloads fail closed. Daily totals are recomputed from the canonical event set and replace the local aggregate row.
+- Organization records use UUIDs. Group parents and catalog membership use group UUIDs; tags and explicit book-tag documents use tag UUIDs; custom themes exclude `background_image_path`.
 - Book asset remote identity is `anx/assets/books/md5/<fingerprint>`; the catalog carries only digest algorithm, digest and a sanitized format extension. The asset API intentionally exposes no delete operation.
 - Annotations retain their existing v2 merge rules. Translation cache remains independent.
 
 ## Migrations / schema changes
 
-- No application SQLite schema change in Milestones 0–4. Stable device identity and all bootstrap markers use existing `legacy_import_receipts`; domain documents use existing shared-state tables.
+- Application database v8→v9 creates `sync_group_ids`, `sync_tag_ids`, and `sync_theme_ids`, each mapping a shared UUID to a unique device-local integer ID. Shared-state schema remains v4; stable identity/bootstrap markers use existing receipts.
 
 ## Important files inspected/changed
 
@@ -69,6 +70,7 @@
 - Milestone 2: added domain stamps, catalog/reading protocols, repository/projection, sync service, startup bootstrap and real reader-progress mutation integration.
 - Milestone 3: added streaming SyncClient asset transport, partial download verification, deterministic local binding, import/tombstone publication hooks and catalog-driven asset processing before the legacy fallback.
 - Milestone 4: added reading-activity protocol/repository/coordinator, UUID session recording on reader close, UUIDv5 legacy aggregate import and `tb_reading_time` replacement projection.
+- Milestone 5: added organization protocols/repository/coordinators, v9 mapping tables, UUIDv5 legacy bootstrap, projections to groups/tag sentinel rows/themes, and immediate DAO/provider mutation hooks.
 
 ## Tests by milestone
 
@@ -77,6 +79,7 @@
 - Milestone 2: focused Flutter tests passed (45 tests across catalog and coordinator suites); targeted analyzer for sync code and EPUB player passed with no issues; Dart format passed.
 - Milestone 3: catalog/asset Flutter tests passed (10 tests); targeted analyzer found no migration errors (three existing `use_build_context_synchronously` info diagnostics remain in touched UI/service files); Dart format passed.
 - Milestone 4: reading-activity/catalog Flutter tests passed (11 tests); targeted analyzer found only two pre-existing `use_build_context_synchronously` info diagnostics in `reading_page.dart`; Dart format passed.
+- Milestone 5: organization/shared-state/library tests passed (29 tests in the combined regression pass); targeted analyzer passed with no issues; Dart format passed.
 
 ## Known limitations / unresolved issues
 
@@ -87,7 +90,7 @@
 
 ## Exact next step
 
-Commit Milestone 4, then mark Milestone 5 in progress and add UUID-backed group, tag/relation and portable-theme records with idempotent projection mappings.
+Commit Milestone 5, then mark Milestone 6 in progress and remove whole-database direction selection/replacement and unsafe legacy `syncFiles` from normal synchronization.
 
 ## Milestone commits
 
@@ -95,3 +98,4 @@ Commit Milestone 4, then mark Milestone 5 in progress and add UUID-backed group,
 - Milestone 1: `9979cf5a refactor(sync): generalize shared document synchronization`.
 - Milestone 2: `dc3b70c4 feat(sync): add shared library and reading state`.
 - Milestone 3: `248be427 feat(sync): synchronize content-addressed library assets`.
+- Milestone 4: `0b8b33b2 feat(sync): synchronize reading activity events`.

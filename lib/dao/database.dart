@@ -13,7 +13,7 @@ import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Current app database version
-const int currentDbVersion = 8;
+const int currentDbVersion = 9;
 
 const createBookSQL = '''
 CREATE TABLE tb_books (
@@ -433,6 +433,21 @@ class DBHelper {
         await db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
           idx_tb_notes_shared_annotation_id ON tb_notes(shared_annotation_id)
           WHERE shared_annotation_id IS NOT NULL''');
+        continue case8;
+      case8:
+      case 8:
+        await db.execute('''CREATE TABLE IF NOT EXISTS sync_group_ids (
+          shared_id TEXT PRIMARY KEY,
+          local_id INTEGER NOT NULL UNIQUE
+        )''');
+        await db.execute('''CREATE TABLE IF NOT EXISTS sync_tag_ids (
+          shared_id TEXT PRIMARY KEY,
+          local_id INTEGER NOT NULL UNIQUE
+        )''');
+        await db.execute('''CREATE TABLE IF NOT EXISTS sync_theme_ids (
+          shared_id TEXT PRIMARY KEY,
+          local_id INTEGER NOT NULL UNIQUE
+        )''');
     }
 
     if (oldVersion != 0 && Prefs().webdavStatus) {

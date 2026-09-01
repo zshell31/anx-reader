@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:anx_reader/dao/book.dart';
+import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/domain_stamp.dart';
@@ -44,6 +45,19 @@ class SqliteLibraryProjection implements LibraryProjection {
     final rating =
         (metadata['rating'] as Map<String, dynamic>)['value'] as double;
     final deleted = membership['value'] != true;
+    var projectedGroupId = existing?.groupId ?? 0;
+    final sharedGroupId =
+        (document['groupId'] as Map<String, dynamic>?)?['value'] as String?;
+    if (sharedGroupId != null) {
+      final mappings = await (await DBHelper().database).query('sync_group_ids',
+          columns: ['local_id'],
+          where: 'shared_id = ?',
+          whereArgs: [sharedGroupId],
+          limit: 1);
+      if (mappings.isNotEmpty) {
+        projectedGroupId = mappings.single['local_id'] as int;
+      }
+    }
     if (existing == null) {
       await books.insertBook(Book(
         id: -1,
@@ -56,6 +70,7 @@ class SqliteLibraryProjection implements LibraryProjection {
         isDeleted: deleted,
         description: text('description'),
         rating: rating,
+        groupId: projectedGroupId,
         md5: fingerprint,
         createTime: DateTime.now(),
         updateTime: DateTime.now(),
@@ -67,6 +82,7 @@ class SqliteLibraryProjection implements LibraryProjection {
       author: text('author'),
       description: text('description'),
       rating: rating,
+      groupId: projectedGroupId,
       isDeleted: deleted,
     ));
   }

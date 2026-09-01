@@ -1,5 +1,6 @@
 import 'package:anx_reader/dao/base_dao.dart';
 import 'package:anx_reader/models/tag.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 
 const _stylesTable = 'tb_styles';
 const _tagSentinel = 1.0;
@@ -40,7 +41,7 @@ class TagDao extends BaseDao {
   Future<int> insertTag(String name, {int? color}) async {
     final sanitizedColor = color == null ? null : (color & 0x00FFFFFF);
     final db = await database;
-    return db.transaction((txn) async {
+    final result = await db.transaction((txn) async {
       final existing = await txn.rawQuery(
         '''
         SELECT id FROM $_stylesTable 
@@ -58,6 +59,8 @@ class TagDao extends BaseDao {
         if (sanitizedColor != null) 'line_height': sanitizedColor.toDouble(),
       });
     });
+    annotationSyncRuntime.notifyOrganizationMutation();
+    return result;
   }
 
   Future<void> updateTag(int id, {String? newName, int? color}) async {
@@ -71,9 +74,11 @@ class TagDao extends BaseDao {
       where: 'id = ? AND ABS(font_size - ?) < 0.0001',
       whereArgs: [id, _tagSentinel],
     );
+    annotationSyncRuntime.notifyOrganizationMutation();
   }
 
   Future<void> deleteTag(int id) async {
+    await annotationSyncRuntime.tombstoneTag(id);
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete(
@@ -149,9 +154,11 @@ class BookTagDao extends BaseDao {
         'letter_spacing': tagId.toDouble(),
       });
     });
+    await annotationSyncRuntime.publishBookTag(bookId, tagId, true);
   }
 
   Future<void> removeRelation({required int bookId, required int tagId}) async {
+    await annotationSyncRuntime.publishBookTag(bookId, tagId, false);
     await delete(
       _stylesTable,
       where:

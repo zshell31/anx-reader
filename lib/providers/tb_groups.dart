@@ -1,5 +1,6 @@
 import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/models/tb_group.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'tb_groups.g.dart';
@@ -86,6 +87,7 @@ class GroupDao extends _$GroupDao {
         },
       );
       ref.invalidateSelf();
+      annotationSyncRuntime.notifyOrganizationMutation();
       return id;
     }
     return 0;
@@ -106,6 +108,7 @@ class GroupDao extends _$GroupDao {
       whereArgs: [group.id],
     );
     ref.invalidateSelf();
+    annotationSyncRuntime.notifyOrganizationMutation();
     return result;
   }
 
@@ -122,6 +125,7 @@ class GroupDao extends _$GroupDao {
       whereArgs: [id],
     );
     ref.invalidateSelf();
+    annotationSyncRuntime.notifyOrganizationMutation();
     return result;
   }
 
@@ -133,6 +137,7 @@ class GroupDao extends _$GroupDao {
       whereArgs: [id],
     );
     ref.invalidateSelf();
+    annotationSyncRuntime.notifyOrganizationMutation();
   }
 
   Future<int> moveGroup(int id, int? newParentId) async {
@@ -148,6 +153,7 @@ class GroupDao extends _$GroupDao {
       whereArgs: [id],
     );
     ref.invalidateSelf();
+    annotationSyncRuntime.notifyOrganizationMutation();
     return result;
   }
 

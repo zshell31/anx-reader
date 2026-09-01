@@ -13,6 +13,9 @@ import 'package:anx_reader/service/sync/library_sync_service.dart';
 import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
 import 'package:anx_reader/service/sync/reading_activity_repository.dart';
 import 'package:anx_reader/service/sync/reading_activity_sync_service.dart';
+import 'package:anx_reader/service/sync/organization_repository.dart';
+import 'package:anx_reader/service/sync/organization_sync_service.dart';
+import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -38,6 +41,8 @@ class AnnotationSyncRuntime {
   LibrarySyncService? _libraryService;
   ReadingActivityRepository? _readingActivityRepository;
   ReadingActivitySyncService? _readingActivityService;
+  OrganizationRepository? _organizationRepository;
+  OrganizationSyncService? _organizationService;
   final StreamController<void> _statusChanges =
       StreamController<void>.broadcast();
   final StreamController<void> _annotationChanges =
@@ -111,6 +116,8 @@ class AnnotationSyncRuntime {
     await library.bootstrap();
     final activity = await _ensureReadingActivityRepository();
     await activity.bootstrap();
+    final organization = await _ensureOrganizationRepository();
+    await organization.bootstrap();
     await _ensureCoordinator();
     unawaited(_runDiscovery());
   }
@@ -133,15 +140,18 @@ class AnnotationSyncRuntime {
     final oldPresentation = _presentationCoordinator;
     final oldLibrary = _libraryService;
     final oldActivity = _readingActivityService;
+    final oldOrganization = _organizationService;
     _coordinator = null;
     _presentationCoordinator = null;
     _libraryService = null;
     _readingActivityService = null;
+    _organizationService = null;
     await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
     if (oldPresentation != null) await oldPresentation.close();
     if (oldLibrary != null) await oldLibrary.close();
     if (oldActivity != null) await oldActivity.close();
+    if (oldOrganization != null) await oldOrganization.close();
     _coordinator = _buildCoordinator();
     unawaited(_runDiscovery());
   }
@@ -192,6 +202,31 @@ class AnnotationSyncRuntime {
     final day = startedAt.toLocal().toIso8601String().substring(0, 10);
     unawaited(_readingActivityService
         ?.notifyMutation(readingActivityDocumentId(fingerprint, day)));
+  }
+
+  void notifyOrganizationMutation() {
+    unawaited(() async {
+      await (await _ensureOrganizationRepository()).bootstrap();
+      await _organizationService?.syncKnown(sharedState);
+    }());
+  }
+
+  Future<void> tombstoneTag(int localId) async {
+    await (await _ensureOrganizationRepository())
+        .tombstoneLocalRecord(tagDomain, 'sync_tag_ids', localId);
+    unawaited(_organizationService?.syncKnown(sharedState));
+  }
+
+  Future<void> tombstoneTheme(int localId) async {
+    await (await _ensureOrganizationRepository())
+        .tombstoneLocalRecord(themeDomain, 'sync_theme_ids', localId);
+    unawaited(_organizationService?.syncKnown(sharedState));
+  }
+
+  Future<void> publishBookTag(int bookId, int tagLocalId, bool present) async {
+    await (await _ensureOrganizationRepository())
+        .publishBookTagByLocalIds(bookId, tagLocalId, present);
+    unawaited(_organizationService?.syncKnown(sharedState));
   }
 
   Future<void> syncNow() => _runDiscovery();
@@ -276,6 +311,14 @@ class AnnotationSyncRuntime {
         transport: transport,
       );
     }
+    final organizationRepository = _organizationRepository;
+    if (organizationRepository != null) {
+      _organizationService = OrganizationSyncService(
+        sharedState: sharedState,
+        repository: organizationRepository,
+        transport: transport,
+      );
+    }
     _presentationCoordinator = AnnotationSyncCoordinator(
       sharedState: sharedState,
       transport: transport,
@@ -335,6 +378,7 @@ class AnnotationSyncRuntime {
   Future<void> _runDiscovery() async {
     final coordinator = await _ensureCoordinator();
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
+    await (await _ensureOrganizationRepository()).bootstrap();
     final fingerprints = await _knownFingerprints();
     await Future.wait([
       coordinator.syncDirtyAnnotations(),
@@ -345,6 +389,8 @@ class AnnotationSyncRuntime {
       if (_readingActivityService != null)
         _readingActivityService!
             .syncKnown(await sharedState.documentIds(readingActivityDomain)),
+      if (_organizationService != null)
+        _organizationService!.syncKnown(sharedState),
     ]);
   }
 
@@ -368,6 +414,16 @@ class AnnotationSyncRuntime {
       deviceId: await LibrarySyncRepository.ensureDeviceId(sharedState),
     );
     return _readingActivityRepository = repository;
+  }
+
+  Future<OrganizationRepository> _ensureOrganizationRepository() async {
+    final current = _organizationRepository;
+    if (current != null) return current;
+    final repository = OrganizationRepository(
+      sharedState: sharedState,
+      deviceId: await LibrarySyncRepository.ensureDeviceId(sharedState),
+    );
+    return _organizationRepository = repository;
   }
 
   Future<bool> _networkPolicyAllowsSync() async {
@@ -412,10 +468,12 @@ class AnnotationSyncRuntime {
     await _presentationCoordinator?.close();
     await _libraryService?.close();
     await _readingActivityService?.close();
+    await _organizationService?.close();
     _coordinator = null;
     _presentationCoordinator = null;
     _libraryService = null;
     _readingActivityService = null;
+    _organizationService = null;
     await sharedState.close();
     _started = false;
   }

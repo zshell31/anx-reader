@@ -12,7 +12,7 @@
 | Milestone | Status | Summary |
 | --- | --- | --- |
 | 0. Audit and migration map | completed | Inventoried v8 database and existing legacy/modern sync; defined protocol and migration map. |
-| 1. General shared-document sync | not_started | Extract reusable coordinator mechanics without changing annotation semantics. |
+| 1. General shared-document sync | completed | Promoted the parameterized coordinator to a reusable core with an annotation compatibility facade. |
 | 2. Library and reading position | not_started | Per-book catalog and reading-state documents, projection and bootstrap. |
 | 3. Library assets | not_started | Content-addressed book assets and safe local binding. |
 | 4. Reading activity | not_started | Immutable session events and aggregate projection. |
@@ -47,6 +47,7 @@
 - Extend the existing `shared_documents`, `sync_outbox`, and `sync_metadata` tables; do not introduce another synchronization database.
 - Documents are small and independently mergeable. Remote roots are under `anx/shared/v1/`; immutable book assets are under `anx/assets/books/md5/`.
 - Conditional `If-None-Match` / strong-ETag `If-Match` writes remain the concurrency boundary. HTTP 412 causes GET, domain merge, and retry.
+- `SharedDocumentSyncCoordinator` owns generic CAS/outbox/ETag/single-flight/retry mechanics. `AnnotationSyncCoordinator` is a compatibility facade supplying annotation defaults; domain protocols still own decoding, validation, merge and projection.
 - Version stamps are UTC timestamp plus a persisted stable device UUID tie-breaker. Comparison is lexicographic by instant then device ID.
 - Reading position uses per-book LWW, not maximum percentage. Catalog metadata uses field-level LWW. Tombstones prevent resurrection.
 - Reading activity uses bounded per-book/day documents containing immutable UUID events; merge is set union by event ID.
@@ -54,17 +55,19 @@
 
 ## Migrations / schema changes
 
-- None yet. Milestone 0 is documentation/audit only.
+- No SQLite change in Milestones 0–1.
 
 ## Important files inspected/changed
 
 - Inspected `lib/dao/database.dart`, database version/migrations and all DAOs/models for books, reading time, groups, tags, themes and notes.
 - Inspected `lib/providers/sync.dart`, `lib/service/database_sync_manager.dart`, shared-state database, annotation coordinator/runtime/protocol, conditional WebDAV transport and translation-cache sync.
 - Changed this progress document and `docs/sync-architecture.md`.
+- Milestone 1: `annotation_sync_coordinator.dart` now exposes the reusable core; `shared_document_sync_coordinator.dart` is the domain-neutral import boundary; compatibility callers remain unchanged.
 
 ## Tests by milestone
 
 - Milestone 0: documentation-only validation with repository searches; no executable behavior changed.
+- Milestone 1: Dart format passed; `flutter test test/service/sync/shared_document_sync_coordinator_test.dart test/service/sync/annotation_sync_coordinator_test.dart` passed (39 tests).
 
 ## Known limitations / unresolved issues
 
@@ -74,8 +77,8 @@
 
 ## Exact next step
 
-Mark Milestone 1 in progress and extract `SharedDocumentSyncCoordinator` from the annotation-named coordinator while preserving compatibility and tests.
+Commit Milestone 1, then mark Milestone 2 in progress and implement versioned catalog/reading-state protocols, bootstrap, projection, and coordinator wiring.
 
 ## Milestone commits
 
-- Milestone 0: `docs(sync): define automatic shared-state migration` (commit recorded by subject until hash is available in the following milestone update).
+- Milestone 0: `18f6bfd1 docs(sync): define automatic shared-state migration`.

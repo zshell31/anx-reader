@@ -37,12 +37,14 @@ bool _annotationDocumentMatchesId(
   return canonicalMd5Fingerprint(book['fingerprint']) == documentId;
 }
 
-/// Annotation-specific, revision-safe WebDAV convergence coordinator.
+/// Domain-neutral, revision-safe WebDAV document convergence coordinator.
 ///
-/// Network work is single-flight per fingerprint. SQLite transactions are
+/// Domain code supplies decoding, identity validation, normalization, merge,
+/// projection notification, and remote paths. Network work is single-flight
+/// per document. SQLite transactions are
 /// limited to snapshots and compare-and-set writes; no transaction spans a
 /// GET, local notification, retry delay, or PUT.
-class AnnotationSyncCoordinator {
+class SharedDocumentSyncCoordinator {
   final SharedStateDatabase sharedState;
   final AnnotationWebDavTransport transport;
   final String syncDomain;
@@ -69,7 +71,7 @@ class AnnotationSyncCoordinator {
       StreamController<void>.broadcast();
   bool _closing = false;
 
-  AnnotationSyncCoordinator({
+  SharedDocumentSyncCoordinator({
     required this.sharedState,
     required this.transport,
     this.syncDomain = annotationSyncDomain,
@@ -563,6 +565,38 @@ class AnnotationSyncCoordinator {
     _retryTimers.clear();
     await _statusChanges.close();
   }
+}
+
+/// Backwards-compatible annotation facade.
+///
+/// Annotation-specific defaults remain here while other domains instantiate
+/// [SharedDocumentSyncCoordinator] with their own protocol functions.
+class AnnotationSyncCoordinator extends SharedDocumentSyncCoordinator {
+  AnnotationSyncCoordinator({
+    required super.sharedState,
+    required super.transport,
+    super.syncDomain = annotationSyncDomain,
+    super.normalizeDocumentId,
+    super.remotePathFor,
+    super.decodeDocument,
+    super.mergeDocuments,
+    super.validateDocumentId,
+    super.onDocumentChanged,
+    super.maxPreconditionRetries = defaultAnnotationPreconditionRetries,
+    super.maxLockContentionRetries = defaultAnnotationLockContentionRetries,
+    super.lockContentionBackoff = const [
+      Duration(milliseconds: 150),
+      Duration(milliseconds: 350),
+      Duration(milliseconds: 750),
+    ],
+    super.waitForLockRetry,
+    super.networkBackoff = const [
+      Duration(seconds: 2),
+      Duration(seconds: 10),
+      Duration(minutes: 1),
+    ],
+    super.scheduleRetry,
+  });
 }
 
 class _RemoteMerge {

@@ -40,20 +40,29 @@ Map<String, dynamic> decodeLibraryCatalogDocument(Object? input) {
   }
   doc['membership'] = membership;
   doc['metadata'] = normalizedMetadata;
-  final asset = doc['bookAsset'];
+  final stampedAsset = _stamped(doc['bookAsset']);
+  final asset = stampedAsset['value'];
   final extension = asset is Map ? asset['extension'] : null;
+  final digest = asset is Map ? asset['digest'] : null;
   if (asset is! Map ||
-      asset['algorithm'] != 'md5' ||
-      canonicalMd5Fingerprint(asset['digest']) != doc['fingerprint'] ||
+      asset['algorithm'] != 'sha256' ||
+      digest is! String ||
+      !RegExp(r'^[0-9a-f]{64}$').hasMatch(digest) ||
       extension is! String ||
       !RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)) {
     throw const FormatException('book asset identity is invalid');
   }
   doc['bookAsset'] = {
-    'algorithm': 'md5',
-    'digest': doc['fingerprint'],
-    'extension': extension,
+    ...stampedAsset,
+    'value': {
+      'algorithm': 'sha256',
+      'digest': digest,
+      'extension': extension,
+    },
   };
+  if (doc['coverAsset'] != null) {
+    doc['coverAsset'] = _decodeAsset(doc['coverAsset'], 'cover');
+  }
   if (doc.containsKey('groupId') && doc['groupId'] != null) {
     doc['groupId'] = _stamped(doc['groupId']);
     if (doc['groupId']['value'] is! String) {
@@ -86,8 +95,37 @@ Map<String, dynamic> mergeLibraryCatalogDocuments(
           : b['groupId'] == null
               ? a['groupId']
               : winningStampedValue(a['groupId'], b['groupId']),
-    'bookAsset': a['bookAsset'],
+    'bookAsset': winningStampedValue(a['bookAsset'], b['bookAsset']),
+    if (a['coverAsset'] != null || b['coverAsset'] != null)
+      'coverAsset': a['coverAsset'] == null
+          ? b['coverAsset']
+          : b['coverAsset'] == null
+              ? a['coverAsset']
+              : winningStampedValue(a['coverAsset'], b['coverAsset']),
   });
+}
+
+Map<String, dynamic> _decodeAsset(Object? input, String kind) {
+  final stamped = _stamped(input);
+  final asset = stamped['value'];
+  final extension = asset is Map ? asset['extension'] : null;
+  final digest = asset is Map ? asset['digest'] : null;
+  if (asset is! Map ||
+      asset['algorithm'] != 'sha256' ||
+      digest is! String ||
+      !RegExp(r'^[0-9a-f]{64}$').hasMatch(digest) ||
+      extension is! String ||
+      !RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)) {
+    throw FormatException('$kind asset identity is invalid');
+  }
+  return {
+    ...stamped,
+    'value': {
+      'algorithm': 'sha256',
+      'digest': digest,
+      'extension': extension,
+    },
+  };
 }
 
 Map<String, dynamic> decodeReadingStateDocument(Object? input) {

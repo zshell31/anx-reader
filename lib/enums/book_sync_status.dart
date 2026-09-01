@@ -5,5 +5,6 @@ enum BookSyncStatusEnum {
   nonExistent,
   downloading,
   uploading,
+  released,
   checking,
 }

@@ -10,5 +10,6 @@ abstract class SyncStatusModel with _$SyncStatusModel {
     required List<int> nonExistent,
     required List<int> downloading,
     required List<int> uploading,
+    required List<int> released,
   }) = _SyncStatusModel;
 }

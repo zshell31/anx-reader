@@ -5,6 +5,7 @@ import 'package:anx_reader/enums/sort_field.dart';
 import 'package:anx_reader/enums/sort_order.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/providers/tb_groups.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/providers/book_filters.dart';
 import 'package:anx_reader/providers/tags.dart'
     show kNoTagFilterId, tagSelectionProvider;
@@ -145,30 +146,32 @@ class BookList extends _$BookList {
     state = AsyncData(await _buildWithFilters());
   }
 
-  void moveBook(Book data, int groupId) {
-    updateBook(data.copyWith(groupId: groupId));
+  Future<void> moveBook(Book data, int groupId) async {
+    await updateBook(data.copyWith(groupId: groupId));
     // insert a new group if not exists
     ref.read(groupDaoProvider.notifier).insertGroup(groupId);
-    refresh();
+    await refresh();
   }
 
-  void updateBook(Book book) {
-    bookDao.updateBook(book);
-    refresh();
+  Future<void> updateBook(Book book) async {
+    await bookDao.updateBook(book);
+    if (book.md5 != null) await annotationSyncRuntime.publishBook(book);
+    if (book.md5 != null) await annotationSyncRuntime.publishBookGroup(book);
+    await refresh();
   }
 
-  void dissolveGroup(List<Book> books) {
+  Future<void> dissolveGroup(List<Book> books) async {
     for (var book in books) {
-      updateBook(book.copyWith(groupId: 0));
+      await updateBook(book.copyWith(groupId: 0));
     }
     // delete the group
     ref.read(groupDaoProvider.notifier).hardDeleteGroup(books.first.groupId);
-    refresh();
+    await refresh();
   }
 
-  void removeFromGroup(Book book) {
-    updateBook(book.copyWith(groupId: 0));
-    refresh();
+  Future<void> removeFromGroup(Book book) async {
+    await updateBook(book.copyWith(groupId: 0));
+    await refresh();
   }
 
   void reorder(List<List<Book>> books) {

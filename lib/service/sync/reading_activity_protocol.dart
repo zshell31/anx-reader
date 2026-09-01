@@ -1,4 +1,5 @@
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/domain_stamp.dart';
 
 const readingActivityDomain = 'reading-activity';
 const readingActivitySchemaVersion = 1;
@@ -37,6 +38,7 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
     final startedAt = event['startedAt'];
     final duration = event['durationSeconds'];
     final deviceId = event['deviceId'];
+    final deleted = event['deleted'] ?? false;
     if (id is! String ||
         !_uuid.hasMatch(id) ||
         startedAt is! String ||
@@ -44,13 +46,37 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
         duration is! int ||
         duration < 0 ||
         deviceId is! String ||
-        deviceId.isEmpty) {
+        deviceId.isEmpty ||
+        deleted is! bool) {
       throw const FormatException('reading event is invalid');
     }
     event['startedAt'] = DateTime.parse(startedAt).toUtc().toIso8601String();
+    event['deleted'] = deleted;
+    event['stamp'] = event['stamp'] == null
+        ? DomainStamp(
+                modifiedAt: DateTime.parse(startedAt).toUtc(),
+                deviceId: deviceId)
+            .toJson()
+        : DomainStamp.fromJson(event['stamp']).toJson();
     final previous = byId[id];
-    if (previous != null && canonicalJson(previous) != canonicalJson(event)) {
-      throw const FormatException('event ID collision');
+    if (previous != null) {
+      for (final field in const [
+        'eventId',
+        'startedAt',
+        'durationSeconds',
+        'deviceId'
+      ]) {
+        if (previous[field] != event[field]) {
+          throw const FormatException('event ID collision');
+        }
+      }
+      final previousStamp = DomainStamp.fromJson(previous['stamp']);
+      final eventStamp = DomainStamp.fromJson(event['stamp']);
+      if (eventStamp.compareTo(previousStamp) < 0) continue;
+      if (eventStamp.compareTo(previousStamp) == 0 &&
+          canonicalJson(previous) != canonicalJson(event)) {
+        throw const FormatException('event mutation collision');
+      }
     }
     byId[id] = event;
   }

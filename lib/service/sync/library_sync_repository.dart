@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/dao/database.dart';
@@ -7,6 +8,9 @@ import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/utils/get_path/get_base_path.dart';
+import 'package:anx_reader/utils/log/common.dart';
+import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
@@ -16,6 +20,10 @@ abstract interface class LibraryProjection {
   Future<void> projectCatalog(Map<String, dynamic> document);
   Future<void> projectReadingState(Map<String, dynamic> document);
   Future<void> bindBookAsset(
+      String fingerprint, String relativePath, String extension);
+  Future<String?> localBookAssetPath(String fingerprint);
+  Future<String?> localCoverAssetPath(String fingerprint);
+  Future<void> bindCoverAsset(
       String fingerprint, String relativePath, String extension);
 }
 
@@ -109,6 +117,26 @@ class SqliteLibraryProjection implements LibraryProjection {
       isDeleted: false,
     ));
   }
+
+  @override
+  Future<String?> localBookAssetPath(String fingerprint) async {
+    final book = await bookByFingerprint(fingerprint);
+    return book == null || book.filePath.isEmpty ? null : book.filePath;
+  }
+
+  @override
+  Future<String?> localCoverAssetPath(String fingerprint) async {
+    final book = await bookByFingerprint(fingerprint);
+    return book == null || book.coverPath.isEmpty ? null : book.coverPath;
+  }
+
+  @override
+  Future<void> bindCoverAsset(
+      String fingerprint, String relativePath, String extension) async {
+    final existing = await bookByFingerprint(fingerprint);
+    if (existing == null) return;
+    await books.updateBook(existing.copyWith(coverPath: relativePath));
+  }
 }
 
 class LibrarySyncRepository {
@@ -119,13 +147,19 @@ class LibrarySyncRepository {
   final LibraryProjection projection;
   final DateTime Function() now;
   final String deviceId;
+  final Future<Map<String, dynamic>?> Function(Book book) assetForBook;
+  final Future<Map<String, dynamic>?> Function(Book book) coverAssetForBook;
 
   LibrarySyncRepository({
     required this.sharedState,
     required this.projection,
     required this.deviceId,
+    Future<Map<String, dynamic>?> Function(Book book)? assetForBook,
+    Future<Map<String, dynamic>?> Function(Book book)? coverAssetForBook,
     DateTime Function()? now,
-  }) : now = now ?? DateTime.now;
+  })  : assetForBook = assetForBook ?? _assetForLocalBook,
+        coverAssetForBook = coverAssetForBook ?? _coverAssetForLocalBook,
+        now = now ?? DateTime.now;
 
   static Future<String> ensureDeviceId(SharedStateDatabase store,
       {Uuid uuid = const Uuid()}) async {
@@ -148,8 +182,12 @@ class LibrarySyncRepository {
     final fingerprint = canonicalMd5Fingerprint(book.md5);
     final valueStamp = mutationStamp ?? stamp();
     final current = await _read(libraryCatalogDomain, fingerprint);
-    final candidate =
-        _catalogFromBook(book, fingerprint, valueStamp, current: current);
+    final candidate = await _catalogFromBook(
+      book,
+      fingerprint,
+      valueStamp,
+      current: current,
+    );
     final merged = current == null
         ? candidate
         : mergeLibraryCatalogDocuments(current, candidate);
@@ -202,18 +240,32 @@ class LibrarySyncRepository {
 
   Future<int> bootstrap() async {
     var imported = 0;
+    var unresolved = 0;
     for (final book in await projection.allBooks()) {
       String fingerprint;
       try {
         fingerprint = canonicalMd5Fingerprint(book.md5);
       } catch (_) {
+        unresolved++;
         continue;
       }
-      if (await sharedState.importReceipt(
-              catalogBootstrapSource, fingerprint) ==
-          null) {
+      final catalogReceipt =
+          await sharedState.importReceipt(catalogBootstrapSource, fingerprint);
+      if (catalogReceipt?.status != 'complete') {
         final legacyStamp = stamp(book.updateTime);
-        await publishBook(book, mutationStamp: legacyStamp);
+        try {
+          await publishBook(book, mutationStamp: legacyStamp);
+        } on StateError {
+          unresolved++;
+          await sharedState.recordImport(
+            source: catalogBootstrapSource,
+            sourceKey: fingerprint,
+            sharedId: fingerprint,
+            status: 'blocked',
+            detail: 'missing-verifiable-asset',
+          );
+          continue;
+        }
         await sharedState.recordImport(
           source: catalogBootstrapSource,
           sourceKey: fingerprint,
@@ -240,12 +292,16 @@ class LibrarySyncRepository {
         );
       }
     }
+    if (unresolved > 0) {
+      AnxLog.warning(
+          'Library catalog bootstrap deferred unresolvedBooks=$unresolved');
+    }
     return imported;
   }
 
-  Map<String, dynamic> _catalogFromBook(
+  Future<Map<String, dynamic>> _catalogFromBook(
       Book book, String fingerprint, DomainStamp valueStamp,
-      {Map<String, dynamic>? current}) {
+      {Map<String, dynamic>? current}) async {
     final existingMetadata = current?['metadata'] as Map<String, dynamic>?;
     Map<String, dynamic> field(String name, Object? value) {
       final previous = existingMetadata?[name] as Map<String, dynamic>?;
@@ -255,6 +311,26 @@ class LibrarySyncRepository {
     }
 
     final previousMembership = current?['membership'] as Map<String, dynamic>?;
+    final previousAsset = current?['bookAsset'] as Map<String, dynamic>?;
+    final previousCoverAsset = current?['coverAsset'] as Map<String, dynamic>?;
+    final localAsset = await assetForBook(book);
+    final asset = localAsset ?? previousAsset?['value'];
+    if (asset == null) {
+      throw StateError('Book has no verifiable local or canonical asset');
+    }
+    final stampedAsset = previousAsset != null &&
+            canonicalJson(previousAsset['value']) == canonicalJson(asset)
+        ? previousAsset
+        : stampedValue(asset, valueStamp);
+    final localCoverAsset = await coverAssetForBook(book);
+    final coverAsset = localCoverAsset ?? previousCoverAsset?['value'];
+    final stampedCoverAsset = coverAsset == null
+        ? null
+        : previousCoverAsset != null &&
+                canonicalJson(previousCoverAsset['value']) ==
+                    canonicalJson(coverAsset)
+            ? previousCoverAsset
+            : stampedValue(coverAsset, valueStamp);
     final present = !book.isDeleted;
     return decodeLibraryCatalogDocument({
       'schemaVersion': libraryCatalogSchemaVersion,
@@ -269,19 +345,9 @@ class LibrarySyncRepository {
         'description': field('description', book.description),
         'rating': field('rating', book.rating),
       },
-      'bookAsset': {
-        'algorithm': 'md5',
-        'digest': fingerprint,
-        'extension': _portableExtension(book.filePath),
-      },
+      'bookAsset': stampedAsset,
+      if (stampedCoverAsset != null) 'coverAsset': stampedCoverAsset,
     });
-  }
-
-  String _portableExtension(String path) {
-    final extension = p.extension(path).toLowerCase();
-    return RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)
-        ? extension
-        : '.epub';
   }
 
   Future<Map<String, dynamic>?> _read(String domain, String id) async {
@@ -291,5 +357,35 @@ class LibrarySyncRepository {
     return domain == libraryCatalogDomain
         ? decodeLibraryCatalogDocument(decoded)
         : decodeReadingStateDocument(decoded);
+  }
+
+  static Future<Map<String, dynamic>?> _assetForLocalBook(Book book) async {
+    if (book.filePath.isEmpty) return null;
+    final file = File(getBasePath(book.filePath));
+    if (!await file.exists()) return null;
+    return {
+      'algorithm': 'sha256',
+      'digest': (await sha256.bind(file.openRead()).first).toString(),
+      'extension': _portableExtensionStatic(book.filePath),
+    };
+  }
+
+  static Future<Map<String, dynamic>?> _coverAssetForLocalBook(
+      Book book) async {
+    if (book.coverPath.isEmpty) return null;
+    final file = File(getBasePath(book.coverPath));
+    if (!await file.exists()) return null;
+    return {
+      'algorithm': 'sha256',
+      'digest': (await sha256.bind(file.openRead()).first).toString(),
+      'extension': _portableExtensionStatic(book.coverPath),
+    };
+  }
+
+  static String _portableExtensionStatic(String path) {
+    final extension = p.extension(path).toLowerCase();
+    return RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)
+        ? extension
+        : '.epub';
   }
 }

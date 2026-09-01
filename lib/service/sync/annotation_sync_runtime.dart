@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
@@ -11,6 +12,7 @@ import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/library_sync_service.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
+import 'package:anx_reader/service/sync/library_asset_sync.dart';
 import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
 import 'package:anx_reader/service/sync/reading_activity_repository.dart';
 import 'package:anx_reader/service/sync/reading_activity_sync_service.dart';
@@ -21,6 +23,8 @@ import 'package:anx_reader/service/sync/remote_document_discovery.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/sync/sync_run_gate.dart';
 import 'package:anx_reader/service/sync/sync_summary.dart';
+import 'package:anx_reader/service/sync/sync_client_factory.dart';
+import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -191,7 +195,9 @@ class AnnotationSyncRuntime {
   Future<void> publishBook(Book book) async {
     final fingerprint = canonicalMd5Fingerprint(book.md5);
     await (await _ensureLibraryRepository()).publishBook(book);
-    unawaited(_libraryService?.notifyCatalogMutation(fingerprint));
+    if (Prefs().autoSync) {
+      unawaited(_libraryService?.notifyCatalogMutation(fingerprint));
+    }
   }
 
   /// Records only a real reader mutation. Opening/restoring a book must not
@@ -203,7 +209,9 @@ class AnnotationSyncRuntime {
       position: book.lastReadPosition,
       percentage: book.readingPercentage,
     );
-    unawaited(_libraryService?.notifyReadingMutation(fingerprint));
+    if (Prefs().autoSync) {
+      unawaited(_libraryService?.notifyReadingMutation(fingerprint));
+    }
   }
 
   Future<void> recordReadingActivity({
@@ -219,40 +227,80 @@ class AnnotationSyncRuntime {
       durationSeconds: durationSeconds,
     );
     final day = startedAt.toLocal().toIso8601String().substring(0, 10);
-    unawaited(_readingActivityService
-        ?.notifyMutation(readingActivityDocumentId(fingerprint, day)));
+    if (Prefs().autoSync) {
+      unawaited(_readingActivityService
+          ?.notifyMutation(readingActivityDocumentId(fingerprint, day)));
+    }
+  }
+
+  Future<void> deleteReadingHistory(Iterable<int> localBookIds) async {
+    final fingerprints = <String>[];
+    for (final id in localBookIds) {
+      try {
+        fingerprints.add(
+            canonicalMd5Fingerprint((await bookDao.selectBookById(id)).md5));
+      } catch (_) {
+        // Books without a portable identity keep device-local history only.
+      }
+    }
+    final changed = await (await _ensureReadingActivityRepository())
+        .deleteHistoryForFingerprints(fingerprints);
+    if (Prefs().autoSync) {
+      for (final id in changed) {
+        unawaited(_readingActivityService?.notifyMutation(id));
+      }
+    }
   }
 
   void notifyOrganizationMutation() {
     unawaited(() async {
       await (await _ensureOrganizationRepository()).bootstrap();
-      await _organizationService?.syncKnown(sharedState);
+      if (Prefs().autoSync) {
+        await _organizationService?.syncKnown(sharedState);
+      }
     }());
   }
 
   Future<void> tombstoneTag(int localId) async {
     await (await _ensureOrganizationRepository())
         .tombstoneLocalRecord(tagDomain, 'sync_tag_ids', localId);
-    unawaited(_organizationService?.syncKnown(sharedState));
+    if (Prefs().autoSync) {
+      unawaited(_organizationService?.syncKnown(sharedState));
+    }
   }
 
   Future<void> tombstoneTheme(int localId) async {
     await (await _ensureOrganizationRepository())
         .tombstoneLocalRecord(themeDomain, 'sync_theme_ids', localId);
-    unawaited(_organizationService?.syncKnown(sharedState));
+    if (Prefs().autoSync) {
+      unawaited(_organizationService?.syncKnown(sharedState));
+    }
   }
 
   Future<void> publishBookTag(int bookId, int tagLocalId, bool present) async {
     await (await _ensureOrganizationRepository())
         .publishBookTagByLocalIds(bookId, tagLocalId, present);
-    unawaited(_organizationService?.syncKnown(sharedState));
+    if (Prefs().autoSync) {
+      unawaited(_organizationService?.syncKnown(sharedState));
+    }
   }
 
-  Future<void> syncNow() => _runDiscovery();
+  Future<void> publishBookGroup(Book book) async {
+    final repository = await _ensureOrganizationRepository();
+    await repository.bootstrap();
+    await repository.publishBookGroupByLocalIds(book.id, book.groupId);
+    final fingerprint = canonicalMd5Fingerprint(book.md5);
+    if (Prefs().autoSync) {
+      unawaited(_libraryService?.notifyCatalogMutation(fingerprint));
+    }
+  }
+
+  Future<void> syncNow() => _runDiscovery(manual: true);
   Future<void> onResume() => _runDiscovery();
   Future<void> onConnectivityRegained() => _runDiscovery();
 
   void bestEffortFlush() {
+    if (!Prefs().autoSync) return;
     final coordinator = _coordinator;
     if (coordinator != null) unawaited(coordinator.syncDirtyAnnotations());
     final presentations = _presentationCoordinator;
@@ -366,6 +414,7 @@ class AnnotationSyncRuntime {
 
   Future<void> _syncTarget(String fingerprint,
       {bool localMutation = false}) async {
+    if (!Prefs().autoSync) return;
     final coordinator = await _ensureCoordinator();
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
     try {
@@ -381,6 +430,7 @@ class AnnotationSyncRuntime {
   }
 
   Future<void> _syncPresentation({bool localMutation = false}) async {
+    if (!Prefs().autoSync) return;
     await _ensureCoordinator();
     final coordinator = _presentationCoordinator;
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
@@ -396,7 +446,8 @@ class AnnotationSyncRuntime {
     }
   }
 
-  Future<void> _runDiscovery() {
+  Future<void> _runDiscovery({bool manual = false}) {
+    if (!manual && !Prefs().autoSync) return Future.value();
     final reconfiguring = _reconfiguring;
     return reconfiguring ?? _runGate.run(_runDiscoveryPass);
   }
@@ -426,29 +477,39 @@ class AnnotationSyncRuntime {
         }
       }
       _lastDiscoveredDocumentCount = remote.documentCount;
-      final fingerprints = {
+      final initialFingerprints = {
         ...await _knownFingerprints(),
         ...remote.ids(annotationSyncDomain),
         ...remote.ids(libraryCatalogDomain),
         ...remote.ids(readingStateDomain),
+      };
+      if (_organizationService != null) {
+        await _organizationService!.syncKnown(
+          sharedState,
+          remoteIdsByDomain: remote.idsByDomain,
+        );
+      }
+      await _libraryService?.syncCatalog(initialFingerprints);
+      final fingerprints = {
+        ...initialFingerprints,
+        ...await _knownFingerprints(),
+        ...await sharedState.documentIds(libraryCatalogDomain),
       };
       await Future.wait([
         coordinator.syncDirtyAnnotations(),
         coordinator.pullBooks(fingerprints),
         _presentationCoordinator!.syncDirtyAnnotations(),
         _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
-        if (_libraryService != null) _libraryService!.syncKnown(fingerprints),
+        if (_libraryService != null)
+          _libraryService!.syncReadingState(fingerprints),
         if (_readingActivityService != null)
           _readingActivityService!.syncKnown({
             ...await sharedState.documentIds(readingActivityDomain),
             ...remote.ids(readingActivityDomain),
           }),
-        if (_organizationService != null)
-          _organizationService!.syncKnown(
-            sharedState,
-            remoteIdsByDomain: remote.idsByDomain,
-          ),
       ]);
+      await _syncSharedLibraryAssets();
+      await _syncTranslationCacheBestEffort();
     } catch (error) {
       _lastRunFailed = true;
       AnxLog.warning('Shared sync run failed error=${_safeError(error)}');
@@ -466,6 +527,42 @@ class AnnotationSyncRuntime {
             'durationMs=${DateTime.now().difference(startedAt).inMilliseconds}');
       }
       _emitStatus();
+    }
+  }
+
+  Future<void> _syncSharedLibraryAssets() async {
+    if (SyncClientFactory.currentClient == null) {
+      SyncClientFactory.initializeCurrentClient();
+    }
+    final client = SyncClientFactory.currentClient;
+    if (client == null) return;
+    final service = LibraryAssetSyncService(
+      transport: SyncClientLibraryAssetTransport(client),
+      projection: SqliteLibraryProjection(),
+      isReleased: (fingerprint, digest) async {
+        final receipt = await sharedState.importReceipt(
+            libraryAssetReleaseSource, fingerprint);
+        return receipt?.status == 'released' && receipt?.sharedId == digest;
+      },
+    );
+    for (final id in await sharedState.documentIds(libraryCatalogDomain)) {
+      final bytes =
+          await sharedState.canonicalDocument(libraryCatalogDomain, id);
+      if (bytes == null) continue;
+      await service.syncBook(
+          decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes))));
+    }
+  }
+
+  Future<void> _syncTranslationCacheBestEffort() async {
+    final client = SyncClientFactory.currentClient;
+    if (client == null) return;
+    try {
+      await TranslationCacheSyncService(client: client).sync();
+    } catch (error) {
+      AnxLog.warning(
+          'Translation cache sync failed; shared domains remain safe: '
+          '${error.runtimeType}');
     }
   }
 

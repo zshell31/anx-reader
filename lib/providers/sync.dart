@@ -17,15 +17,27 @@ import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
-import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'sync.g.dart';
+
+class BookAssetAvailability {
+  final bool localVerified;
+  final bool remote;
+  final bool released;
+
+  const BookAssetAvailability({
+    required this.localVerified,
+    required this.remote,
+    required this.released,
+  });
+}
 
 /// Directionless automatic synchronization entry point.
 ///
@@ -71,7 +83,7 @@ class Sync extends _$Sync {
     return true;
   }
 
-  Future<void> syncData(
+  Future<void> synchronize(
     WidgetRef? ref, {
     SyncTrigger trigger = SyncTrigger.auto,
   }) async {
@@ -89,14 +101,6 @@ class Sync extends _$Sync {
     try {
       await client.ping();
       await annotationSyncRuntime.syncNow();
-      await _syncSharedLibraryAssets(client);
-      try {
-        await TranslationCacheSyncService(client: client).sync();
-      } catch (error) {
-        AnxLog.warning(
-            'Translation cache sync failed; shared domains remain safe: '
-            '${error.runtimeType}');
-      }
       ref?.read(bookListProvider.notifier).refresh();
       ref?.read(groupDaoProvider.notifier).refresh();
       ref?.read(syncStatusProvider.notifier).refresh();
@@ -107,18 +111,6 @@ class Sync extends _$Sync {
       AnxLog.severe('Automatic shared-state sync failed: ${error.runtimeType}');
     } finally {
       state = state.copyWith(isSyncing: false);
-    }
-  }
-
-  Future<void> _syncSharedLibraryAssets(SyncClientBase client) async {
-    final service = LibraryAssetSyncService(
-      transport: SyncClientLibraryAssetTransport(client),
-      projection: SqliteLibraryProjection(),
-    );
-    for (final id in await annotationSyncRuntime.sharedState
-        .documentIds(libraryCatalogDomain)) {
-      final document = await _catalog(id);
-      if (document != null) await service.syncBook(document);
     }
   }
 
@@ -153,11 +145,36 @@ class Sync extends _$Sync {
             state = state.copyWith(count: received, total: total));
   }
 
-  Future<List<String>> listRemoteBookFiles() async {
+  Future<BookAssetAvailability> bookAssetAvailability(Book book) async {
+    final fingerprint = book.md5?.toLowerCase();
     final client = _syncClient;
-    if (client == null) return const [];
-    final remote = await client.safeReadDir('/anx/assets/books/md5');
-    return remote.map((file) => file.name).whereType<String>().toList();
+    if (fingerprint == null || client == null) {
+      return const BookAssetAvailability(
+          localVerified: false, remote: false, released: false);
+    }
+    final document = await _catalog(fingerprint);
+    if (document == null) {
+      return const BookAssetAvailability(
+          localVerified: false, remote: false, released: false);
+    }
+    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+        as Map<String, dynamic>;
+    final digest = asset['digest'] as String;
+    final local = io.File(getBasePath(book.filePath));
+    final localVerified = await local.exists() &&
+        (await sha256.bind(local.openRead()).first).toString() == digest;
+    final remote = await SyncClientLibraryAssetTransport(client)
+        .exists(libraryBookAssetSegments(digest));
+    final receipt = await annotationSyncRuntime.sharedState
+        .importReceipt(libraryAssetReleaseSource, fingerprint);
+    return BookAssetAvailability(
+      localVerified: localVerified,
+      remote: remote,
+      released: !localVerified &&
+          remote &&
+          receipt?.status == 'released' &&
+          receipt?.sharedId == digest,
+    );
   }
 
   Future<void> downloadBook(Book book) async {
@@ -170,10 +187,20 @@ class Sync extends _$Sync {
           .bookSyncStatusBookNotFoundRemote);
       return;
     }
-    await LibraryAssetSyncService(
+    final result = await LibraryAssetSyncService(
       transport: SyncClientLibraryAssetTransport(client),
       projection: SqliteLibraryProjection(),
     ).syncBook(document);
+    if (result.downloaded || result.bound) {
+      final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+          as Map<String, dynamic>;
+      await annotationSyncRuntime.sharedState.recordImport(
+        source: libraryAssetReleaseSource,
+        sourceKey: fingerprint,
+        sharedId: asset['digest'] as String,
+        status: 'acquired',
+      );
+    }
     ref.read(syncStatusProvider.notifier).refresh();
   }
 
@@ -183,12 +210,17 @@ class Sync extends _$Sync {
     if (fingerprint == null || client == null) return;
     final document = await _catalog(fingerprint);
     if (document == null) return;
+    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+        as Map<String, dynamic>;
+    final digest = asset['digest'] as String;
     final transport = SyncClientLibraryAssetTransport(client);
-    await LibraryAssetSyncService(
-      transport: transport,
-      projection: SqliteLibraryProjection(),
-    ).syncBook(document);
-    if (await transport.exists(libraryBookAssetSegments(fingerprint))) {
+    if (await transport.exists(libraryBookAssetSegments(digest))) {
+      await annotationSyncRuntime.sharedState.recordImport(
+        source: libraryAssetReleaseSource,
+        sourceKey: fingerprint,
+        sharedId: digest,
+        status: 'released',
+      );
       final local = io.File(getBasePath(book.filePath));
       if (local.existsSync()) await local.delete();
       ref.read(syncStatusProvider.notifier).refresh();

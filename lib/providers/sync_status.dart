@@ -1,11 +1,7 @@
-import 'dart:io';
-
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/sync_status.dart';
 import 'package:anx_reader/providers/sync.dart';
-import 'package:anx_reader/utils/get_path/get_base_path.dart';
-import 'package:anx_reader/utils/log/common.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'sync_status.g.dart';
@@ -13,27 +9,26 @@ part 'sync_status.g.dart';
 @Riverpod(keepAlive: true)
 class SyncStatus extends _$SyncStatus {
   List<Book> allBooksInBookShelf = [];
+
   @override
   Future<SyncStatusModel> build() async {
-    allBooksInBookShelf = await _listAllBooksInBookShelf();
-    final allBooksInBookShelfIds =
-        allBooksInBookShelf.map((e) => e.id).toList();
-    final remoteFiles = await _listRemoteFiles(allBooksInBookShelf);
-    final localFiles = await _listLocalFiles(allBooksInBookShelf);
-
-    final localOnly =
-        localFiles.where((e) => !remoteFiles.contains(e)).toList();
-    final remoteOnly =
-        remoteFiles.where((e) => !localFiles.contains(e)).toList();
-    final both = localFiles.where((e) => remoteFiles.contains(e)).toList();
-    final nonExistent = allBooksInBookShelfIds
-        .where((e) => !localFiles.contains(e) && !remoteFiles.contains(e))
+    allBooksInBookShelf = await bookDao.selectNotDeleteBooks();
+    final entries = await Future.wait(allBooksInBookShelf.map((book) async => (
+          book: book,
+          value:
+              await ref.read(syncProvider.notifier).bookAssetAvailability(book),
+        )));
+    List<int> ids(bool Function(BookAssetAvailability) include) => entries
+        .where((entry) => include(entry.value))
+        .map((entry) => entry.book.id)
         .toList();
     return SyncStatusModel(
-      localOnly: localOnly,
-      remoteOnly: remoteOnly,
-      both: both,
-      nonExistent: nonExistent,
+      localOnly: ids((value) => value.localVerified && !value.remote),
+      remoteOnly: ids(
+          (value) => !value.localVerified && value.remote && !value.released),
+      both: ids((value) => value.localVerified && value.remote),
+      nonExistent: ids((value) => !value.localVerified && !value.remote),
+      released: ids((value) => value.released),
       downloading: const [],
       uploading: const [],
     );
@@ -43,158 +38,51 @@ class SyncStatus extends _$SyncStatus {
     state = AsyncData(await build());
   }
 
-  Future<List<int>> _listRemoteFiles(List<Book> books) async {
-    Future<List<int>> core() async {
-      final remoteFiles =
-          await ref.read(syncProvider.notifier).listRemoteBookFiles();
-      final remoteFilesIds = books
-          .map((e) {
-            final isExist =
-                e.md5 != null && remoteFiles.contains(e.md5!.toLowerCase());
-            return isExist ? e.id : null;
-          })
-          .whereType<int>()
-          .toList();
-      return remoteFilesIds;
-    }
-
-    int count = 0;
-    const maxCount = 2;
-    while (true) {
-      try {
-        return await core();
-      } catch (e) {
-        AnxLog.info(
-            'Webdav: Failed to list remote files: $e try again $count/$maxCount');
-        count++;
-        if (count >= maxCount) {
-          AnxLog.info('Webdav: Failed to list remote files: $e');
-          return [];
-        }
-      }
-    }
-  }
-
-  Future<List<int>> _listLocalFiles(List<Book> books) async {
-    final localFiles = (await getFileDir().list().toList())
-        .map((e) => e.path.split(Platform.pathSeparator).last)
-        .toList();
-
-    final localFilesIds = books
-        .map((e) {
-          final filePath = e.filePath.split('/').last;
-          final isExist = localFiles.contains(filePath);
-          return isExist ? e.id : null;
-        })
-        .whereType<int>()
-        .toList();
-    return localFilesIds;
-  }
-
-  Future<List<Book>> _listAllBooksInBookShelf() async {
-    return await bookDao.selectNotDeleteBooks();
-  }
-
   Future<int?> pathToBookId(String filePath) async {
-    if (filePath.endsWith('.db')) {
-      return null;
+    if (filePath.endsWith('.db')) return null;
+    Book? match() => allBooksInBookShelf
+        .where((book) => filePath.contains(book.filePath))
+        .firstOrNull;
+    var book = match();
+    if (book == null) {
+      allBooksInBookShelf = await bookDao.selectNotDeleteBooks();
+      book = match();
     }
-    try {
-      return allBooksInBookShelf
-          .firstWhere((e) => filePath.contains(e.filePath))
-          .id;
-    } catch (e) {
-      allBooksInBookShelf = await _listAllBooksInBookShelf();
-      return allBooksInBookShelf
-          .firstWhere((e) => filePath.contains(e.filePath))
-          .id;
-    }
+    return book?.id;
   }
 
-  bool isCover(String filePath) {
-    return filePath.contains("/cover/");
-  }
+  bool isCover(String filePath) => filePath.contains('/cover/');
 
-  Future<void> addDownloading(String filePath) async {
-    if (isCover(filePath)) {
-      return;
-    }
+  Future<void> addDownloading(String filePath) =>
+      _updateProgress(filePath, downloading: true, add: true);
+
+  Future<void> addUploading(String filePath) =>
+      _updateProgress(filePath, downloading: false, add: true);
+
+  Future<void> removeDownloading(String filePath) =>
+      _updateProgress(filePath, downloading: true, add: false);
+
+  Future<void> removeUploading(String filePath) =>
+      _updateProgress(filePath, downloading: false, add: false);
+
+  Future<void> _updateProgress(
+    String filePath, {
+    required bool downloading,
+    required bool add,
+  }) async {
+    if (isCover(filePath)) return;
     final bookId = await pathToBookId(filePath);
-    if (bookId == null || state.value == null) {
-      return;
-    }
-    state = AsyncData(
-      SyncStatusModel(
-        localOnly: state.value!.localOnly,
-        remoteOnly: state.value!.remoteOnly,
-        both: state.value!.both,
-        nonExistent: state.value!.nonExistent,
-        downloading: [...state.value!.downloading, bookId],
-        uploading: state.value!.uploading,
-      ),
-    );
-  }
-
-  Future<void> addUploading(String filePath) async {
-    if (isCover(filePath)) {
-      return;
-    }
-    final bookId = await pathToBookId(filePath);
-    if (bookId == null || state.value == null) {
-      return;
-    }
-    state = AsyncData(
-      SyncStatusModel(
-        localOnly: state.value!.localOnly,
-        remoteOnly: state.value!.remoteOnly,
-        both: state.value!.both,
-        nonExistent: state.value!.nonExistent,
-        downloading: state.value!.downloading,
-        uploading: [...state.value!.uploading, bookId],
-      ),
-    );
-  }
-
-  Future<void> removeDownloading(String filePath) async {
-    if (isCover(filePath)) {
-      return;
-    }
-    final bookId = await pathToBookId(filePath);
-    if (bookId == null || state.value == null) {
-      return;
-    }
-    state = AsyncData(
-      SyncStatusModel(
-        localOnly: state.value!.localOnly,
-        remoteOnly: state.value!.remoteOnly,
-        both: [...state.value!.both, bookId],
-        nonExistent: state.value!.nonExistent,
-        downloading:
-            state.value!.downloading.where((e) => e != bookId).toList(),
-        uploading: state.value!.uploading,
-      ),
-    );
-    ref.invalidateSelf();
-  }
-
-  Future<void> removeUploading(String filePath) async {
-    if (isCover(filePath)) {
-      return;
-    }
-    final bookId = await pathToBookId(filePath);
-    if (bookId == null || state.value == null) {
-      return;
-    }
-    state = AsyncData(
-      SyncStatusModel(
-        localOnly: state.value!.localOnly,
-        remoteOnly: state.value!.remoteOnly,
-        both: [...state.value!.both, bookId],
-        nonExistent: state.value!.nonExistent,
-        downloading: state.value!.downloading,
-        uploading: state.value!.uploading.where((e) => e != bookId).toList(),
-      ),
-    );
-    ref.invalidateSelf();
+    final current = state.value;
+    if (bookId == null || current == null) return;
+    List<int> update(List<int> values) => add
+        ? {...values, bookId}.toList()
+        : values.where((id) => id != bookId).toList();
+    state = AsyncData(current.copyWith(
+      downloading:
+          downloading ? update(current.downloading) : current.downloading,
+      uploading: downloading ? current.uploading : update(current.uploading),
+      both: add ? current.both : {...current.both, bookId}.toList(),
+    ));
+    if (!add) ref.invalidateSelf();
   }
 }

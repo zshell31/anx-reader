@@ -4,6 +4,7 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/dao/reading_time.dart';
 import 'package:anx_reader/models/reading_time.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
@@ -58,13 +59,15 @@ class ReadingActivityRepository {
   final ReadingActivityProjection projection;
   final String deviceId;
   final Uuid uuid;
+  final DateTime Function() now;
 
   ReadingActivityRepository({
     required this.sharedState,
     required this.projection,
     required this.deviceId,
     this.uuid = const Uuid(),
-  });
+    DateTime Function()? now,
+  }) : now = now ?? DateTime.now;
 
   Future<String> recordSession({
     required String fingerprint,
@@ -82,6 +85,9 @@ class ReadingActivityRepository {
       'startedAt': startedAt.toUtc().toIso8601String(),
       'durationSeconds': durationSeconds,
       'deviceId': deviceId,
+      'deleted': false,
+      'stamp':
+          DomainStamp(modifiedAt: now().toUtc(), deviceId: deviceId).toJson(),
     };
     final next = mergeReadingActivityDocuments(current, {
       ..._empty(normalized, day),
@@ -96,6 +102,36 @@ class ReadingActivityRepository {
   Future<void> projectCanonical(String id) async {
     final document = await _read(id);
     if (document != null) await _project(document);
+  }
+
+  Future<Set<String>> deleteHistoryForFingerprints(
+      Iterable<String> fingerprints) async {
+    final changed = <String>{};
+    final deletionStamp =
+        DomainStamp(modifiedAt: now().toUtc(), deviceId: deviceId).toJson();
+    for (final fingerprint in fingerprints.map(canonicalMd5Fingerprint)) {
+      final prefix = '$fingerprint@';
+      for (final id in await sharedState.documentIds(readingActivityDomain)) {
+        if (!id.startsWith(prefix)) continue;
+        final current = await _read(id);
+        if (current == null) continue;
+        final events = (current['events'] as List)
+            .cast<Map<String, dynamic>>()
+            .map((event) => {
+                  ...event,
+                  'deleted': true,
+                  'stamp': deletionStamp,
+                })
+            .toList();
+        final next =
+            decodeReadingActivityDocument({...current, 'events': events});
+        await sharedState.putCanonicalDocument(
+            readingActivityDomain, id, encodeDomainDocument(next));
+        await _project(next);
+        changed.add(id);
+      }
+    }
+    return changed;
   }
 
   Future<int> bootstrap() async {
@@ -145,6 +181,7 @@ class ReadingActivityRepository {
   Future<void> _project(Map<String, dynamic> document) async {
     final total = (document['events'] as List)
         .cast<Map<String, dynamic>>()
+        .where((event) => event['deleted'] != true)
         .fold<int>(0, (sum, event) => sum + event['durationSeconds'] as int);
     await projection.replaceAggregate(
         document['fingerprint'] as String, document['day'] as String, total);

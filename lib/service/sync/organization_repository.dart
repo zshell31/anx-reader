@@ -253,6 +253,34 @@ class OrganizationRepository {
         }));
   }
 
+  Future<void> publishBookGroupByLocalIds(int bookId, int groupLocalId) async {
+    final db = await DBHelper().database;
+    final books = await db.query('tb_books',
+        columns: ['file_md5'], where: 'id = ?', whereArgs: [bookId], limit: 1);
+    if (books.isEmpty) return;
+    final fingerprint = canonicalMd5Fingerprint(books.single['file_md5']);
+    String? groupId;
+    if (groupLocalId != 0) {
+      final mappings = await db.query('sync_group_ids',
+          columns: ['shared_id'],
+          where: 'local_id = ?',
+          whereArgs: [groupLocalId],
+          limit: 1);
+      if (mappings.isEmpty) return;
+      groupId = mappings.single['shared_id'] as String;
+    }
+    final bytes =
+        await sharedState.canonicalDocument(libraryCatalogDomain, fingerprint);
+    if (bytes == null) return;
+    final catalog =
+        decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes)));
+    final current = catalog['groupId'] as Map<String, dynamic>?;
+    if (current?['value'] == groupId) return;
+    catalog['groupId'] = stampedValue(groupId, _stamp);
+    await sharedState.putCanonicalDocument(libraryCatalogDomain, fingerprint,
+        encodeDomainDocument(decodeLibraryCatalogDocument(catalog)));
+  }
+
   Future<void> _projectGroup(Map<String, dynamic> doc) async {
     final db = await DBHelper().database;
     final id = doc['id'] as String;

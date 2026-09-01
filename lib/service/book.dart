@@ -392,7 +392,7 @@ void _showImportDialog(
                       });
                       ref
                           .read(syncProvider.notifier)
-                          .syncData(ref, trigger: SyncTrigger.auto);
+                          .synchronize(ref, trigger: SyncTrigger.auto);
                     },
                     child: Text(finished
                         ? L10n.of(context).commonOk
@@ -485,9 +485,10 @@ Future<void> pushToReadingPage(
   });
 }
 
-void updateBookRating(Book book, double rating) {
+Future<void> updateBookRating(Book book, double rating) async {
   book.rating = rating;
-  bookDao.updateBook(book);
+  await bookDao.updateBook(book);
+  if (book.md5 != null) await annotationSyncRuntime.publishBook(book);
 }
 
 Future<void> resetBookCover(Book book) async {

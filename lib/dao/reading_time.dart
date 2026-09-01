@@ -1,9 +1,8 @@
 import 'package:anx_reader/dao/base_dao.dart';
 import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/reading_time.dart';
-import 'package:anx_reader/providers/sync.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 
 class ReadingTimeDao extends BaseDao {
   ReadingTimeDao();
@@ -75,6 +74,12 @@ class ReadingTimeDao extends BaseDao {
           where: 'book_id = ? AND DATE(date) = DATE(?)',
           whereArgs: [bookId, day],
           orderBy: 'id');
+      if (readingTime == 0) {
+        await txn.delete(table,
+            where: 'book_id = ? AND DATE(date) = DATE(?)',
+            whereArgs: [bookId, day]);
+        return;
+      }
       if (existing.isEmpty) {
         await txn.insert(table, {
           'book_id': bookId,
@@ -401,14 +406,14 @@ class ReadingTimeDao extends BaseDao {
   Future<void> deleteReadingTimeByBookId(List<int> bookIds) async {
     if (bookIds.isEmpty) return;
 
+    await annotationSyncRuntime.deleteReadingHistory(bookIds);
+
     final placeholders = List.filled(bookIds.length, '?').join(',');
     await delete(
       table,
       where: 'book_id IN ($placeholders)',
       whereArgs: bookIds,
     );
-
-    Sync().syncData(null, trigger: SyncTrigger.auto);
   }
 
   Future<List<Map<String, dynamic>>> _aggregateByBook({

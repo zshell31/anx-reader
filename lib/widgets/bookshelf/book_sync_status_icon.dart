@@ -27,6 +27,8 @@ class BookSyncStatusIcon extends StatelessWidget {
         return Colors.blue;
       case BookSyncStatusEnum.uploading:
         return Colors.blue;
+      case BookSyncStatusEnum.released:
+        return Colors.blueGrey;
       case BookSyncStatusEnum.checking:
         return Colors.grey;
     }
@@ -114,6 +116,11 @@ class BookSyncStatusIcon extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      BookSyncStatusEnum.released => Icon(
+          Icons.cloud_done_outlined,
+          color: color,
+          size: iconSize,
         ),
       BookSyncStatusEnum.checking => CircularProgressIndicator.adaptive(
           strokeWidth: 2,

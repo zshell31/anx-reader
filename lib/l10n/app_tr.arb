@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Yalnızca WiFi bağlıyken senkronize et",
   "webdavSyncAborted": "Senkronizasyon iptal edildi",
   "webdavSyncAbortedContent": "WebDAV'dan veri alınamadı, uzak veri boş. Lütfen aşağıdakileri kontrol edin: \n1. Ağ bağlantısı \n2. Diğer cihazlarda geçerli okuma verilerinin WebDAV'a yüklendiğinden emin olun\n\nArdından, lütfen verileri WebDAV'a yüklemeyi deneyin",
-  "webdavSyncDirection": "WebDAV verileri diğer cihazlar tarafından değiştirilmiş olabilir, lütfen verilerin nasıl işleneceğini seçin",
   "settingsSync": "Senkronizasyon",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "WebDAV'ı Etkinleştir",

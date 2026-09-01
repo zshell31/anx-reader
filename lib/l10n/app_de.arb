@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Nur synchronisieren, wenn WLAN verbunden ist",
   "webdavSyncAborted": "Synchronisierung abgebrochen",
   "webdavSyncAbortedContent": "Daten konnten nicht von WebDAV abgerufen werden, Remotedaten sind leer. Bitte überprüfen Sie Folgendes: \n1. Netzwerkverbindung \n2. Stellen Sie sicher, dass gültige Lesedaten auf anderen Geräten zu WebDAV hochgeladen wurden\nAls Nächstes versuchen Sie bitte, Daten zu WebDAV hochzuladen",
-  "webdavSyncDirection": "WebDAV-Daten können von anderen Geräten geändert worden sein. Bitte wählen Sie, wie die Daten behandelt werden sollen",
   "settingsSync": "Synchronisieren",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "WebDAV aktivieren",

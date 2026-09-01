@@ -34,4 +34,4 @@ Future<bool> testEnableWebdav() async {
 }
 
 Future<void> syncNow(WidgetRef ref) =>
-    Sync().syncData(ref, trigger: SyncTrigger.manual);
+    Sync().synchronize(ref, trigger: SyncTrigger.manual);

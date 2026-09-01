@@ -46,6 +46,10 @@ class SyncStatusBottomSheet extends ConsumerWidget {
               data: (data) => data.nonExistent.length,
             ) ??
         0;
+    final int releasedBooks = ref.watch(syncStatusProvider).whenOrNull(
+              data: (data) => data.released.length,
+            ) ??
+        0;
     return Container(
       padding: const EdgeInsets.all(16.0),
       child: SingleChildScrollView(
@@ -55,9 +59,9 @@ class SyncStatusBottomSheet extends ConsumerWidget {
             _buildSyncingIndicator(syncState, theme, l10n),
             const SizedBox(height: 10),
             _buildBookDistributionChart(localOnlyBooks, remoteOnlyBooks,
-                bothBooks, nonExistentBooks, theme),
+                bothBooks, nonExistentBooks, releasedBooks, theme),
             _buildBookStats(localOnlyBooks, remoteOnlyBooks, bothBooks,
-                nonExistentBooks, theme, l10n),
+                nonExistentBooks, releasedBooks, theme, l10n),
             const SizedBox(height: 10),
             _buildNonExistentTip(theme, l10n),
             const SizedBox(height: 30),
@@ -135,6 +139,7 @@ class SyncStatusBottomSheet extends ConsumerWidget {
       BookSyncStatusEnum.remoteOnly,
       BookSyncStatusEnum.both,
       BookSyncStatusEnum.nonExistent,
+      BookSyncStatusEnum.released,
       if (showUploading) BookSyncStatusEnum.uploading,
       if (showChecking) BookSyncStatusEnum.checking,
     ];
@@ -151,9 +156,10 @@ class SyncStatusBottomSheet extends ConsumerWidget {
     int remoteOnly,
     int both,
     int nonExistent,
+    int released,
     ThemeData theme,
   ) {
-    final total = localOnly + remoteOnly + both + nonExistent;
+    final total = localOnly + remoteOnly + both + nonExistent + released;
 
     return LinearProportionBar(segments: [
       SegmentData(
@@ -176,6 +182,11 @@ class SyncStatusBottomSheet extends ConsumerWidget {
         color: _getBookDistributionColors()[3],
         showLabel: true,
       ),
+      SegmentData(
+        proportion: total > 0 ? released / total : 0,
+        color: _getBookDistributionColors()[4],
+        showLabel: true,
+      ),
     ]);
   }
 
@@ -184,6 +195,7 @@ class SyncStatusBottomSheet extends ConsumerWidget {
     int remoteOnly,
     int both,
     int nonExistent,
+    int released,
     ThemeData theme,
     L10n l10n,
   ) {
@@ -213,6 +225,12 @@ class SyncStatusBottomSheet extends ConsumerWidget {
             l10n.bookSyncStatusNonExistentBooks,
             l10n.bookSyncStatusBooksCount(nonExistent),
             BookSyncStatusEnum.nonExistent,
+            theme),
+        const SizedBox(height: 5),
+        _buildStatRow(
+            l10n.bookSyncStatusReleasedBooks,
+            l10n.bookSyncStatusBooksCount(released),
+            BookSyncStatusEnum.released,
             theme),
       ],
     );
@@ -279,7 +297,7 @@ class SyncStatusBottomSheet extends ConsumerWidget {
                   } else {
                     ref
                         .read(syncProvider.notifier)
-                        .syncData(ref, trigger: SyncTrigger.manual);
+                        .synchronize(ref, trigger: SyncTrigger.manual);
                   }
                 },
               ),

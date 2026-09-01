@@ -149,4 +149,25 @@ void main() {
     await repository.projectCanonical(id);
     expect(projection.aggregates[id], 30);
   });
+
+  test('history deletion tombstones events and defeats a stale live replica',
+      () async {
+    final startedAt = DateTime.parse('2025-07-08T10:00:00Z');
+    await repository.recordSession(
+      fingerprint: fingerprint,
+      startedAt: startedAt,
+      durationSeconds: 40,
+      eventId: eventA,
+    );
+    final id = readingActivityDocumentId(fingerprint, '2025-07-08');
+    final stale = decodeReadingActivityDocument(jsonDecode(utf8
+        .decode((await store.canonicalDocument(readingActivityDomain, id))!)));
+    expect(await repository.deleteHistoryForFingerprints([fingerprint]), {id});
+    final deleted = decodeReadingActivityDocument(jsonDecode(utf8
+        .decode((await store.canonicalDocument(readingActivityDomain, id))!)));
+    final merged = mergeReadingActivityDocuments(deleted, stale);
+    expect((merged['events'] as List).single['deleted'], isTrue);
+    expect(projection.aggregates[id], 0);
+    expect(await store.outboxEntry(readingActivityDomain, id), isNotNull);
+  });
 }

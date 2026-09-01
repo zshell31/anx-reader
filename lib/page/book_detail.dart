@@ -13,6 +13,7 @@ import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/tags.dart';
 import 'package:anx_reader/service/book.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/utils/date/convert_seconds.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/utils/log/common.dart';
@@ -205,12 +206,13 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                       .writeAsBytes(await image.readAsBytes());
                   widget.book.coverPath = newPath;
 
-                  setState(() {
-                    widget.book.coverPath = newPath;
-                    bookDao.updateBook(widget.book);
-                    Sync().syncData(ref, trigger: SyncTrigger.auto);
-                    ref.read(bookListProvider.notifier).refresh();
-                  });
+                  await bookDao.updateBook(widget.book);
+                  if (widget.book.md5 != null) {
+                    await annotationSyncRuntime.publishBook(widget.book);
+                  }
+                  setState(() {});
+                  Sync().synchronize(ref, trigger: SyncTrigger.auto);
+                  ref.read(bookListProvider.notifier).refresh();
                 },
                 child: Container(
                   decoration: BoxDecoration(
@@ -249,11 +251,9 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                   Icons.star,
                   color: Colors.amber,
                 ),
-                onRatingUpdate: (rating) {
-                  setState(() {
-                    this.rating = rating;
-                    updateBookRating(widget.book, rating);
-                  });
+                onRatingUpdate: (rating) async {
+                  setState(() => this.rating = rating);
+                  await updateBookRating(widget.book, rating);
                 },
               ),
             ),
@@ -329,13 +329,14 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                       Text(L10n.of(context).bookDetailSave),
                     ],
                   ),
-                  onPressed: () {
-                    setState(() {
-                      isEditing = false;
-                      bookDao.updateBook(widget.book);
-                      Sync().syncData(ref, trigger: SyncTrigger.manual);
-                      ref.read(bookListProvider.notifier).refresh();
-                    });
+                  onPressed: () async {
+                    await bookDao.updateBook(widget.book);
+                    if (widget.book.md5 != null) {
+                      await annotationSyncRuntime.publishBook(widget.book);
+                    }
+                    setState(() => isEditing = false);
+                    Sync().synchronize(ref, trigger: SyncTrigger.manual);
+                    ref.read(bookListProvider.notifier).refresh();
                   },
                 )
               : OutlinedButton(

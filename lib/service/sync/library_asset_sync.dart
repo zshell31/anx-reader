@@ -1,18 +1,27 @@
 import 'dart:io';
 
-import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:crypto/crypto.dart';
 
-List<String> libraryBookAssetSegments(String fingerprint) => [
+const libraryAssetReleaseSource = 'library-asset-release-v1';
+
+List<String> libraryBookAssetSegments(String digest) => [
       'anx',
       'assets',
       'books',
-      'md5',
-      canonicalMd5Fingerprint(fingerprint),
+      'sha256',
+      _canonicalSha256(digest),
+    ];
+
+List<String> libraryCoverAssetSegments(String digest) => [
+      'anx',
+      'assets',
+      'covers',
+      'sha256',
+      _canonicalSha256(digest),
     ];
 
 abstract interface class LibraryAssetTransport {
@@ -46,12 +55,15 @@ class LibraryAssetSyncService {
   final LibraryAssetTransport transport;
   final LibraryProjection projection;
   final String Function(String relativePath) resolveLocalPath;
+  final Future<bool> Function(String fingerprint, String digest) isReleased;
 
   LibraryAssetSyncService({
     required this.transport,
     required this.projection,
     String Function(String relativePath)? resolveLocalPath,
-  }) : resolveLocalPath = resolveLocalPath ?? getBasePath;
+    Future<bool> Function(String fingerprint, String digest)? isReleased,
+  })  : resolveLocalPath = resolveLocalPath ?? getBasePath,
+        isReleased = isReleased ?? ((_, __) async => false);
 
   Future<LibraryAssetSyncResult> syncBook(
       Map<String, dynamic> catalogDocument) async {
@@ -60,35 +72,49 @@ class LibraryAssetSyncService {
     if (membership['value'] != true) {
       return const LibraryAssetSyncResult();
     }
+    final cover = await _syncCover(document);
+    final book = await _syncBookAsset(document);
+    return cover.combine(book);
+  }
+
+  Future<LibraryAssetSyncResult> _syncBookAsset(
+      Map<String, dynamic> document) async {
     final fingerprint = document['fingerprint'] as String;
-    final asset = document['bookAsset'] as Map<String, dynamic>;
+    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+        as Map<String, dynamic>;
+    final digest = _canonicalSha256(asset['digest']);
     final extension = asset['extension'] as String;
-    final remotePath = libraryBookAssetSegments(fingerprint);
-    final relativePath = 'file/$fingerprint$extension';
+    final remotePath = libraryBookAssetSegments(digest);
+    final boundRelativePath = await projection.localBookAssetPath(fingerprint);
+    final relativePath = boundRelativePath ?? 'file/$digest$extension';
     final localPath = resolveLocalPath(relativePath);
     final local = File(localPath);
     final localValid =
-        local.existsSync() && await _fingerprint(localPath) == fingerprint;
+        local.existsSync() && await _contentDigest(localPath) == digest;
     final remoteExists = await transport.exists(remotePath);
 
     if (localValid && !remoteExists) {
       await transport.upload(localPath, remotePath);
       return const LibraryAssetSyncResult(uploaded: true);
     }
-    if (!localValid && remoteExists) {
-      await local.parent.create(recursive: true);
-      final partialPath = '$localPath.part';
+    if (!localValid && remoteExists && !await isReleased(fingerprint, digest)) {
+      final downloadRelativePath = 'file/$digest$extension';
+      final downloadPath = resolveLocalPath(downloadRelativePath);
+      final downloadFile = File(downloadPath);
+      await downloadFile.parent.create(recursive: true);
+      final partialPath = '$downloadPath.part';
       final partial = File(partialPath);
       if (partial.existsSync()) await partial.delete();
       try {
         await transport.download(remotePath, partialPath);
-        final actual = await _fingerprint(partialPath);
-        if (actual != fingerprint) {
-          throw LibraryAssetFingerprintMismatch(fingerprint, actual);
+        final actual = await _contentDigest(partialPath);
+        if (actual != digest) {
+          throw LibraryAssetFingerprintMismatch(digest, actual);
         }
-        if (local.existsSync()) await local.delete();
-        await partial.rename(localPath);
-        await projection.bindBookAsset(fingerprint, relativePath, extension);
+        if (downloadFile.existsSync()) await downloadFile.delete();
+        await partial.rename(downloadPath);
+        await projection.bindBookAsset(
+            fingerprint, downloadRelativePath, extension);
         return const LibraryAssetSyncResult(downloaded: true, bound: true);
       } finally {
         if (partial.existsSync()) await partial.delete();
@@ -101,8 +127,65 @@ class LibraryAssetSyncService {
     return const LibraryAssetSyncResult(missing: true);
   }
 
-  Future<String> _fingerprint(String path) async =>
-      (await md5.bind(File(path).openRead()).first).toString();
+  Future<LibraryAssetSyncResult> _syncCover(
+      Map<String, dynamic> document) async {
+    final stamped = document['coverAsset'];
+    if (stamped == null) return const LibraryAssetSyncResult();
+    final fingerprint = document['fingerprint'] as String;
+    final asset =
+        (stamped as Map<String, dynamic>)['value'] as Map<String, dynamic>;
+    final digest = _canonicalSha256(asset['digest']);
+    final extension = asset['extension'] as String;
+    final remotePath = libraryCoverAssetSegments(digest);
+    final boundRelativePath = await projection.localCoverAssetPath(fingerprint);
+    final relativePath = boundRelativePath ?? 'cover/$digest$extension';
+    final localPath = resolveLocalPath(relativePath);
+    final local = File(localPath);
+    final localValid =
+        local.existsSync() && await _contentDigest(localPath) == digest;
+    final remoteExists = await transport.exists(remotePath);
+    if (localValid && !remoteExists) {
+      await transport.upload(localPath, remotePath);
+      return const LibraryAssetSyncResult(uploaded: true);
+    }
+    if (!localValid && remoteExists) {
+      final targetRelativePath = 'cover/$digest$extension';
+      final targetPath = resolveLocalPath(targetRelativePath);
+      final target = File(targetPath);
+      await target.parent.create(recursive: true);
+      final partial = File('$targetPath.part');
+      if (partial.existsSync()) await partial.delete();
+      try {
+        await transport.download(remotePath, partial.path);
+        final actual = await _contentDigest(partial.path);
+        if (actual != digest) {
+          throw LibraryAssetFingerprintMismatch(digest, actual);
+        }
+        if (target.existsSync()) await target.delete();
+        await partial.rename(targetPath);
+        await projection.bindCoverAsset(
+            fingerprint, targetRelativePath, extension);
+        return const LibraryAssetSyncResult(downloaded: true, bound: true);
+      } finally {
+        if (partial.existsSync()) await partial.delete();
+      }
+    }
+    if (localValid) {
+      await projection.bindCoverAsset(fingerprint, relativePath, extension);
+      return const LibraryAssetSyncResult(bound: true);
+    }
+    return const LibraryAssetSyncResult(missing: true);
+  }
+
+  Future<String> _contentDigest(String path) async =>
+      (await sha256.bind(File(path).openRead()).first).toString();
+}
+
+String _canonicalSha256(Object? value) {
+  if (value is! String || !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(value)) {
+    throw const FormatException('invalid SHA-256 digest');
+  }
+  return value.toLowerCase();
 }
 
 class LibraryAssetFingerprintMismatch implements Exception {
@@ -126,4 +209,12 @@ class LibraryAssetSyncResult {
     this.bound = false,
     this.missing = false,
   });
+
+  LibraryAssetSyncResult combine(LibraryAssetSyncResult other) =>
+      LibraryAssetSyncResult(
+        uploaded: uploaded || other.uploaded,
+        downloaded: downloaded || other.downloaded,
+        bound: bound || other.bound,
+        missing: missing || other.missing,
+      );
 }

@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "المزامنة فقط عند الاتصال بشبكة WiFi",
   "webdavSyncAborted": "تم إحباط المزامنة",
   "webdavSyncAbortedContent": "فشل في الحصول على البيانات من WebDAV ، البيانات عن بُعد فارغة. يرجى التحقق مما يلي: \n1. اتصال الشبكة \n2. تأكد من تحميل بيانات القراءة الصالحة إلى WebDAV على الأجهزة الأخرى\n\nبعد ذلك ، يرجى محاولة تحميل البيانات إلى WebDAV",
-  "webdavSyncDirection": "قد يتم تعديل بيانات WebDAV بواسطة أجهزة أخرى ، يرجى اختيار كيفية التعامل مع البيانات",
   "settingsSync": "المزامنة",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "تمكين WebDAV",

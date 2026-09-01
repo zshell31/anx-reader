@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "僅在連線至 Wi-Fi 時同步",
   "webdavSyncAborted": "同步已中止",
   "webdavSyncAbortedContent": "無法從 WebDAV 取得資料，遠端資料為空。請檢查： \n1. 網路連線 \n2. 確認已在其他裝置上將有效的閱讀資料上傳至 WebDAV\n\n接下來，請嘗試將資料上傳至 WebDAV。",
-  "webdavSyncDirection": "WebDAV 端的資料可能已被其他裝置修改，請選擇如何處理資料",
   "settingsSync": "同步",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "啟用 WebDAV",

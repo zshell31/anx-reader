@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Sincronizza solo quando il WiFi è connesso",
   "webdavSyncAborted": "Sincronizzazione interrotta",
   "webdavSyncAbortedContent": "Impossibile ottenere dati da WebDAV, i dati remoti sono vuoti. Per favore controlla quanto segue: \n1. Connessione di rete \n2. Assicurati che dati di lettura validi siano stati caricati su WebDAV su altri dispositivi\n\nSuccessivamente, per favore prova a caricare dati su WebDAV",
-  "webdavSyncDirection": "I dati WebDAV potrebbero essere stati modificati da altri dispositivi, per favore scegli come gestire i dati",
   "settingsSync": "Sincronizza",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "Abilita WebDAV",

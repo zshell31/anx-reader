@@ -110,7 +110,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     InitializationCheck.check();
     if (Prefs().webdavStatus) {
       await Sync().init();
-      await Sync().syncData(ref, trigger: SyncTrigger.auto);
+      await Sync().synchronize(ref, trigger: SyncTrigger.auto);
     }
     loadDefaultFont();
 

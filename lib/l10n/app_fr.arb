@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Synchroniser uniquement quand le WiFi est connecté",
   "webdavSyncAborted": "Synchronisation abandonnée",
   "webdavSyncAbortedContent": "Impossible d'obtenir les données de WebDAV, les données distantes sont vides. Veuillez vérifier les points suivants : \n1. Connexion réseau \n2. S'assurer que des données de lecture valides ont été téléchargées vers WebDAV sur d'autres appareils\n\nEnsuite, veuillez essayer de télécharger les données vers WebDAV",
-  "webdavSyncDirection": "Les données WebDAV peuvent avoir été modifiées par d'autres appareils, veuillez choisir comment traiter les données",
   "settingsSync": "Synchronisation",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "Activer WebDAV",

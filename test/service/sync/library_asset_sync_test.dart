@@ -34,11 +34,25 @@ class MemoryAssets implements LibraryAssetTransport {
 
 class BindingProjection implements LibraryProjection {
   String? boundPath;
+  String? boundCoverPath;
 
   @override
   Future<void> bindBookAsset(
       String fingerprint, String relativePath, String extension) async {
     boundPath = relativePath;
+  }
+
+  @override
+  Future<String?> localBookAssetPath(String fingerprint) async => boundPath;
+
+  @override
+  Future<String?> localCoverAssetPath(String fingerprint) async =>
+      boundCoverPath;
+
+  @override
+  Future<void> bindCoverAsset(
+      String fingerprint, String relativePath, String extension) async {
+    boundCoverPath = relativePath;
   }
 
   @override
@@ -51,8 +65,10 @@ class BindingProjection implements LibraryProjection {
   Future<void> projectReadingState(Map<String, dynamic> document) async {}
 }
 
-Map<String, dynamic> catalog(List<int> bytes, {bool present = true}) {
-  final fingerprint = md5.convert(bytes).toString();
+Map<String, dynamic> catalog(List<int> bytes,
+    {bool present = true, List<int>? coverBytes}) {
+  final fingerprint = md5.convert([42, ...bytes]).toString();
+  final digest = sha256.convert(bytes).toString();
   final stamp =
       DomainStamp(modifiedAt: DateTime.utc(2025), deviceId: 'device-a');
   return decodeLibraryCatalogDocument({
@@ -65,11 +81,17 @@ Map<String, dynamic> catalog(List<int> bytes, {bool present = true}) {
       'description': stampedValue(null, stamp),
       'rating': stampedValue(0.0, stamp),
     },
-    'bookAsset': {
-      'algorithm': 'md5',
-      'digest': fingerprint,
+    'bookAsset': stampedValue({
+      'algorithm': 'sha256',
+      'digest': digest,
       'extension': '.epub',
-    },
+    }, stamp),
+    if (coverBytes != null)
+      'coverAsset': stampedValue({
+        'algorithm': 'sha256',
+        'digest': sha256.convert(coverBytes).toString(),
+        'extension': '.png',
+      }, stamp),
   });
 }
 
@@ -95,10 +117,10 @@ void main() {
   test('uploads a valid local immutable asset once', () async {
     final bytes = <int>[1, 2, 3, 4];
     final document = catalog(bytes);
-    final fingerprint = document['fingerprint'] as String;
-    final file = File('${directory.path}/file/$fingerprint.epub');
+    final file = File('${directory.path}/randomized-name.epub');
     await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes);
+    projection.boundPath = 'randomized-name.epub';
     expect((await service.syncBook(document)).uploaded, isTrue);
     expect((await service.syncBook(document)).uploaded, isFalse);
     expect(transport.uploads, 1);
@@ -107,18 +129,18 @@ void main() {
   test('downloads, verifies, and binds a remote-only asset', () async {
     final bytes = <int>[5, 6, 7, 8];
     final document = catalog(bytes);
-    final fingerprint = document['fingerprint'] as String;
-    transport.objects[libraryBookAssetSegments(fingerprint).join('/')] = bytes;
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
     final result = await service.syncBook(document);
     expect(result.downloaded, isTrue);
     expect(result.bound, isTrue);
-    expect(projection.boundPath, 'file/$fingerprint.epub');
+    expect(projection.boundPath, 'file/$digest.epub');
   });
 
   test('rejects corrupt download before binding', () async {
     final document = catalog(<int>[9, 10]);
-    final fingerprint = document['fingerprint'] as String;
-    transport.objects[libraryBookAssetSegments(fingerprint).join('/')] = [99];
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = [99];
     await expectLater(service.syncBook(document),
         throwsA(isA<LibraryAssetFingerprintMismatch>()));
     expect(projection.boundPath, isNull);
@@ -127,11 +149,55 @@ void main() {
   test('tombstone never deletes or downloads immutable bytes', () async {
     final bytes = <int>[11, 12];
     final document = catalog(bytes, present: false);
-    final fingerprint = document['fingerprint'] as String;
-    transport.objects[libraryBookAssetSegments(fingerprint).join('/')] = bytes;
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
     await service.syncBook(document);
     expect(transport.objects,
-        contains(libraryBookAssetSegments(fingerprint).join('/')));
+        contains(libraryBookAssetSegments(digest).join('/')));
     expect(transport.downloads, 0);
+  });
+
+  test('semantic TXT fingerprint is independent from converted asset bytes',
+      () async {
+    final convertedEpub = <int>[80, 75, 3, 4, 99];
+    final document = catalog(convertedEpub);
+    final fingerprint = document['fingerprint'] as String;
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    expect(fingerprint, isNot(digest));
+    expect(digest, sha256.convert(convertedEpub).toString());
+  });
+
+  test('released local book is not automatically downloaded', () async {
+    final bytes = <int>[13, 14];
+    final document = catalog(bytes);
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
+    service = LibraryAssetSyncService(
+      transport: transport,
+      projection: projection,
+      resolveLocalPath: (relative) => '${directory.path}/$relative',
+      isReleased: (_, __) async => true,
+    );
+    final result = await service.syncBook(document);
+    expect(result.downloaded, isFalse);
+    expect(result.missing, isTrue);
+    expect(transport.downloads, 0);
+  });
+
+  test('custom cover uses an independent immutable SHA-256 asset', () async {
+    final bookBytes = <int>[15, 16];
+    final coverBytes = <int>[137, 80, 78, 71];
+    final document = catalog(bookBytes, coverBytes: coverBytes);
+    final bookDigest =
+        ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    final coverDigest =
+        ((document['coverAsset'] as Map)['value'] as Map)['digest'];
+    transport.objects[libraryBookAssetSegments(bookDigest).join('/')] =
+        bookBytes;
+    transport.objects[libraryCoverAssetSegments(coverDigest).join('/')] =
+        coverBytes;
+    final result = await service.syncBook(document);
+    expect(result.downloaded, isTrue);
+    expect(projection.boundCoverPath, 'cover/$coverDigest.png');
   });
 }

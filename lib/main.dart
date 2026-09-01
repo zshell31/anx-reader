@@ -191,7 +191,7 @@ class _MyAppState extends ConsumerState<MyApp>
       if (Prefs().webdavStatus) {
         ref
             .read(syncProvider.notifier)
-            .syncData(ref, trigger: SyncTrigger.auto);
+            .synchronize(ref, trigger: SyncTrigger.auto);
       }
     } else if (state == AppLifecycleState.resumed) {
       unawaited(annotationSyncRuntime.onResume());

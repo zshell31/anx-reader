@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Only sync when WiFi is connected",
   "webdavSyncAborted": "Sync aborted",
   "webdavSyncAbortedContent": "Failed to get data from WebDAV, remote data is empty. Please check the following: \n1. Network connection \n2. Ensure that valid reading data has been uploaded to WebDAV on other devices\n\nNext, please try to upload data to WebDAV",
-  "webdavSyncDirection": "WebDAV data may be modified by other devices, please choose how to handle the data",
   "settingsSync": "Sync",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "Activează WebDAV",

@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "Синхр. только по WiFi",
   "webdavSyncAborted": "Синхронизация прервана",
   "webdavSyncAbortedContent": "Не удалось получить данные с WebDAV, удалённые данные пусты. Пожалуйста, проверьте:\n1. Подключение к сети\n2. Убедитесь, что на других устройствах загружены корректные данные для чтения\n\nПопробуйте загрузить данные на WebDAV снова.",
-  "webdavSyncDirection": "Данные WebDAV могли быть изменены другими устройствами, выберите способ обработки данных",
   "settingsSync": "Синхронизация",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "Разрешить WebDAV",

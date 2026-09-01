@@ -52,6 +52,22 @@ class LibrarySyncService {
     ]);
   }
 
+  Future<void> syncCatalog(Iterable<String> fingerprints) async {
+    final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
+    await Future.wait([
+      catalog.syncDirtyAnnotations(),
+      catalog.pullBooks(ids),
+    ]);
+  }
+
+  Future<void> syncReadingState(Iterable<String> fingerprints) async {
+    final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
+    await Future.wait([
+      readingState.syncDirtyAnnotations(),
+      readingState.pullBooks(ids),
+    ]);
+  }
+
   Future<void> notifyCatalogMutation(String fingerprint) =>
       catalog.notifyDirty(fingerprint);
 

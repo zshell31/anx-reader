@@ -157,7 +157,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
       annotationSyncRuntime.closeBook(
           annotationFingerprint, _annotationRefresh);
     }
-    Sync().syncData(ref, trigger: SyncTrigger.auto);
+    Sync().synchronize(ref, trigger: SyncTrigger.auto);
     _readTimeWatch.stop();
     _awakeTimer?.cancel();
     WakelockPlus.disable();
@@ -305,7 +305,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.resumed:
@@ -328,13 +328,22 @@ class ReadingPageState extends ConsumerState<ReadingPage>
           final elapsedSeconds = _readTimeWatch.elapsed.inSeconds;
           if (elapsedSeconds > 5) {
             epubPlayerKey.currentState?.saveReadingProgress();
-            readingTimeDao.insertReadingTime(
-              ReadingTime(
-                bookId: _book.id,
-                readingTime: elapsedSeconds,
-              ),
-              startedAt: _sessionStart,
-            );
+            final sessionStart = _sessionStart;
+            if (sessionStart != null && _book.md5 != null) {
+              await annotationSyncRuntime.recordReadingActivity(
+                book: _book,
+                startedAt: sessionStart,
+                durationSeconds: elapsedSeconds,
+              );
+            } else {
+              await readingTimeDao.insertReadingTime(
+                ReadingTime(
+                  bookId: _book.id,
+                  readingTime: elapsedSeconds,
+                ),
+                startedAt: sessionStart,
+              );
+            }
           }
           _readTimeWatch.reset();
           _sessionStart = null;

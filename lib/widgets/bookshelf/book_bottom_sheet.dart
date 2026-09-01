@@ -232,11 +232,21 @@ class BookBottomSheet extends ConsumerWidget {
         String? newMd5 = await MD5Service.calculateFileMd5(newDestPath);
 
         // Update DB
-        await bookDao.updateBook(book.copyWith(
+        final replacement = book.copyWith(
           filePath: newRelativePath,
           md5: newMd5,
           updateTime: DateTime.now(),
-        ));
+        );
+        if (book.md5 != null && book.md5 != newMd5) {
+          await annotationSyncRuntime.publishBook(book.copyWith(
+            isDeleted: true,
+            updateTime: DateTime.now(),
+          ));
+        }
+        await bookDao.updateBook(replacement);
+        if (replacement.md5 != null) {
+          await annotationSyncRuntime.publishBook(replacement);
+        }
 
         // Delete old file if path is different
         if (book.fileFullPath != newDestPath) {
@@ -257,7 +267,7 @@ class BookBottomSheet extends ConsumerWidget {
         if (context.mounted) Navigator.pop(context);
 
         if (Prefs().webdavStatus) {
-          ref.read(syncProvider.notifier).syncData(ref);
+          ref.read(syncProvider.notifier).synchronize(ref);
         }
       } catch (e) {
         AnxToast.show(

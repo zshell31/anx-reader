@@ -1269,21 +1269,6 @@ class Prefs extends ChangeNotifier {
     notifyListeners();
   }
 
-  DateTime? get lastUploadBookDate {
-    String? lastUploadBookDateStr = prefs.getString('lastUploadBookDate');
-    if (lastUploadBookDateStr == null) return null;
-    return DateTime.parse(lastUploadBookDateStr);
-  }
-
-  set lastUploadBookDate(DateTime? date) {
-    if (date == null) {
-      prefs.remove('lastUploadBookDate');
-    } else {
-      prefs.setString('lastUploadBookDate', date.toIso8601String());
-    }
-    notifyListeners();
-  }
-
   int get lastServerPort {
     return prefs.getInt('lastServerPort') ?? 0;
   }

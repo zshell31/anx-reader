@@ -11,7 +11,33 @@ void main() {
     expect(source, isNot(contains('syncFiles')));
     expect(source, isNot(contains('DatabaseSyncManager')));
     expect(source, isNot(contains('SyncDirection')));
+    expect(source, isNot(contains('syncData(')));
     expect(source, contains('annotationSyncRuntime.syncNow()'));
+  });
+
+  test('shared runtime integrates assets and translation cache', () {
+    final source = File('lib/service/sync/annotation_sync_runtime.dart')
+        .readAsStringSync();
+    expect(source, contains('LibraryAssetSyncService'));
+    expect(source, contains('TranslationCacheSyncService'));
+    expect(source.indexOf('syncCatalog(initialFingerprints)'),
+        lessThan(source.indexOf('coordinator.pullBooks(fingerprints)')));
+  });
+
+  test('sync transport cannot transfer either local SQLite database', () {
+    final files = [
+      File('lib/providers/sync.dart'),
+      ...Directory('lib/service/sync').listSync().whereType<File>().where(
+          (file) =>
+              file.path.endsWith('.dart') &&
+              !file.path.endsWith('shared_state_database.dart')),
+    ];
+    final source = files.map((file) => file.readAsStringSync()).join('\n');
+    expect(source, isNot(contains('app_database.db')));
+    expect(source, isNot(contains('shared_state.db')));
+    expect(source, isNot(contains('VACUUM INTO')));
+    expect(source, isNot(contains('database8.db')));
+    expect(source, isNot(contains('prepareUploadSnapshot')));
   });
 
   test('legacy database replacement implementation is removed', () {

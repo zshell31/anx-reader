@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 const fingerprint = '0123456789abcdef0123456789abcdef';
+const assetDigest =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 DomainStamp stamp(String time, String device) =>
     DomainStamp(modifiedAt: DateTime.parse(time), deviceId: device);
@@ -62,6 +64,16 @@ class MemoryProjection implements LibraryProjection {
   @override
   Future<void> bindBookAsset(
       String fingerprint, String relativePath, String extension) async {}
+
+  @override
+  Future<String?> localBookAssetPath(String fingerprint) async => null;
+
+  @override
+  Future<String?> localCoverAssetPath(String fingerprint) async => null;
+
+  @override
+  Future<void> bindCoverAsset(
+      String fingerprint, String relativePath, String extension) async {}
 }
 
 void main() {
@@ -82,6 +94,12 @@ void main() {
       projection: projection,
       deviceId: 'device-a',
       now: () => DateTime.utc(2026),
+      assetForBook: (_) async => const {
+        'algorithm': 'sha256',
+        'digest': assetDigest,
+        'extension': '.epub',
+      },
+      coverAssetForBook: (_) async => null,
     );
   });
 
@@ -116,11 +134,11 @@ void main() {
                 stampedValue(null, stamp('2025-01-01T00:00:00Z', 'a')),
             'rating': stampedValue(0.0, stamp('2025-01-01T00:00:00Z', 'a')),
           },
-          'bookAsset': {
-            'algorithm': 'md5',
-            'digest': fingerprint,
+          'bookAsset': stampedValue({
+            'algorithm': 'sha256',
+            'digest': assetDigest,
             'extension': '.epub'
-          },
+          }, stamp('2025-01-01T00:00:00Z', 'a')),
         });
     final merged = mergeLibraryCatalogDocuments(
       record('new title', 'old author', stamp('2025-02-01T00:00:00Z', 'a'),
@@ -208,11 +226,9 @@ void main() {
             stampedValue(null, stamp('2025-01-01T00:00:00Z', 'remote')),
         'rating': stampedValue(0.0, stamp('2025-01-01T00:00:00Z', 'remote')),
       },
-      'bookAsset': {
-        'algorithm': 'md5',
-        'digest': fingerprint,
-        'extension': '.epub'
-      },
+      'bookAsset': stampedValue(
+          {'algorithm': 'sha256', 'digest': assetDigest, 'extension': '.epub'},
+          stamp('2025-01-01T00:00:00Z', 'remote')),
     });
     await store.applyRemoteMerge(
         libraryCatalogDomain, fingerprint, null, encodeDomainDocument(remote));

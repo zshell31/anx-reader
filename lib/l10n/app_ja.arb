@@ -240,7 +240,6 @@
   "webdavOnlyWifi": "WiFi接続時のみ同期",
   "webdavSyncAborted": "同期中止",
   "webdavSyncAbortedContent": "WebDAVからデータを取得できませんでした。リモートデータが空です。以下を確認してください：\n1. ネットワーク接続\n2. 他のデバイスで有効な読書データがWebDAVにアップロードされていること\n\n次に、WebDAVへのデータアップロードを試してください",
-  "webdavSyncDirection": "WebDAVデータが他のデバイスで変更された可能性があります。データの処理方法を選択してください",
   "settingsSync": "同期",
   "settingsSyncWebdav": "WebDAV",
   "settingsSyncEnableWebdav": "WebDAVを有効化",

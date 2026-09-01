@@ -4,6 +4,7 @@ import 'package:anx_reader/models/tb_group.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/tb_groups.dart';
 import 'package:anx_reader/service/ai/tools/models/bookshelf_organize_plan.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class BookshelfOrganizeService {
@@ -58,6 +59,10 @@ class BookshelfOrganizeService {
         }
         final updated = current.copyWith(groupId: group.groupId);
         await bookDao.updateBook(updated);
+        if (updated.md5 != null) {
+          await annotationSyncRuntime.publishBook(updated);
+          await annotationSyncRuntime.publishBookGroup(updated);
+        }
         bookMap[current.id] = updated;
       }
     }
@@ -69,6 +74,10 @@ class BookshelfOrganizeService {
       }
       final updated = current.copyWith(groupId: 0);
       await bookDao.updateBook(updated);
+      if (updated.md5 != null) {
+        await annotationSyncRuntime.publishBook(updated);
+        await annotationSyncRuntime.publishBookGroup(updated);
+      }
       bookMap[current.id] = updated;
     }
 

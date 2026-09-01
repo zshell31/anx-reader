@@ -39,6 +39,8 @@ class BookItem extends ConsumerWidget {
                 return BookSyncStatusEnum.remoteOnly;
               } else if (data.both.contains(book.id)) {
                 return BookSyncStatusEnum.both;
+              } else if (data.released.contains(book.id)) {
+                return BookSyncStatusEnum.released;
               } else if (data.nonExistent.contains(book.id)) {
                 return BookSyncStatusEnum.nonExistent;
               } else {

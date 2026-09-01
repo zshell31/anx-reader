@@ -19,6 +19,10 @@ annotation path above remains compatible with Lingua Reader. Immutable book
 assets and the independent translation cache retain their Anx paths outside
 the configurable shared root.
 
+Book and cover assets are addressed independently by exact-byte SHA-256; the
+annotation/book MD5 remains semantic identity and is never assumed to hash a
+converted EPUB's stored bytes.
+
 Synchronization is automatic and merge-based. Remote absence is not deletion;
 replacement uses the strong ETag returned with the current GET, and creation
 uses `If-None-Match: *`. When the canonical merged document already matches the

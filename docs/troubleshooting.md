@@ -14,6 +14,19 @@ After **reproducing the issue**, click on the bottom right corner of the interfa
 
 For some issues, you may need to first disable the "Clear logs on startup" option in the "Advanced" interface to export the log file after reproducing the issue.
 
+## WebDAV synchronization
+
+Synchronization has no upload/download direction. Use **Sync now** to run the
+same discovery-and-merge cycle used by startup, resume, and reconnect. Verify
+that WebDAV is enabled, the shared data folder matches on every device, and the
+Wi-Fi-only policy permits the current connection.
+
+A catalog entry with no local file is a normal remote-only book. Explicitly
+download it unless it was intentionally released on this device. If an asset
+download is rejected, the exact bytes did not match the catalog SHA-256; the
+partial file is discarded. Existing remote `database<version>.db` files are
+legacy rollback artifacts and are intentionally ignored.
+
 # 简体中文
 ## 无法导入书籍
 

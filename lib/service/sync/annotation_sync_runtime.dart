@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/enums/sync_protocol.dart';
+import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
+import 'package:anx_reader/service/sync/library_sync_repository.dart';
+import 'package:anx_reader/service/sync/library_sync_service.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -28,6 +31,8 @@ class AnnotationSyncRuntime {
   final Map<String, Set<void Function()>> _openBookRefresh = {};
   AnnotationSyncCoordinator? _coordinator;
   AnnotationSyncCoordinator? _presentationCoordinator;
+  LibrarySyncRepository? _libraryRepository;
+  LibrarySyncService? _libraryService;
   final StreamController<void> _statusChanges =
       StreamController<void>.broadcast();
   final StreamController<void> _annotationChanges =
@@ -97,6 +102,8 @@ class AnnotationSyncRuntime {
         unawaited(onConnectivityRegained());
       }
     });
+    final library = await _ensureLibraryRepository();
+    await library.bootstrap();
     await _ensureCoordinator();
     unawaited(_runDiscovery());
   }
@@ -117,11 +124,14 @@ class AnnotationSyncRuntime {
   Future<void> _performReconfigure() async {
     final old = _coordinator;
     final oldPresentation = _presentationCoordinator;
+    final oldLibrary = _libraryService;
     _coordinator = null;
     _presentationCoordinator = null;
+    _libraryService = null;
     await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
     if (oldPresentation != null) await oldPresentation.close();
+    if (oldLibrary != null) await oldLibrary.close();
     _coordinator = _buildCoordinator();
     unawaited(_runDiscovery());
   }
@@ -137,6 +147,24 @@ class AnnotationSyncRuntime {
   void notifyPresentationMutation() {
     _annotationChanges.add(null);
     unawaited(_syncPresentation(localMutation: true));
+  }
+
+  Future<void> publishBook(Book book) async {
+    final fingerprint = canonicalMd5Fingerprint(book.md5);
+    await (await _ensureLibraryRepository()).publishBook(book);
+    unawaited(_libraryService?.notifyCatalogMutation(fingerprint));
+  }
+
+  /// Records only a real reader mutation. Opening/restoring a book must not
+  /// call this API, because doing so would manufacture a newer LWW stamp.
+  Future<void> recordReadingProgress(Book book) async {
+    final fingerprint = canonicalMd5Fingerprint(book.md5);
+    await (await _ensureLibraryRepository()).recordReadingProgress(
+      fingerprint: fingerprint,
+      position: book.lastReadPosition,
+      percentage: book.readingPercentage,
+    );
+    unawaited(_libraryService?.notifyReadingMutation(fingerprint));
   }
 
   Future<void> syncNow() => _runDiscovery();
@@ -205,6 +233,14 @@ class AnnotationSyncRuntime {
         }
       },
     );
+    final libraryRepository = _libraryRepository;
+    if (libraryRepository != null) {
+      _libraryService = LibrarySyncService(
+        sharedState: sharedState,
+        repository: libraryRepository,
+        transport: transport,
+      );
+    }
     _presentationCoordinator = AnnotationSyncCoordinator(
       sharedState: sharedState,
       transport: transport,
@@ -264,12 +300,25 @@ class AnnotationSyncRuntime {
   Future<void> _runDiscovery() async {
     final coordinator = await _ensureCoordinator();
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
+    final fingerprints = await _knownFingerprints();
     await Future.wait([
       coordinator.syncDirtyAnnotations(),
-      coordinator.pullBooks(await _knownFingerprints()),
+      coordinator.pullBooks(fingerprints),
       _presentationCoordinator!.syncDirtyAnnotations(),
       _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
+      if (_libraryService != null) _libraryService!.syncKnown(fingerprints),
     ]);
+  }
+
+  Future<LibrarySyncRepository> _ensureLibraryRepository() async {
+    final current = _libraryRepository;
+    if (current != null) return current;
+    final repository = LibrarySyncRepository(
+      sharedState: sharedState,
+      projection: SqliteLibraryProjection(),
+      deviceId: await LibrarySyncRepository.ensureDeviceId(sharedState),
+    );
+    return _libraryRepository = repository;
   }
 
   Future<bool> _networkPolicyAllowsSync() async {
@@ -312,8 +361,10 @@ class AnnotationSyncRuntime {
     await _cancelCoordinatorStatusSubscriptions();
     await _coordinator?.close();
     await _presentationCoordinator?.close();
+    await _libraryService?.close();
     _coordinator = null;
     _presentationCoordinator = null;
+    _libraryService = null;
     await sharedState.close();
     _started = false;
   }

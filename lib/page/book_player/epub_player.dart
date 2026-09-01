@@ -1086,6 +1086,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     book.lastReadPosition = cfi;
     book.readingPercentage = percentage;
     await bookDao.updateBook(book);
+    await annotationSyncRuntime.recordReadingProgress(book);
     if (mounted) {
       ref.read(bookListProvider.notifier).refresh();
     }

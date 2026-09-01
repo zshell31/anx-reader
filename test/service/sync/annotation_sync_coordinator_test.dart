@@ -324,6 +324,18 @@ void main() {
     expect(notifications, [fingerprint]);
   });
 
+  test('dirty local already present remotely converges without a PUT',
+      () async {
+    await putLocal([entity('A')]);
+    remote.seed(document([entity('A')]));
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.puts, 0);
+    expect(remote.locks, 0);
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
   test('protocol winner resolves the same annotation edit', () async {
     await putLocal([entity('same', updatedAt: '2026-08-27T11:00:00.000Z')]);
     remote.seed(
@@ -707,7 +719,7 @@ void main() {
     expect(remote.decoded!['annotations'], hasLength(3));
   });
 
-  test('412 retries are bounded and leave revision dirty', () async {
+  test('bounded 412 retries fall back to an exclusive LOCK', () async {
     await putLocal([entity('A')]);
     remote.seed(document([entity('B')]));
     remote.onPut = () async {
@@ -717,11 +729,13 @@ void main() {
     await coordinator.close();
     coordinator = createCoordinator(retries: 1);
 
-    await expectLater(coordinator.syncBook(fingerprint),
-        throwsA(isA<AnnotationSyncConflictException>()));
+    await coordinator.syncBook(fingerprint);
 
     expect(remote.puts, 2);
-    expect((await store.pendingOutbox()).single.attempts, 1);
+    expect(remote.locks, 1);
+    expect(remote.lockedPuts, 1);
+    expect(remote.decoded!['annotations'], hasLength(2));
+    expect(await store.pendingOutbox(), isEmpty);
   });
 
   test('local mutation during GET is merged with current revision', () async {

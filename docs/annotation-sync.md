@@ -16,6 +16,9 @@ clients. It does not change legacy Anx paths under `anx/` and does not create an
 Anx-specific annotation tree.
 
 Synchronization is automatic and merge-based. Remote absence is not deletion;
-replacement uses the strong ETag returned with the current GET, creation uses
-`If-None-Match: *`, and HTTP 412 causes a bounded reread/merge/retry. A malformed
-remote document is never overwritten.
+replacement uses the strong ETag returned with the current GET, and creation
+uses `If-None-Match: *`. When the canonical merged document already matches the
+remote representation, clients mark it converged without an unnecessary PUT.
+HTTP 412 causes a bounded reread/merge/retry followed by an exclusive WebDAV
+LOCK, a final read and merge, and a lock-protected PUT. A malformed remote
+document is never overwritten.

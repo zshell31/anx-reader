@@ -13,15 +13,6 @@ const defaultAnnotationLockContentionRetries = 3;
 
 enum AnnotationSyncStatus { synced, syncing, pendingOffline, error }
 
-class AnnotationSyncConflictException implements Exception {
-  final int attempts;
-  const AnnotationSyncConflictException(this.attempts);
-
-  @override
-  String toString() =>
-      'Annotation sync did not converge after $attempts conditional writes';
-}
-
 class MalformedRemoteAnnotationException implements Exception {
   final Object cause;
   const MalformedRemoteAnnotationException(this.cause);
@@ -268,9 +259,10 @@ class AnnotationSyncCoordinator {
     var conditionalCreateRejected = false;
     while (true) {
       final remote = await transport.get(remotePathFor(work.documentId));
-      if (remote == null && conditionalCreateRejected) {
+      if ((remote == null && conditionalCreateRejected) ||
+          (remote != null && failures > maxPreconditionRetries)) {
         try {
-          await _writeUnderCreateLock(work.documentId, work.localRevision,
+          await _writeUnderExclusiveLock(work.documentId, work.localRevision,
               expectDirty: true);
           return;
         } on WebDavLocked {
@@ -298,6 +290,14 @@ class AnnotationSyncCoordinator {
           !beforePut.dirty) {
         return;
       }
+      if (remote != null &&
+          _sameCanonical(
+              merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
+        await sharedState.markConverged(
+            syncDomain, work.documentId, work.localRevision,
+            strongEtag: remote.etag);
+        return;
+      }
 
       try {
         final write = remote == null
@@ -315,9 +315,6 @@ class AnnotationSyncCoordinator {
           continue;
         }
         failures++;
-        if (failures > maxPreconditionRetries) {
-          throw AnnotationSyncConflictException(failures);
-        }
       }
     }
   }
@@ -328,9 +325,10 @@ class AnnotationSyncCoordinator {
     var conditionalCreateRejected = false;
     while (true) {
       final remote = await transport.get(remotePathFor(id));
-      if (remote == null && conditionalCreateRejected) {
+      if ((remote == null && conditionalCreateRejected) ||
+          (remote != null && failures > maxPreconditionRetries)) {
         try {
-          await _writeUnderCreateLock(id, null, expectDirty: false);
+          await _writeUnderExclusiveLock(id, null, expectDirty: false);
           return;
         } on WebDavLocked {
           lockContentions++;
@@ -378,14 +376,11 @@ class AnnotationSyncCoordinator {
           continue;
         }
         failures++;
-        if (failures > maxPreconditionRetries) {
-          throw AnnotationSyncConflictException(failures);
-        }
       }
     }
   }
 
-  Future<void> _writeUnderCreateLock(String id, int? expectedRevision,
+  Future<void> _writeUnderExclusiveLock(String id, int? expectedRevision,
       {required bool expectDirty}) async {
     final path = remotePathFor(id);
     final lock = await transport.lock(path);
@@ -412,6 +407,21 @@ class AnnotationSyncCoordinator {
       if (beforePut == null ||
           beforePut.localRevision != targetRevision ||
           beforePut.dirty != expectDirty) {
+        return;
+      }
+
+      if (remote != null &&
+          _sameCanonical(
+              merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
+        if (expectDirty) {
+          await sharedState.markConverged(
+              syncDomain, id, beforePut.localRevision,
+              strongEtag: remote.etag);
+        } else {
+          await sharedState.markRemoteConverged(
+              syncDomain, id, beforePut.localRevision,
+              strongEtag: remote.etag);
+        }
         return;
       }
 

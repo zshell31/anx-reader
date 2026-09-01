@@ -204,15 +204,27 @@ void main() {
             contains("callFlutter('onSelectionActionsRequested', annotation")));
   });
 
-  test('tap inside an active selection claims the native pointer default', () {
+  test('nearby taps stay inside the active selection interaction boundary', () {
     final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();
 
+    expect(bookSource, contains('const selectionTapHitSlop = 10;'));
+    expect(
+        bookSource,
+        contains('const inside = pointIsInsideRange(\n'
+            '      range, e.clientX, e.clientY, selectionTapHitSlop);'));
     expect(
         bookSource,
         contains(
-            'const inside = pointIsInsideRange(range, e.clientX, e.clientY);'));
-    expect(bookSource, contains('if (inside) e.preventDefault();'));
-    expect(bookSource, isNot(contains('if (!inside) e.preventDefault();')));
+            'pending?.doc === doc && pending.inside && !pending.cancelled'));
+    expect(
+        bookSource,
+        contains(
+            'if (!range && pending.inside && pending.collapsedDuringTap)'));
+    expect(bookSource, contains('selection.addRange(pending.range);'));
+    expect(
+        bookSource,
+        contains('if (pending.inside) {\n'
+            '      toggleSelectionActions('));
   });
 
   test('internal editor handoff clears only its owning DOM selection', () {

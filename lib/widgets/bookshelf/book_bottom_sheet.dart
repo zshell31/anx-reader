@@ -13,6 +13,7 @@ import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/providers/sync_status.dart';
 import 'package:anx_reader/service/convert_to_epub/txt/convert_from_txt.dart';
 import 'package:anx_reader/service/md5_service.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/book.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/utils/share_file.dart';
@@ -39,7 +40,7 @@ class BookBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> handleDelete(BuildContext context) async {
       Navigator.pop(context);
-      await bookDao.updateBook(Book(
+      final tombstone = Book(
         id: book.id,
         title: book.title,
         coverPath: book.coverPath,
@@ -53,7 +54,11 @@ class BookBottomSheet extends ConsumerWidget {
         md5: book.md5,
         createTime: book.createTime,
         updateTime: DateTime.now(),
-      ));
+      );
+      await bookDao.updateBook(tombstone);
+      if (tombstone.md5 != null) {
+        await annotationSyncRuntime.publishBook(tombstone);
+      }
       ref.read(bookListProvider.notifier).refresh();
       File(book.fileFullPath).delete();
       File(book.coverFullPath).delete();

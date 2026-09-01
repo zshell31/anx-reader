@@ -7,12 +7,15 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:uuid/uuid.dart';
+import 'package:path/path.dart' as p;
 
 abstract interface class LibraryProjection {
   Future<List<Book>> allBooks();
   Future<Book?> bookByFingerprint(String fingerprint);
   Future<void> projectCatalog(Map<String, dynamic> document);
   Future<void> projectReadingState(Map<String, dynamic> document);
+  Future<void> bindBookAsset(
+      String fingerprint, String relativePath, String extension);
 }
 
 class SqliteLibraryProjection implements LibraryProjection {
@@ -76,6 +79,18 @@ class SqliteLibraryProjection implements LibraryProjection {
     await books.updateBook(existing.copyWith(
       lastReadPosition: document['position'] as String,
       readingPercentage: document['percentage'] as double,
+    ));
+  }
+
+  @override
+  Future<void> bindBookAsset(
+      String fingerprint, String relativePath, String extension) async {
+    final existing = await bookByFingerprint(fingerprint);
+    if (existing == null) return;
+    await books.updateBook(existing.copyWith(
+      filePath: relativePath,
+      md5: fingerprint,
+      isDeleted: false,
     ));
   }
 }
@@ -238,8 +253,19 @@ class LibrarySyncRepository {
         'description': field('description', book.description),
         'rating': field('rating', book.rating),
       },
-      'bookAsset': {'algorithm': 'md5', 'digest': fingerprint},
+      'bookAsset': {
+        'algorithm': 'md5',
+        'digest': fingerprint,
+        'extension': _portableExtension(book.filePath),
+      },
     });
+  }
+
+  String _portableExtension(String path) {
+    final extension = p.extension(path).toLowerCase();
+    return RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)
+        ? extension
+        : '.epub';
   }
 
   Future<Map<String, dynamic>?> _read(String domain, String id) async {

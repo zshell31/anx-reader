@@ -41,14 +41,18 @@ Map<String, dynamic> decodeLibraryCatalogDocument(Object? input) {
   doc['membership'] = membership;
   doc['metadata'] = normalizedMetadata;
   final asset = doc['bookAsset'];
+  final extension = asset is Map ? asset['extension'] : null;
   if (asset is! Map ||
       asset['algorithm'] != 'md5' ||
-      canonicalMd5Fingerprint(asset['digest']) != doc['fingerprint']) {
+      canonicalMd5Fingerprint(asset['digest']) != doc['fingerprint'] ||
+      extension is! String ||
+      !RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension)) {
     throw const FormatException('book asset identity is invalid');
   }
   doc['bookAsset'] = {
     'algorithm': 'md5',
     'digest': doc['fingerprint'],
+    'extension': extension,
   };
   if (doc.containsKey('groupId') && doc['groupId'] != null) {
     doc['groupId'] = _stamped(doc['groupId']);

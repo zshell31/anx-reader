@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
@@ -14,6 +15,9 @@ import 'package:anx_reader/service/sync/sync_client_factory.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
+import 'package:anx_reader/service/sync/library_asset_sync.dart';
+import 'package:anx_reader/service/sync/library_protocol.dart';
+import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/database_sync_manager.dart';
 import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/utils/get_path/databases_path.dart';
@@ -288,6 +292,13 @@ class Sync extends _$Sync {
           'Translation cache sync failed; main sync continues: $e\n$s');
     }
 
+    try {
+      await _syncSharedLibraryAssets(client);
+    } catch (e, s) {
+      AnxLog.warning('Shared library asset sync failed; pending catalog state '
+          'is preserved: $e\n$s');
+    }
+
     // Determine sync direction
     SyncDirection? finalDirection = await determineSyncDirection(direction);
     if (finalDirection == null) {
@@ -414,6 +425,21 @@ class Sync extends _$Sync {
       }
     }
     ref.read(syncStatusProvider.notifier).refresh();
+  }
+
+  Future<void> _syncSharedLibraryAssets(SyncClientBase client) async {
+    final service = LibraryAssetSyncService(
+      transport: SyncClientLibraryAssetTransport(client),
+      projection: SqliteLibraryProjection(),
+    );
+    for (final id in await annotationSyncRuntime.sharedState
+        .documentIds(libraryCatalogDomain)) {
+      final bytes = await annotationSyncRuntime.sharedState
+          .canonicalDocument(libraryCatalogDomain, id);
+      if (bytes == null) continue;
+      await service.syncBook(
+          decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes))));
+    }
   }
 
   Future<void> syncDatabase(SyncDirection direction) async {

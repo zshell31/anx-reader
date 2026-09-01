@@ -369,6 +369,17 @@ class SharedStateDatabase {
         : Uint8List.fromList(rows.single['canonical_state'] as List<int>);
   }
 
+  Future<List<String>> documentIds(String domain) async {
+    final rows = await (await database).query('shared_documents',
+        columns: ['document_id'],
+        where: 'domain = ?',
+        whereArgs: [domain],
+        orderBy: 'document_id');
+    return rows
+        .map((row) => row['document_id'] as String)
+        .toList(growable: false);
+  }
+
   Future<SharedDocumentSnapshot?> documentSnapshot(
       String domain, String documentId) async {
     final rows = await (await database).rawQuery('''SELECT

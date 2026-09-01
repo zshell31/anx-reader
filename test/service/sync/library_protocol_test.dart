@@ -58,6 +58,10 @@ class MemoryProjection implements LibraryProjection {
   Future<void> projectReadingState(Map<String, dynamic> document) async {
     positions.add(document);
   }
+
+  @override
+  Future<void> bindBookAsset(
+      String fingerprint, String relativePath, String extension) async {}
 }
 
 void main() {
@@ -112,7 +116,11 @@ void main() {
                 stampedValue(null, stamp('2025-01-01T00:00:00Z', 'a')),
             'rating': stampedValue(0.0, stamp('2025-01-01T00:00:00Z', 'a')),
           },
-          'bookAsset': {'algorithm': 'md5', 'digest': fingerprint},
+          'bookAsset': {
+            'algorithm': 'md5',
+            'digest': fingerprint,
+            'extension': '.epub'
+          },
         });
     final merged = mergeLibraryCatalogDocuments(
       record('new title', 'old author', stamp('2025-02-01T00:00:00Z', 'a'),
@@ -200,7 +208,11 @@ void main() {
             stampedValue(null, stamp('2025-01-01T00:00:00Z', 'remote')),
         'rating': stampedValue(0.0, stamp('2025-01-01T00:00:00Z', 'remote')),
       },
-      'bookAsset': {'algorithm': 'md5', 'digest': fingerprint},
+      'bookAsset': {
+        'algorithm': 'md5',
+        'digest': fingerprint,
+        'extension': '.epub'
+      },
     });
     await store.applyRemoteMerge(
         libraryCatalogDomain, fingerprint, null, encodeDomainDocument(remote));

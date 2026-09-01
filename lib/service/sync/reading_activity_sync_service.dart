@@ -1,0 +1,37 @@
+import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
+import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
+import 'package:anx_reader/service/sync/reading_activity_repository.dart';
+import 'package:anx_reader/service/sync/shared_document_sync_coordinator.dart';
+import 'package:anx_reader/service/sync/shared_state_database.dart';
+
+class ReadingActivitySyncService {
+  final SharedDocumentSyncCoordinator coordinator;
+
+  ReadingActivitySyncService({
+    required SharedStateDatabase sharedState,
+    required ReadingActivityRepository repository,
+    required AnnotationWebDavTransport transport,
+  }) : coordinator = SharedDocumentSyncCoordinator(
+          sharedState: sharedState,
+          transport: transport,
+          syncDomain: readingActivityDomain,
+          normalizeDocumentId: (id) => id,
+          remotePathFor: readingActivityRemotePath,
+          decodeDocument: decodeReadingActivityDocument,
+          mergeDocuments: mergeReadingActivityDocuments,
+          validateDocumentId: readingActivityMatchesId,
+          onDocumentChanged: repository.projectCanonical,
+        );
+
+  Future<void> syncKnown(Iterable<String> documentIds) async {
+    await Future.wait([
+      coordinator.syncDirtyAnnotations(),
+      coordinator.pullBooks(documentIds),
+    ]);
+  }
+
+  Future<void> notifyMutation(String documentId) =>
+      coordinator.notifyDirty(documentId);
+
+  Future<void> close() => coordinator.close();
+}

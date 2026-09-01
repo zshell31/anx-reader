@@ -15,7 +15,7 @@
 | 1. General shared-document sync | completed | Promoted the parameterized coordinator to a reusable core with an annotation compatibility facade. |
 | 2. Library and reading position | completed | Added v1 per-book catalog/reading-state protocols, deterministic merges, projection, bootstrap and runtime wiring. |
 | 3. Library assets | completed | Added immutable MD5-addressed upload/download, verification, path-independent binding and deletion safety. |
-| 4. Reading activity | not_started | Immutable session events and aggregate projection. |
+| 4. Reading activity | completed | Added bounded immutable session-event documents, union merge, deterministic legacy import and statistics projection. |
 | 5. Groups, tags, themes | not_started | UUID identities, tombstones, mappings and projections. |
 | 6. Retire database sync | not_started | Remove direction choice and whole-database/file sync from normal behavior. |
 | 7. Automatic integration and diagnostics | not_started | Lifecycle orchestration, coalescing, summaries and privacy-safe logs. |
@@ -52,12 +52,13 @@
 - Reading position uses per-book LWW, not maximum percentage. Catalog metadata uses field-level LWW. Tombstones prevent resurrection.
 - Catalog projection may create a pathless local row for a remote-only live record; Milestone 3 binds verified content-addressed bytes and a device-local path.
 - Reading activity uses bounded per-book/day documents containing immutable UUID events; merge is set union by event ID.
+- Reading event ID collisions with differing payloads fail closed. Daily totals are recomputed from the canonical event set and replace the local aggregate row.
 - Book asset remote identity is `anx/assets/books/md5/<fingerprint>`; the catalog carries only digest algorithm, digest and a sanitized format extension. The asset API intentionally exposes no delete operation.
 - Annotations retain their existing v2 merge rules. Translation cache remains independent.
 
 ## Migrations / schema changes
 
-- No application SQLite schema change in Milestones 0–3. Stable device identity and bootstrap markers use existing `legacy_import_receipts`; catalog and reading-state documents use existing shared-state tables.
+- No application SQLite schema change in Milestones 0–4. Stable device identity and all bootstrap markers use existing `legacy_import_receipts`; domain documents use existing shared-state tables.
 
 ## Important files inspected/changed
 
@@ -67,6 +68,7 @@
 - Milestone 1: `annotation_sync_coordinator.dart` now exposes the reusable core; `shared_document_sync_coordinator.dart` is the domain-neutral import boundary; compatibility callers remain unchanged.
 - Milestone 2: added domain stamps, catalog/reading protocols, repository/projection, sync service, startup bootstrap and real reader-progress mutation integration.
 - Milestone 3: added streaming SyncClient asset transport, partial download verification, deterministic local binding, import/tombstone publication hooks and catalog-driven asset processing before the legacy fallback.
+- Milestone 4: added reading-activity protocol/repository/coordinator, UUID session recording on reader close, UUIDv5 legacy aggregate import and `tb_reading_time` replacement projection.
 
 ## Tests by milestone
 
@@ -74,6 +76,7 @@
 - Milestone 1: Dart format passed; `flutter test test/service/sync/shared_document_sync_coordinator_test.dart test/service/sync/annotation_sync_coordinator_test.dart` passed (39 tests).
 - Milestone 2: focused Flutter tests passed (45 tests across catalog and coordinator suites); targeted analyzer for sync code and EPUB player passed with no issues; Dart format passed.
 - Milestone 3: catalog/asset Flutter tests passed (10 tests); targeted analyzer found no migration errors (three existing `use_build_context_synchronously` info diagnostics remain in touched UI/service files); Dart format passed.
+- Milestone 4: reading-activity/catalog Flutter tests passed (11 tests); targeted analyzer found only two pre-existing `use_build_context_synchronously` info diagnostics in `reading_page.dart`; Dart format passed.
 
 ## Known limitations / unresolved issues
 
@@ -84,10 +87,11 @@
 
 ## Exact next step
 
-Commit Milestone 3, then mark Milestone 4 in progress and implement immutable per-book/day reading activity documents with deterministic aggregate migration and projection.
+Commit Milestone 4, then mark Milestone 5 in progress and add UUID-backed group, tag/relation and portable-theme records with idempotent projection mappings.
 
 ## Milestone commits
 
 - Milestone 0: `18f6bfd1 docs(sync): define automatic shared-state migration`.
 - Milestone 1: `9979cf5a refactor(sync): generalize shared document synchronization`.
 - Milestone 2: `dc3b70c4 feat(sync): add shared library and reading state`.
+- Milestone 3: `248be427 feat(sync): synchronize content-addressed library assets`.

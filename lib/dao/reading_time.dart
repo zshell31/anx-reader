@@ -64,6 +64,34 @@ class ReadingTimeDao extends BaseDao {
     await insertReadingTime(session, startedAt: startedAt);
   }
 
+  Future<void> replaceDailyAggregate({
+    required int bookId,
+    required String day,
+    required int readingTime,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final existing = await txn.query(table,
+          columns: ['id'],
+          where: 'book_id = ? AND DATE(date) = DATE(?)',
+          whereArgs: [bookId, day],
+          orderBy: 'id');
+      if (existing.isEmpty) {
+        await txn.insert(table, {
+          'book_id': bookId,
+          'date': day,
+          'reading_time': readingTime,
+        });
+        return;
+      }
+      await txn.update(table, {'reading_time': readingTime, 'date': day},
+          where: 'id = ?', whereArgs: [existing.first['id']]);
+      for (final duplicate in existing.skip(1)) {
+        await txn.delete(table, where: 'id = ?', whereArgs: [duplicate['id']]);
+      }
+    });
+  }
+
   String _resolveDayString(ReadingTime readingTime, DateTime? startedAt) {
     final fromModel = readingTime.startedAt;
     if (fromModel != null) {

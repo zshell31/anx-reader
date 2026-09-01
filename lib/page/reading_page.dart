@@ -164,13 +164,22 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     WakelockPlus.disable();
     showStatusBar();
     WidgetsBinding.instance.removeObserver(this);
-    readingTimeDao.insertReadingTime(
-      ReadingTime(
-        bookId: _book.id,
-        readingTime: _readTimeWatch.elapsed.inSeconds,
-      ),
-      startedAt: _sessionStart,
-    );
+    final sessionStart = _sessionStart;
+    if (sessionStart != null && _book.md5 != null) {
+      unawaited(annotationSyncRuntime.recordReadingActivity(
+        book: _book,
+        startedAt: sessionStart,
+        durationSeconds: _readTimeWatch.elapsed.inSeconds,
+      ));
+    } else {
+      readingTimeDao.insertReadingTime(
+        ReadingTime(
+          bookId: _book.id,
+          readingTime: _readTimeWatch.elapsed.inSeconds,
+        ),
+        startedAt: sessionStart,
+      );
+    }
     _sessionStart = null;
     audioHandler.stop();
     // if (_volumeKeyListenerAttached) {

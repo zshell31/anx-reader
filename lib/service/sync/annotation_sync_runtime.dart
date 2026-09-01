@@ -10,6 +10,9 @@ import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/library_sync_service.dart';
+import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
+import 'package:anx_reader/service/sync/reading_activity_repository.dart';
+import 'package:anx_reader/service/sync/reading_activity_sync_service.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -33,6 +36,8 @@ class AnnotationSyncRuntime {
   AnnotationSyncCoordinator? _presentationCoordinator;
   LibrarySyncRepository? _libraryRepository;
   LibrarySyncService? _libraryService;
+  ReadingActivityRepository? _readingActivityRepository;
+  ReadingActivitySyncService? _readingActivityService;
   final StreamController<void> _statusChanges =
       StreamController<void>.broadcast();
   final StreamController<void> _annotationChanges =
@@ -104,6 +109,8 @@ class AnnotationSyncRuntime {
     });
     final library = await _ensureLibraryRepository();
     await library.bootstrap();
+    final activity = await _ensureReadingActivityRepository();
+    await activity.bootstrap();
     await _ensureCoordinator();
     unawaited(_runDiscovery());
   }
@@ -125,13 +132,16 @@ class AnnotationSyncRuntime {
     final old = _coordinator;
     final oldPresentation = _presentationCoordinator;
     final oldLibrary = _libraryService;
+    final oldActivity = _readingActivityService;
     _coordinator = null;
     _presentationCoordinator = null;
     _libraryService = null;
+    _readingActivityService = null;
     await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
     if (oldPresentation != null) await oldPresentation.close();
     if (oldLibrary != null) await oldLibrary.close();
+    if (oldActivity != null) await oldActivity.close();
     _coordinator = _buildCoordinator();
     unawaited(_runDiscovery());
   }
@@ -165,6 +175,23 @@ class AnnotationSyncRuntime {
       percentage: book.readingPercentage,
     );
     unawaited(_libraryService?.notifyReadingMutation(fingerprint));
+  }
+
+  Future<void> recordReadingActivity({
+    required Book book,
+    required DateTime startedAt,
+    required int durationSeconds,
+  }) async {
+    final fingerprint = canonicalMd5Fingerprint(book.md5);
+    final repository = await _ensureReadingActivityRepository();
+    await repository.recordSession(
+      fingerprint: fingerprint,
+      startedAt: startedAt,
+      durationSeconds: durationSeconds,
+    );
+    final day = startedAt.toLocal().toIso8601String().substring(0, 10);
+    unawaited(_readingActivityService
+        ?.notifyMutation(readingActivityDocumentId(fingerprint, day)));
   }
 
   Future<void> syncNow() => _runDiscovery();
@@ -241,6 +268,14 @@ class AnnotationSyncRuntime {
         transport: transport,
       );
     }
+    final activityRepository = _readingActivityRepository;
+    if (activityRepository != null) {
+      _readingActivityService = ReadingActivitySyncService(
+        sharedState: sharedState,
+        repository: activityRepository,
+        transport: transport,
+      );
+    }
     _presentationCoordinator = AnnotationSyncCoordinator(
       sharedState: sharedState,
       transport: transport,
@@ -307,6 +342,9 @@ class AnnotationSyncRuntime {
       _presentationCoordinator!.syncDirtyAnnotations(),
       _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
       if (_libraryService != null) _libraryService!.syncKnown(fingerprints),
+      if (_readingActivityService != null)
+        _readingActivityService!
+            .syncKnown(await sharedState.documentIds(readingActivityDomain)),
     ]);
   }
 
@@ -319,6 +357,17 @@ class AnnotationSyncRuntime {
       deviceId: await LibrarySyncRepository.ensureDeviceId(sharedState),
     );
     return _libraryRepository = repository;
+  }
+
+  Future<ReadingActivityRepository> _ensureReadingActivityRepository() async {
+    final current = _readingActivityRepository;
+    if (current != null) return current;
+    final repository = ReadingActivityRepository(
+      sharedState: sharedState,
+      projection: SqliteReadingActivityProjection(),
+      deviceId: await LibrarySyncRepository.ensureDeviceId(sharedState),
+    );
+    return _readingActivityRepository = repository;
   }
 
   Future<bool> _networkPolicyAllowsSync() async {
@@ -362,9 +411,11 @@ class AnnotationSyncRuntime {
     await _coordinator?.close();
     await _presentationCoordinator?.close();
     await _libraryService?.close();
+    await _readingActivityService?.close();
     _coordinator = null;
     _presentationCoordinator = null;
     _libraryService = null;
+    _readingActivityService = null;
     await sharedState.close();
     _started = false;
   }

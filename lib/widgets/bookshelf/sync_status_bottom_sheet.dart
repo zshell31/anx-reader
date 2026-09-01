@@ -1,38 +1,28 @@
-import 'dart:io';
-
-import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/book_sync_status.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/sync_state_model.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/sync_status.dart';
-import 'package:anx_reader/utils/get_path/databases_path.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/bookshelf/book_sync_status_icon.dart';
 import 'package:anx_reader/widgets/linear_proportion_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:path/path.dart';
 
 Future<void> showSyncStatusBottomSheet(BuildContext context) async {
-  final dbPath = await getAnxDataBasesPath();
   showModalBottomSheet(
     useSafeArea: true,
     context: navigatorKey.currentContext!,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (context) => SyncStatusBottomSheet(dbPath: dbPath),
+    builder: (context) => const SyncStatusBottomSheet(),
   );
 }
 
 class SyncStatusBottomSheet extends ConsumerWidget {
-  const SyncStatusBottomSheet({super.key, required this.dbPath});
-
-  final String dbPath;
+  const SyncStatusBottomSheet({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,11 +46,6 @@ class SyncStatusBottomSheet extends ConsumerWidget {
               data: (data) => data.nonExistent.length,
             ) ??
         0;
-    File localDb = File(join((dbPath), 'app_database.db'));
-    final DateTime localUpdateTime = localDb.lastModifiedSync();
-
-    final DateTime? lastUploadTime = Prefs().lastUploadBookDate;
-
     return Container(
       padding: const EdgeInsets.all(16.0),
       child: SingleChildScrollView(
@@ -69,8 +54,6 @@ class SyncStatusBottomSheet extends ConsumerWidget {
           children: [
             _buildSyncingIndicator(syncState, theme, l10n),
             const SizedBox(height: 10),
-            _buildUpdateTimeInfo(localUpdateTime, lastUploadTime, theme, l10n),
-            const SizedBox(height: 30),
             _buildBookDistributionChart(localOnlyBooks, remoteOnlyBooks,
                 bothBooks, nonExistentBooks, theme),
             _buildBookStats(localOnlyBooks, remoteOnlyBooks, bothBooks,
@@ -125,13 +108,10 @@ class SyncStatusBottomSheet extends ConsumerWidget {
       );
     }
 
-    final syncDirection = syncState.direction == SyncDirection.upload
-        ? l10n.bookSyncStatusUploadingTitle
-        : l10n.bookSyncStatusDownloadingTitle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(syncDirection, style: theme.textTheme.titleMedium),
+        Text(l10n.webdavSyncing, style: theme.textTheme.titleMedium),
         Text(syncState.fileName, style: theme.textTheme.bodyMedium),
         const SizedBox(height: 10),
         LinearProgressIndicator(
@@ -142,46 +122,6 @@ class SyncStatusBottomSheet extends ConsumerWidget {
             '${byteToHuman(syncState.count)} / ${byteToHuman(syncState.total)}'),
         const SizedBox(height: 20),
         const Divider(),
-      ],
-    );
-  }
-
-  Widget _buildUpdateTimeInfo(
-    DateTime localTime,
-    DateTime? lastUploadTime,
-    ThemeData theme,
-    L10n l10n,
-  ) {
-    Widget buildTimeRow(
-      String label,
-      String time,
-      ThemeData theme,
-    ) {
-      return Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(label, style: theme.textTheme.bodyMedium),
-          ),
-          Text(time, style: theme.textTheme.bodyMedium),
-        ],
-      );
-    }
-
-    final dateFormatter = DateFormat('yyyy-MM-dd HH:mm:ss');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildTimeRow(l10n.bookSyncStatusLocalUpdateTime,
-            dateFormatter.format(localTime), theme),
-        const SizedBox(height: 5),
-        buildTimeRow(
-            l10n.bookSyncStatusLastSyncTime,
-            lastUploadTime != null
-                ? dateFormatter.format(lastUploadTime)
-                : l10n.bookSyncStatusNoSyncYet,
-            theme),
       ],
     );
   }
@@ -337,9 +277,9 @@ class SyncStatusBottomSheet extends ConsumerWidget {
                   if (isSyncing) {
                     AnxToast.show(l10n.webdavSyncing);
                   } else {
-                    ref.read(syncProvider.notifier).syncData(
-                        SyncDirection.both, ref,
-                        trigger: SyncTrigger.manual);
+                    ref
+                        .read(syncProvider.notifier)
+                        .syncData(ref, trigger: SyncTrigger.manual);
                   }
                 },
               ),

@@ -59,17 +59,16 @@ void main() {
             'refreshAnnotations() => renderAnnotations(webViewController)'));
   });
 
-  test('legacy database replacement immediately reruns read-only migration',
-      () {
+  test('legacy migration remains for startup and explicit backup import', () {
     final main = source('lib/main.dart');
-    final manager = source('lib/service/database_sync_manager.dart');
     final provider = source('lib/providers/sync.dart');
     final settings = source('lib/page/settings_page/sync.dart');
 
     expect(main, contains('Future<void> migrateLegacyAnnotations()'));
-    expect(manager, contains('await migrateLegacyAnnotations()'));
-    expect(provider, contains('await migrateLegacyAnnotations()'));
     expect(settings, contains('await migrateLegacyAnnotations()'));
+    expect(provider, isNot(contains('migrateLegacyAnnotations')));
+    expect(
+        File('lib/service/database_sync_manager.dart').existsSync(), isFalse);
     expect(main, isNot(contains('AnnotationProjectionReconciler')));
   });
 }

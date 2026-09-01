@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:anx_reader/dao/database.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/page/home_page/ai_page.dart';
@@ -111,7 +110,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     InitializationCheck.check();
     if (Prefs().webdavStatus) {
       await Sync().init();
-      await Sync().syncData(SyncDirection.both, ref, trigger: SyncTrigger.auto);
+      await Sync().syncData(ref, trigger: SyncTrigger.auto);
     }
     loadDefaultFont();
 

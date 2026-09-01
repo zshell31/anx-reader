@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/dao/theme.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
@@ -391,9 +390,9 @@ void _showImportDialog(
                       setState(() {
                         finished = true;
                       });
-                      ref.read(syncProvider.notifier).syncData(
-                          SyncDirection.upload, ref,
-                          trigger: SyncTrigger.auto);
+                      ref
+                          .read(syncProvider.notifier)
+                          .syncData(ref, trigger: SyncTrigger.auto);
                     },
                     child: Text(finished
                         ? L10n.of(context).commonOk

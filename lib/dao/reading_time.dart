@@ -1,6 +1,5 @@
 import 'package:anx_reader/dao/base_dao.dart';
 import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/reading_time.dart';
@@ -409,7 +408,7 @@ class ReadingTimeDao extends BaseDao {
       whereArgs: bookIds,
     );
 
-    Sync().syncData(SyncDirection.both, null, trigger: SyncTrigger.auto);
+    Sync().syncData(null, trigger: SyncTrigger.auto);
   }
 
   Future<List<Map<String, dynamic>>> _aggregateByBook({

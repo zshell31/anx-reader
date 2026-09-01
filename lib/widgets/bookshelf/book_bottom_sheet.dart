@@ -9,7 +9,6 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/book_list.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/providers/sync_status.dart';
 import 'package:anx_reader/service/convert_to_epub/txt/convert_from_txt.dart';
 import 'package:anx_reader/service/md5_service.dart';
@@ -258,7 +257,7 @@ class BookBottomSheet extends ConsumerWidget {
         if (context.mounted) Navigator.pop(context);
 
         if (Prefs().webdavStatus) {
-          ref.read(syncProvider.notifier).syncData(SyncDirection.upload, ref);
+          ref.read(syncProvider.notifier).syncData(ref);
         }
       } catch (e) {
         AnxToast.show(

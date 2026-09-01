@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/dao/reading_time.dart';
 import 'package:anx_reader/enums/hint_key.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
@@ -209,8 +208,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                   setState(() {
                     widget.book.coverPath = newPath;
                     bookDao.updateBook(widget.book);
-                    Sync().syncData(SyncDirection.upload, ref,
-                        trigger: SyncTrigger.auto);
+                    Sync().syncData(ref, trigger: SyncTrigger.auto);
                     ref.read(bookListProvider.notifier).refresh();
                   });
                 },
@@ -335,8 +333,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                     setState(() {
                       isEditing = false;
                       bookDao.updateBook(widget.book);
-                      Sync().syncData(SyncDirection.upload, ref,
-                          trigger: SyncTrigger.manual);
+                      Sync().syncData(ref, trigger: SyncTrigger.manual);
                       ref.read(bookListProvider.notifier).refresh();
                     });
                   },

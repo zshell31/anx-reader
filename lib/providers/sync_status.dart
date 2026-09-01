@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/sync_status.dart';
 import 'package:anx_reader/providers/sync.dart';
@@ -30,35 +29,13 @@ class SyncStatus extends _$SyncStatus {
     final nonExistent = allBooksInBookShelfIds
         .where((e) => !localFiles.contains(e) && !remoteFiles.contains(e))
         .toList();
-    final webdavInfo = ref.read(syncProvider);
-
-    final isSyncing = ref.read(syncProvider.select((value) => value.isSyncing));
-
-    List<int> downloading = isSyncing &&
-            webdavInfo.direction == SyncDirection.download &&
-            !webdavInfo.fileName.endsWith('.db')
-        ? [
-            allBooksInBookShelf
-                .firstWhere((e) => e.filePath.contains(webdavInfo.fileName))
-                .id
-          ]
-        : [];
-    List<int> uploading = isSyncing &&
-            webdavInfo.direction == SyncDirection.upload &&
-            !webdavInfo.fileName.endsWith('.db')
-        ? [
-            allBooksInBookShelf
-                .firstWhere((e) => e.filePath.contains(webdavInfo.fileName))
-                .id
-          ]
-        : [];
     return SyncStatusModel(
       localOnly: localOnly,
       remoteOnly: remoteOnly,
       both: both,
       nonExistent: nonExistent,
-      downloading: downloading,
-      uploading: uploading,
+      downloading: const [],
+      uploading: const [],
     );
   }
 
@@ -72,8 +49,8 @@ class SyncStatus extends _$SyncStatus {
           await ref.read(syncProvider.notifier).listRemoteBookFiles();
       final remoteFilesIds = books
           .map((e) {
-            final filePath = e.filePath.split('/').last;
-            final isExist = remoteFiles.contains(filePath);
+            final isExist =
+                e.md5 != null && remoteFiles.contains(e.md5!.toLowerCase());
             return isExist ? e.id : null;
           })
           .whereType<int>()

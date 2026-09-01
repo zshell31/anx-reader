@@ -5,7 +5,6 @@ import 'package:anx_reader/utils/platform_utils.dart';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/database.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/window_info.dart';
@@ -192,7 +191,7 @@ class _MyAppState extends ConsumerState<MyApp>
       if (Prefs().webdavStatus) {
         ref
             .read(syncProvider.notifier)
-            .syncData(SyncDirection.both, ref, trigger: SyncTrigger.auto);
+            .syncData(ref, trigger: SyncTrigger.auto);
       }
     } else if (state == AppLifecycleState.resumed) {
       unawaited(annotationSyncRuntime.onResume());

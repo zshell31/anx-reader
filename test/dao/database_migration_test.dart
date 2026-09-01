@@ -26,7 +26,7 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('production migration preserves v7 data and enforces v8 shared IDs',
+  test('production migration preserves v7 data and adds v9 sync mappings',
       () async {
     final version7 = await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
@@ -67,13 +67,13 @@ void main() {
     expect(await version7.getVersion(), 7);
     await version7.close();
 
-    var version8 = await databaseFactoryFfi.openDatabase(path,
+    var version9 = await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
             version: currentDbVersion,
             onUpgrade: DBHelper().onUpgradeDatabase));
-    expect(await version8.getVersion(), 8);
+    expect(await version9.getVersion(), currentDbVersion);
 
-    final after = (await version8.query('tb_notes', where: 'id = 41')).single;
+    final after = (await version9.query('tb_notes', where: 'id = 41')).single;
     for (final column in [
       'id',
       'book_id',
@@ -90,15 +90,15 @@ void main() {
     }
     expect(after['shared_annotation_id'], isNull);
     expect(
-        (await version8.rawQuery('PRAGMA table_info(tb_notes)'))
+        (await version9.rawQuery('PRAGMA table_info(tb_notes)'))
             .map((row) => row['name']),
         contains('shared_annotation_id'));
-    expect(await version8.query('migration_sentinel'), [
+    expect(await version9.query('migration_sentinel'), [
       {'id': 1, 'value': 'survives'}
     ]);
 
     Future<int> insertNote(int id, String? sharedId) =>
-        version8.insert('tb_notes', {
+        version9.insert('tb_notes', {
           'id': id,
           'book_id': 7,
           'content': 'note $id',
@@ -112,22 +112,29 @@ void main() {
     await expectLater(
         insertNote(46, 'shared-a'), throwsA(isA<DatabaseException>()));
 
-    final indexes = await version8.rawQuery(
+    final indexes = await version9.rawQuery(
         "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
         ['idx_tb_notes_shared_annotation_id']);
     expect(indexes, hasLength(1));
     expect(indexes.single['sql'],
         contains('WHERE shared_annotation_id IS NOT NULL'));
-    await version8.close();
+    for (final table in ['sync_group_ids', 'sync_tag_ids', 'sync_theme_ids']) {
+      expect(
+          await version9.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+              [table]),
+          hasLength(1));
+    }
+    await version9.close();
 
-    version8 = await databaseFactoryFfi.openDatabase(path,
+    version9 = await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
             version: currentDbVersion,
             onUpgrade: DBHelper().onUpgradeDatabase));
-    expect(await version8.getVersion(), 8);
-    expect(await version8.query('tb_notes'), hasLength(5));
-    expect((await version8.query('migration_sentinel')).single['value'],
+    expect(await version9.getVersion(), currentDbVersion);
+    expect(await version9.query('tb_notes'), hasLength(5));
+    expect((await version9.query('migration_sentinel')).single['value'],
         'survives');
-    await version8.close();
+    await version9.close();
   });
 }

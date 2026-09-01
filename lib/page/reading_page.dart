@@ -6,7 +6,6 @@ import 'package:anx_reader/dao/reading_time.dart';
 import 'package:anx_reader/dao/theme.dart';
 import 'package:anx_reader/enums/ai_panel_position.dart';
 import 'package:anx_reader/enums/ai_chat_display_mode.dart';
-import 'package:anx_reader/enums/sync_direction.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
@@ -158,7 +157,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
       annotationSyncRuntime.closeBook(
           annotationFingerprint, _annotationRefresh);
     }
-    Sync().syncData(SyncDirection.upload, ref, trigger: SyncTrigger.auto);
+    Sync().syncData(ref, trigger: SyncTrigger.auto);
     _readTimeWatch.stop();
     _awakeTimer?.cancel();
     WakelockPlus.disable();

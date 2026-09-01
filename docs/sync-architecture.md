@@ -52,6 +52,6 @@ Startup and resume perform discovery/pull followed by outbox flush. Connectivity
 
 Outbox rows survive process death. Interrupted `syncing` metadata is recovered to pending on database open. Malformed remote documents produce observable errors and are not blindly overwritten.
 
-## Legacy compatibility during migration
+## Retired legacy synchronization
 
-The old path uploads/downloads `database8.db`, chooses direction from database modification times, replaces the live database, and derives file deletion from the local `tb_books` projection. It remains temporarily present only until replacement domains are complete. Old remote database files will then be ignored and left untouched for rollback/recovery; new clients will not update them.
+Normal synchronization no longer uploads or downloads a database snapshot, chooses a direction from modification times, replaces the live database, or deletes remote files from the local `tb_books` projection. Existing remote database files are ignored and left untouched for rollback/recovery. Explicit ZIP backup import/export remains a separate user-controlled local operation.

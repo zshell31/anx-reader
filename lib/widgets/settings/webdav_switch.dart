@@ -24,7 +24,7 @@ AbstractSettingsTile webdavSwitch(
           });
         } else {
           Sync().init();
-          chooseDirection(ref);
+          syncNow(ref);
         }
       }
       await annotationSyncRuntime.reconfigure();

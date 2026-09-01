@@ -8,7 +8,6 @@ import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/enums/sync_protocol.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
-import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
@@ -91,7 +90,7 @@ class _SyncSettingState extends ConsumerState<SyncSetting> {
                 // value: Text(Prefs().syncDirection),
                 enabled: Prefs().webdavStatus,
                 onPressed: (context) {
-                  chooseDirection(ref);
+                  syncNow(ref);
                 }),
             SettingsTile.switchTile(
                 title: Text(L10n.of(context).webdavOnlyWifi),
@@ -121,12 +120,6 @@ class _SyncSettingState extends ConsumerState<SyncSetting> {
                     Prefs().autoSync = value;
                   });
                 }),
-            SettingsTile.navigation(
-                title: Text(L10n.of(context).restoreBackup),
-                leading: const Icon(Icons.restore),
-                onPressed: (context) {
-                  ref.read(syncProvider.notifier).showBackupManagementDialog();
-                })
           ],
         ),
         SettingsSection(

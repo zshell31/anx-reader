@@ -17,7 +17,7 @@
 | 3. Library assets | completed | Added immutable MD5-addressed upload/download, verification, path-independent binding and deletion safety. |
 | 4. Reading activity | completed | Added bounded immutable session-event documents, union merge, deterministic legacy import and statistics projection. |
 | 5. Groups, tags, themes | completed | Added UUID records/mappings, explicit relations, tombstones, portable theme projection and mutation hooks. |
-| 6. Retire database sync | not_started | Remove direction choice and whole-database/file sync from normal behavior. |
+| 6. Retire database sync | completed | Directionless shared-domain sync is the only normal path; whole-database replacement and projection-driven deletion are removed. |
 | 7. Automatic integration and diagnostics | not_started | Lifecycle orchestration, coalescing, summaries and privacy-safe logs. |
 | 8. Documentation and validation | not_started | Refresh all sync docs and complete end-to-end validation. |
 
@@ -71,6 +71,7 @@
 - Milestone 3: added streaming SyncClient asset transport, partial download verification, deterministic local binding, import/tombstone publication hooks and catalog-driven asset processing before the legacy fallback.
 - Milestone 4: added reading-activity protocol/repository/coordinator, UUID session recording on reader close, UUIDv5 legacy aggregate import and `tb_reading_time` replacement projection.
 - Milestone 5: added organization protocols/repository/coordinators, v9 mapping tables, UUIDv5 legacy bootstrap, projections to groups/tag sentinel rows/themes, and immediate DAO/provider mutation hooks.
+- Milestone 6: replaced the normal sync provider with a directionless shared-domain/assets/cache pipeline, removed database timestamp direction selection and replacement, removed projection-driven remote deletion, and retained WebDAV configuration, manual **Sync now**, local asset release/download, and explicit ZIP backup import/export.
 
 ## Tests by milestone
 
@@ -80,17 +81,17 @@
 - Milestone 3: catalog/asset Flutter tests passed (10 tests); targeted analyzer found no migration errors (three existing `use_build_context_synchronously` info diagnostics remain in touched UI/service files); Dart format passed.
 - Milestone 4: reading-activity/catalog Flutter tests passed (11 tests); targeted analyzer found only two pre-existing `use_build_context_synchronously` info diagnostics in `reading_page.dart`; Dart format passed.
 - Milestone 5: organization/shared-state/library tests passed (29 tests in the combined regression pass); targeted analyzer passed with no issues; Dart format passed.
+- Milestone 6: database migration, runtime-boundary, coordinator, catalog/asset, reading-activity, organization and retirement tests passed; targeted analyzer reported only existing `use_build_context_synchronously` info diagnostics in touched UI/service files; Dart format and `git diff --check` passed. The broader sync suite had 228 passing tests and one unrelated pre-existing JavaScript-selection source-contract failure in `annotation_mutation_boundary_test.dart`.
 
 ## Known limitations / unresolved issues
 
-- Until Milestone 6, legacy database sync remains callable.
 - Existing books without a valid fingerprint cannot be published until their fingerprint is calculated.
 - Remote collection discovery must be added to the general runtime; current annotation discovery is based mainly on known fingerprints.
 - Cover sharing is deliberately omitted because covers can be regenerated from verified book bytes. Immutable assets are retained after tombstones; no garbage collection is implemented.
 
 ## Exact next step
 
-Commit Milestone 5, then mark Milestone 6 in progress and remove whole-database direction selection/replacement and unsafe legacy `syncFiles` from normal synchronization.
+Commit Milestone 6, then implement Milestone 7 lifecycle coalescing, status summaries and privacy-safe diagnostics around the directionless runtime.
 
 ## Milestone commits
 
@@ -99,3 +100,4 @@ Commit Milestone 5, then mark Milestone 6 in progress and remove whole-database 
 - Milestone 2: `dc3b70c4 feat(sync): add shared library and reading state`.
 - Milestone 3: `248be427 feat(sync): synchronize content-addressed library assets`.
 - Milestone 4: `0b8b33b2 feat(sync): synchronize reading activity events`.
+- Milestone 5: `90cf6ddc feat(sync): synchronize library organization and themes`.

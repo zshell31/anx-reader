@@ -50,7 +50,11 @@ Every new JSON document has an integer `schemaVersion` and explicit identity fie
 
 Startup and resume perform discovery/pull followed by outbox flush. Connectivity restoration retries pending work while respecting the Wi-Fi-only preference. Local shared mutations update canonical state and outbox atomically, update the UI projection immediately, and schedule asynchronous sync. Book open refreshes relevant per-book state; book close performs a best-effort flush. Manual **Sync now** is directionless.
 
+Lifecycle-wide runs are single-flight. Triggers arriving during a run request one follow-up pass, so startup/resume/connectivity/manual triggers do not fan out duplicate collection scans. Depth-one WebDAV `PROPFIND` discovers validated document IDs in each flat collection and in the bounded reading-activity/book-tag subcollections; invalid or unexpectedly nested entries are ignored. This allows a fresh device to discover a remote catalog before it has local fingerprints.
+
 Outbox rows survive process death. Interrupted `syncing` metadata is recovered to pending on database open. Malformed remote documents produce observable errors and are not blindly overwritten.
+
+Diagnostics aggregate every domain coordinator into synced, syncing, pending/offline or error state and report only counts, completion time and run duration. Logs do not include document IDs, fingerprints, paths, credentials or document content.
 
 ## Retired legacy synchronization
 

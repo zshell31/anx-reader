@@ -73,12 +73,17 @@ class OrganizationSyncService {
         onDocumentChanged: (id) => repository.projectCanonical(domain, id),
       );
 
-  Future<void> syncKnown(SharedStateDatabase state) async {
+  Future<void> syncKnown(
+    SharedStateDatabase state, {
+    Map<String, Set<String>> remoteIdsByDomain = const {},
+  }) async {
     final work = <Future<void>>[];
     for (final coordinator in coordinators) {
       work.add(coordinator.syncDirtyAnnotations());
-      work.add(coordinator
-          .pullBooks(await state.documentIds(coordinator.syncDomain)));
+      work.add(coordinator.pullBooks({
+        ...await state.documentIds(coordinator.syncDomain),
+        ...remoteIdsByDomain[coordinator.syncDomain] ?? const <String>{},
+      }));
     }
     await Future.wait(work);
   }

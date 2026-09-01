@@ -18,7 +18,7 @@
 | 4. Reading activity | completed | Added bounded immutable session-event documents, union merge, deterministic legacy import and statistics projection. |
 | 5. Groups, tags, themes | completed | Added UUID records/mappings, explicit relations, tombstones, portable theme projection and mutation hooks. |
 | 6. Retire database sync | completed | Directionless shared-domain sync is the only normal path; whole-database replacement and projection-driven deletion are removed. |
-| 7. Automatic integration and diagnostics | not_started | Lifecycle orchestration, coalescing, summaries and privacy-safe logs. |
+| 7. Automatic integration and diagnostics | completed | Added collection discovery, lifecycle run coalescing, aggregate summaries and privacy-safe diagnostics. |
 | 8. Documentation and validation | not_started | Refresh all sync docs and complete end-to-end validation. |
 
 ## Current audit (baseline database version 8; current version 9)
@@ -72,6 +72,7 @@
 - Milestone 4: added reading-activity protocol/repository/coordinator, UUID session recording on reader close, UUIDv5 legacy aggregate import and `tb_reading_time` replacement projection.
 - Milestone 5: added organization protocols/repository/coordinators, v9 mapping tables, UUIDv5 legacy bootstrap, projections to groups/tag sentinel rows/themes, and immediate DAO/provider mutation hooks.
 - Milestone 6: replaced the normal sync provider with a directionless shared-domain/assets/cache pipeline, removed database timestamp direction selection and replacement, removed projection-driven remote deletion, and retained WebDAV configuration, manual **Sync now**, local asset release/download, and explicit ZIP backup import/export.
+- Milestone 7: added depth-one WebDAV collection discovery for flat and nested domains, unioned remote identities into every coordinator, coalesced overlapping lifecycle triggers with one follow-up pass, aggregated all domain statuses/counts, and exposed count-only diagnostics without document IDs, paths, credentials or content.
 
 ## Tests by milestone
 
@@ -82,16 +83,16 @@
 - Milestone 4: reading-activity/catalog Flutter tests passed (11 tests); targeted analyzer found only two pre-existing `use_build_context_synchronously` info diagnostics in `reading_page.dart`; Dart format passed.
 - Milestone 5: organization/shared-state/library tests passed (29 tests in the combined regression pass); targeted analyzer passed with no issues; Dart format passed.
 - Milestone 6: database migration, runtime-boundary, coordinator, catalog/asset, reading-activity, organization and retirement tests passed; targeted analyzer reported only existing `use_build_context_synchronously` info diagnostics in touched UI/service files; Dart format and `git diff --check` passed. The broader sync suite had 228 passing tests and one unrelated pre-existing JavaScript-selection source-contract failure in `annotation_mutation_boundary_test.dart`.
+- Milestone 7: automatic-integration, WebDAV transport, coordinator, catalog/asset, reading-activity, organization, runtime-boundary, retirement and migration tests passed (92 tests); targeted analyzer reported only the existing settings-page `use_build_context_synchronously` info diagnostic; Dart format and `git diff --check` passed.
 
 ## Known limitations / unresolved issues
 
 - Existing books without a valid fingerprint cannot be published until their fingerprint is calculated.
-- Remote collection discovery must be added to the general runtime; current annotation discovery is based mainly on known fingerprints.
 - Cover sharing is deliberately omitted because covers can be regenerated from verified book bytes. Immutable assets are retained after tombstones; no garbage collection is implemented.
 
 ## Exact next step
 
-Commit Milestone 6, then implement Milestone 7 lifecycle coalescing, status summaries and privacy-safe diagnostics around the directionless runtime.
+Commit Milestone 7, then complete Milestone 8 documentation and end-to-end validation without merging into `develop`.
 
 ## Milestone commits
 
@@ -101,3 +102,4 @@ Commit Milestone 6, then implement Milestone 7 lifecycle coalescing, status summ
 - Milestone 3: `248be427 feat(sync): synchronize content-addressed library assets`.
 - Milestone 4: `0b8b33b2 feat(sync): synchronize reading activity events`.
 - Milestone 5: `90cf6ddc feat(sync): synchronize library organization and themes`.
+- Milestone 6: `d47db1fc refactor(sync): retire whole-database synchronization`.

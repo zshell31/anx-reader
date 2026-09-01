@@ -440,10 +440,10 @@ void showWebdavDialog(BuildContext context) {
           StreamBuilder<void>(
             stream: annotationSyncRuntime.statusChanges,
             builder: (context, _) => FutureBuilder(
-              future: annotationSyncRuntime.status,
+              future: annotationSyncRuntime.summary,
               builder: (context, snapshot) {
-                final status = snapshot.data;
-                final label = switch (status) {
+                final summary = snapshot.data;
+                final label = switch (summary?.status) {
                   AnnotationSyncStatus.syncing => 'syncing',
                   AnnotationSyncStatus.pendingOffline => 'pending/offline',
                   AnnotationSyncStatus.error => 'error',
@@ -451,7 +451,10 @@ void showWebdavDialog(BuildContext context) {
                 };
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text('Annotations: $label'),
+                  child: Text('Shared data: $label'
+                      '${summary == null ? '' : ' · pending ${summary.pendingDocumentCount}'
+                          ' · failed ${summary.failedDocumentCount}'
+                          ' · discovered ${summary.discoveredDocumentCount}'}'),
                 );
               },
             ),

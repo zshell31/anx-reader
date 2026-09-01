@@ -43,6 +43,43 @@ ConditionalWebDavTransport transport(FakeExecutor executor,
         executor: executor);
 
 void main() {
+  group('collection discovery', () {
+    test('PROPFIND returns validated direct children only', () async {
+      const xml = '''<?xml version="1.0"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response><D:href>/base/shared/annotations/</D:href>
+    <D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
+  </D:response>
+  <D:response><D:href>/base/shared/annotations/abc.json</D:href>
+    <D:propstat><D:prop><D:resourcetype/></D:prop></D:propstat>
+  </D:response>
+  <D:response><D:href>/base/shared/annotations/books/</D:href>
+    <D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
+  </D:response>
+  <D:response><D:href>/base/shared/annotations/books/nested.json</D:href></D:response>
+  <D:response><D:href>/outside/secret.json</D:href></D:response>
+</D:multistatus>''';
+      final fake = FakeExecutor([response(207, body: xml)]);
+
+      final entries = await transport(fake).list(['annotations']);
+
+      expect(fake.calls.single.$1, 'PROPFIND');
+      expect(fake.calls.single.$3['Depth'], '1');
+      expect(entries.map((entry) => (entry.name, entry.isCollection)),
+          [('abc.json', false), ('books', true)]);
+    });
+
+    test('missing collection is empty and malformed XML fails safely',
+        () async {
+      expect(await transport(FakeExecutor([response(404)])).list(['missing']),
+          isEmpty);
+      await expectLater(
+          transport(FakeExecutor([response(207, body: '<broken>')]))
+              .list(['broken']),
+          throwsA(isA<WebDavTransportException>()));
+    });
+  });
+
   group('GET', () {
     test('returns body and strong ETag from the same 200 response', () async {
       final fake = FakeExecutor([response(200, etag: '"v1"', body: '{"a":1}')]);

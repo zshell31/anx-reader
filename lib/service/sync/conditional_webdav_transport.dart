@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:dio/dio.dart';
+import 'package:xml/xml.dart';
 
 class WebDavTransportException implements Exception {
   final String message;
@@ -58,6 +59,12 @@ class WebDavLock {
   final Duration? timeout;
   final bool created;
   const WebDavLock(this.token, this.timeout, {required this.created});
+}
+
+class WebDavCollectionEntry {
+  final String name;
+  final bool isCollection;
+  const WebDavCollectionEntry(this.name, {required this.isCollection});
 }
 
 abstract interface class AnnotationWebDavTransport {
@@ -124,12 +131,7 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
       ...remoteRoot.split('/').where((x) => x.isNotEmpty),
       ...segments
     ];
-    if (all.any((x) =>
-        x.isEmpty ||
-        x == '.' ||
-        x == '..' ||
-        x.contains('/') ||
-        x.contains(r'\'))) {
+    if (all.any((x) => !_safeSegment(x))) {
       throw const WebDavTransportException('unsafe WebDAV path segment');
     }
     return baseUri.replace(pathSegments: [
@@ -137,6 +139,13 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
       ...all
     ]);
   }
+
+  bool _safeSegment(String value) =>
+      value.isNotEmpty &&
+      value != '.' &&
+      value != '..' &&
+      !value.contains('/') &&
+      !value.contains(r'\');
 
   @override
   Future<WebDavObject?> get(List<String> path) async {
@@ -147,6 +156,67 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
     }
     final etag = _strongEtag(response.headers.value('etag'));
     return WebDavObject(Uint8List.fromList(response.data!), etag);
+  }
+
+  /// Lists direct children only. A missing collection is treated as empty.
+  Future<List<WebDavCollectionEntry>> list(List<String> path) async {
+    final collectionUri = objectUri(path);
+    final response = await _execute('PROPFIND', collectionUri,
+        headers: {
+          ..._headers,
+          'Depth': '1',
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+        body: utf8.encode(_propfindBody),
+        sensitive: true);
+    if (response.statusCode == 404) return const [];
+    if (response.statusCode != 207 || response.data == null) {
+      throw WebDavTransportException('PROPFIND failed',
+          status: response.statusCode);
+    }
+    try {
+      final document = XmlDocument.parse(utf8.decode(response.data!));
+      final parentSegments = collectionUri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .toList(growable: false);
+      final entries = <String, WebDavCollectionEntry>{};
+      for (final item in document.descendants.whereType<XmlElement>().where(
+            (element) => element.name.local == 'response',
+          )) {
+        final hrefs = item.descendants.whereType<XmlElement>().where(
+              (element) => element.name.local == 'href',
+            );
+        if (hrefs.isEmpty) continue;
+        final href = hrefs.first.innerText.trim();
+        if (href.isEmpty) continue;
+        final childSegments = Uri.parse(href)
+            .pathSegments
+            .where((segment) => segment.isNotEmpty)
+            .toList(growable: false);
+        if (childSegments.length != parentSegments.length + 1) continue;
+        var sameParent = true;
+        for (var index = 0; index < parentSegments.length; index++) {
+          if (childSegments[index] != parentSegments[index]) {
+            sameParent = false;
+            break;
+          }
+        }
+        if (!sameParent) continue;
+        final name = childSegments.last;
+        if (!_safeSegment(name)) continue;
+        final isCollection = item.descendants
+            .whereType<XmlElement>()
+            .any((element) => element.name.local == 'collection');
+        entries[name] = WebDavCollectionEntry(name, isCollection: isCollection);
+      }
+      final result = entries.values.toList()
+        ..sort((left, right) => left.name.compareTo(right.name));
+      return result;
+    } on XmlParserException {
+      throw const WebDavTransportException('invalid PROPFIND response');
+    } on FormatException {
+      throw const WebDavTransportException('invalid PROPFIND response');
+    }
   }
 
   @override
@@ -293,3 +363,8 @@ const _exclusiveWriteLockBody = '''<?xml version="1.0" encoding="utf-8"?>
   <D:lockscope><D:exclusive/></D:lockscope>
   <D:locktype><D:write/></D:locktype>
 </D:lockinfo>''';
+
+const _propfindBody = '''<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop><D:resourcetype/></D:prop>
+</D:propfind>''';

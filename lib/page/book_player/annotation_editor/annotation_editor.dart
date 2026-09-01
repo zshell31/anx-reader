@@ -289,17 +289,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                     ),
                     if (draft.selection.lookupContext?.trim().isNotEmpty ==
                         true)
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: Text(l10n.annotationEditorContext),
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: SelectableText(
-                              draft.selection.lookupContext!.trim(),
-                            ),
-                          ),
-                        ],
+                      _ContextSection(
+                        title: l10n.annotationEditorContext,
+                        text: draft.selection.lookupContext!.trim(),
                       ),
                     const SizedBox(height: 12),
                     Text(
@@ -469,6 +461,43 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
 }
 
 enum _UnsavedAction { save, discard, cancel }
+
+class _ContextSection extends StatefulWidget {
+  final String title;
+  final String text;
+
+  const _ContextSection({required this.title, required this.text});
+
+  @override
+  State<_ContextSection> createState() => _ContextSectionState();
+}
+
+class _ContextSectionState extends State<_ContextSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        initiallyExpanded: false,
+        onExpansionChanged: (expanded) {
+          setState(() => _expanded = expanded);
+        },
+        title: Text(widget.title),
+        trailing: AnimatedRotation(
+          turns: _expanded ? 0.25 : 0,
+          duration: Prefs().eInkMode
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
+          child: const Icon(Icons.chevron_right),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectableText(widget.text),
+          ),
+        ],
+      );
+}
 
 class _ProviderButton extends StatelessWidget {
   final AnnotationEditorProvider provider;

@@ -1,13 +1,35 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { SelectionGestureOwnership } from '../src/selection-gesture.mjs'
+import {
+    pointIsInsideSelectionRects,
+    SelectionGestureOwnership,
+} from '../src/selection-gesture.mjs'
 import {
     SelectionSessionMachine,
     SelectionSessionState,
 } from '../src/selection-session.mjs'
 
 const point = { pointerId: 7, clientX: 24, clientY: 80 }
+
+test('selection hit slop accepts nearby taps without changing its rects', () => {
+    const rects = [{ left: 20, right: 80, top: 40, bottom: 60 }]
+
+    assert.equal(pointIsInsideSelectionRects(rects, 50, 50), true)
+    assert.equal(pointIsInsideSelectionRects(rects, 15, 50), false)
+    assert.equal(pointIsInsideSelectionRects(rects, 15, 50, 10), true)
+    assert.deepEqual(rects, [{ left: 20, right: 80, top: 40, bottom: 60 }])
+})
+
+test('selection hit slop remains local to each rendered line', () => {
+    const rects = [
+        { left: 20, right: 80, top: 40, bottom: 55 },
+        { left: 20, right: 60, top: 80, bottom: 95 },
+    ]
+
+    assert.equal(pointIsInsideSelectionRects(rects, 70, 67, 10), false)
+    assert.equal(pointIsInsideSelectionRects(rects, 65, 85, 10), true)
+})
 
 const createHarness = ({ actionsVisible = false } = {}) => {
     const doc = {}

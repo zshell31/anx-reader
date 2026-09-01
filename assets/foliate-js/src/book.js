@@ -4,7 +4,10 @@ console.log('AnxUA', navigator.userAgent)
 import './view.js'
 import { AutoPageSelectionCoordinator } from './auto-page-selection.mjs'
 import { SelectionSessionMachine, SelectionSessionState } from './selection-session.mjs'
-import { SelectionGestureOwnership } from './selection-gesture.mjs'
+import {
+  pointIsInsideSelectionRects,
+  SelectionGestureOwnership,
+} from './selection-gesture.mjs'
 import { buildRangeSentenceContext } from './sentence-context.mjs'
 import {
   annotationForRemoval,
@@ -138,8 +141,9 @@ const getRangeKey = (coordinator, range) => {
     + `-${nodeId(range.endContainer)}:${range.endOffset}`;
 };
 
-const pointIsInsideRange = (range, x, y) => Array.from(range.getClientRects())
-  .some(rect => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+const selectionTapHitSlop = 10;
+const pointIsInsideRange = (range, x, y, hitSlop = 0) =>
+  pointIsInsideSelectionRects(range.getClientRects(), x, y, hitSlop);
 
 const publishSelection = (view, doc, index, range) => {
   const coordinator = getSelectionCoordinator(view);
@@ -277,7 +281,9 @@ const setSelectionHandler = (view, doc, index) => {
     }
 
     const rangeKey = getRangeKey(coordinator, range);
-    const inside = pointIsInsideRange(range, e.clientX, e.clientY);
+    const insideExact = pointIsInsideRange(range, e.clientX, e.clientY);
+    const inside = pointIsInsideRange(
+      range, e.clientX, e.clientY, selectionTapHitSlop);
     coordinator.pendingPointer = {
       doc,
       pointerId: e.pointerId,
@@ -288,7 +294,9 @@ const setSelectionHandler = (view, doc, index) => {
       collapsedDuringTap: false,
       cancelled: false,
     };
-    if (inside) e.preventDefault();
+    // Preserve native handle drags in the invisible outer hit area. Exact
+    // text hits still suppress Android's eager selection collapse.
+    if (insideExact) e.preventDefault();
   }, true);
 
   doc.addEventListener('pointercancel', e => {

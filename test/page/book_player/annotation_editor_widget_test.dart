@@ -89,6 +89,26 @@ void main() {
     );
   });
 
+  testWidgets('context uses right and down disclosure arrows', (tester) async {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    final contextTile = find.ancestor(
+      of: find.text('Context'),
+      matching: find.byType(ExpansionTile),
+    );
+    final disclosure = find.descendant(
+      of: contextTile,
+      matching: find.byType(AnimatedRotation),
+    );
+    expect(tester.widget<AnimatedRotation>(disclosure).turns, 0);
+
+    await tester.tap(find.text('Context'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedRotation>(disclosure).turns, 0.25);
+  });
+
   testWidgets('bottom actions stay visible while editor body scrolls',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 640));

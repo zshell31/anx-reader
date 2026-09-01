@@ -77,3 +77,14 @@ export class SelectionGestureOwnership {
             && this.#gesture.pointerId === pointerId
     }
 }
+
+export const pointIsInsideSelectionRects = (
+    rects,
+    clientX,
+    clientY,
+    hitSlop = 0,
+) => Array.from(rects).some(rect =>
+    clientX >= rect.left - hitSlop
+    && clientX <= rect.right + hitSlop
+    && clientY >= rect.top - hitSlop
+    && clientY <= rect.bottom + hitSlop)

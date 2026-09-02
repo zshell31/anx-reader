@@ -14,6 +14,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/read_theme.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
+import 'package:anx_reader/page/book_player/pdf_player.dart';
 import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/book_notes.dart';
@@ -68,6 +69,7 @@ class ReadingPage extends ConsumerStatefulWidget {
 final GlobalKey<ReadingPageState> readingPageKey =
     GlobalKey<ReadingPageState>();
 final epubPlayerKey = GlobalKey<EpubPlayerState>();
+final pdfPlayerKey = GlobalKey<PdfPlayerState>();
 
 class ReadingPageState extends ConsumerState<ReadingPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
@@ -91,6 +93,8 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   bool bookmarkExists = false;
   String? _annotationFingerprint;
   late final void Function() _annotationRefresh;
+
+  bool get _isPdf => p.extension(_book.filePath).toLowerCase() == '.pdf';
 
   late final FocusNode _readerFocusNode;
   // late final VolumeKeyBoard _volumeKeyBoard;
@@ -198,6 +202,30 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     }
   }
 
+  void _nextPage() {
+    if (_isPdf) {
+      pdfPlayerKey.currentState?.nextPage();
+    } else {
+      epubPlayerKey.currentState?.nextPage();
+    }
+  }
+
+  void _previousPage() {
+    if (_isPdf) {
+      pdfPlayerKey.currentState?.prevPage();
+    } else {
+      epubPlayerKey.currentState?.prevPage();
+    }
+  }
+
+  void _saveReadingProgress() {
+    if (_isPdf) {
+      unawaited(pdfPlayerKey.currentState?.saveReadingProgress());
+    } else {
+      unawaited(epubPlayerKey.currentState?.saveReadingProgress());
+    }
+  }
+
   void _requestReaderFocus() {
     if (bottomBarOffstage && !_readerFocusNode.hasFocus) {
       _readerFocusNode.requestFocus();
@@ -251,14 +279,14 @@ class ReadingPageState extends ConsumerState<ReadingPage>
         logicalKey == LogicalKeyboardKey.arrowDown ||
         logicalKey == LogicalKeyboardKey.pageDown ||
         logicalKey == LogicalKeyboardKey.space) {
-      epubPlayerKey.currentState?.nextPage();
+      _nextPage();
       return KeyEventResult.handled;
     }
 
     if (logicalKey == LogicalKeyboardKey.arrowLeft ||
         logicalKey == LogicalKeyboardKey.arrowUp ||
         logicalKey == LogicalKeyboardKey.pageUp) {
-      epubPlayerKey.currentState?.prevPage();
+      _previousPage();
       return KeyEventResult.handled;
     }
 
@@ -271,21 +299,21 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     if (Prefs().keyboardShortcutTurnPage) {
       final isControlPressed = HardwareKeyboard.instance.isControlPressed;
       if (isControlPressed && logicalKey == LogicalKeyboardKey.bracketLeft) {
-        epubPlayerKey.currentState?.prevPage();
+        _previousPage();
         return KeyEventResult.handled;
       }
       if (isControlPressed && logicalKey == LogicalKeyboardKey.bracketRight) {
-        epubPlayerKey.currentState?.nextPage();
+        _nextPage();
         return KeyEventResult.handled;
       }
       final bool isSimulatedCtrlLeft = event.character == '\u001b';
       final bool isSimulatedCtrlRight = event.character == '\u001d';
       if (isSimulatedCtrlLeft) {
-        epubPlayerKey.currentState?.prevPage();
+        _previousPage();
         return KeyEventResult.handled;
       }
       if (isSimulatedCtrlRight) {
-        epubPlayerKey.currentState?.nextPage();
+        _nextPage();
         return KeyEventResult.handled;
       }
     }
@@ -327,7 +355,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
             state == AppLifecycleState.detached) {
           final elapsedSeconds = _readTimeWatch.elapsed.inSeconds;
           if (elapsedSeconds > 5) {
-            epubPlayerKey.currentState?.saveReadingProgress();
+            _saveReadingProgress();
             final sessionStart = _sessionStart;
             if (sessionStart != null && _book.md5 != null) {
               await annotationSyncRuntime.recordReadingActivity(
@@ -753,43 +781,45 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                   ),
                   actions: [
                     if (EnvVar.enableAIFeature) aiButton,
-                    IconButton(
-                      icon: const Icon(Icons.copy),
-                      tooltip: L10n.of(context).readingPageCopyChapterContent,
-                      onPressed: () async {
-                        try {
-                          var content = await epubPlayerKey.currentState
-                              ?.theChapterContent();
-                          var len = content?.length ?? 0;
-                          if (len > 0) {
-                            await Clipboard.setData(
-                                ClipboardData(text: content!));
-                          }
-                          AnxToast.show(L10n.of(context)
-                              .readingPageCopiedCharacters(len));
-                        } catch (e) {
-                          AnxToast.show(
-                              L10n.of(context).readingPageErrorCopyingContent);
-                        }
-                      },
-                    ),
-                    IconButton(
-                        tooltip: L10n.of(context).readingPageBookmark,
-                        onPressed: () {
-                          if (bookmarkExists) {
-                            final bookmarkId =
-                                epubPlayerKey.currentState!.bookmarkId;
-                            if (bookmarkId != null) {
-                              epubPlayerKey.currentState!
-                                  .removeAnnotation(bookmarkId);
+                    if (!_isPdf)
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        tooltip: L10n.of(context).readingPageCopyChapterContent,
+                        onPressed: () async {
+                          try {
+                            var content = await epubPlayerKey.currentState
+                                ?.theChapterContent();
+                            var len = content?.length ?? 0;
+                            if (len > 0) {
+                              await Clipboard.setData(
+                                  ClipboardData(text: content!));
                             }
-                          } else {
-                            epubPlayerKey.currentState!.addBookmarkHere();
+                            AnxToast.show(L10n.of(context)
+                                .readingPageCopiedCharacters(len));
+                          } catch (e) {
+                            AnxToast.show(L10n.of(context)
+                                .readingPageErrorCopyingContent);
                           }
                         },
-                        icon: bookmarkExists
-                            ? const Icon(Icons.bookmark)
-                            : const Icon(Icons.bookmark_border)),
+                      ),
+                    if (!_isPdf)
+                      IconButton(
+                          tooltip: L10n.of(context).readingPageBookmark,
+                          onPressed: () {
+                            if (bookmarkExists) {
+                              final bookmarkId =
+                                  epubPlayerKey.currentState!.bookmarkId;
+                              if (bookmarkId != null) {
+                                epubPlayerKey.currentState!
+                                    .removeAnnotation(bookmarkId);
+                              }
+                            } else {
+                              epubPlayerKey.currentState!.addBookmarkHere();
+                            }
+                          },
+                          icon: bookmarkExists
+                              ? const Icon(Icons.bookmark)
+                              : const Icon(Icons.bookmark_border)),
                     IconButton(
                       tooltip: L10n.of(context).readingPageBookDetails,
                       icon: const Icon(EvaIcons.more_vertical),
@@ -805,60 +835,62 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                   ],
                 ),
                 const Spacer(),
-                BottomSheet(
-                  onClosing: () {},
-                  enableDrag: false,
-                  builder: (context) => SafeArea(
-                    top: false,
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: StatefulBuilder(
-                        builder: (BuildContext context, StateSetter setState) {
-                          final hasContent = !identical(_currentPage, empty);
-                          return IntrinsicHeight(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (hasContent)
-                                  Expanded(
-                                    child: _currentPage,
+                if (!_isPdf)
+                  BottomSheet(
+                    onClosing: () {},
+                    enableDrag: false,
+                    builder: (context) => SafeArea(
+                      top: false,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: StatefulBuilder(
+                          builder:
+                              (BuildContext context, StateSetter setState) {
+                            final hasContent = !identical(_currentPage, empty);
+                            return IntrinsicHeight(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasContent)
+                                    Expanded(
+                                      child: _currentPage,
+                                    ),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.toc),
+                                        onPressed: tocHandler,
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(EvaIcons.edit),
+                                        onPressed: noteHandler,
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.data_usage),
+                                        onPressed: progressHandler,
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.color_lens),
+                                        onPressed: () {
+                                          styleHandler(setState);
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(EvaIcons.headphones),
+                                        onPressed: ttsHandler,
+                                      ),
+                                    ],
                                   ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.toc),
-                                      onPressed: tocHandler,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(EvaIcons.edit),
-                                      onPressed: noteHandler,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.data_usage),
-                                      onPressed: progressHandler,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.color_lens),
-                                      onPressed: () {
-                                        styleHandler(setState);
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(EvaIcons.headphones),
-                                      onPressed: ttsHandler,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
@@ -879,23 +911,26 @@ class ReadingPageState extends ConsumerState<ReadingPage>
             child: Scaffold(
               key: _scaffoldKey,
               resizeToAvoidBottomInset: false,
-              drawer: PointerInterceptor(
-                child: Drawer(
-                  width: math.min(
-                    MediaQuery.of(context).size.width * 0.8,
-                    420,
-                  ),
-                  child: SafeArea(
-                    child: TocWidget(
-                      epubPlayerKey: epubPlayerKey,
-                      hideAppBarAndBottomBar: showOrHideAppBarAndBottomBar,
-                      closeDrawer: () {
-                        _scaffoldKey.currentState?.closeDrawer();
-                      },
+              drawer: _isPdf
+                  ? null
+                  : PointerInterceptor(
+                      child: Drawer(
+                        width: math.min(
+                          MediaQuery.of(context).size.width * 0.8,
+                          420,
+                        ),
+                        child: SafeArea(
+                          child: TocWidget(
+                            epubPlayerKey: epubPlayerKey,
+                            hideAppBarAndBottomBar:
+                                showOrHideAppBarAndBottomBar,
+                            closeDrawer: () {
+                              _scaffoldKey.currentState?.closeDrawer();
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
               body: Stack(
                 children: [
                   AxisFlex(
@@ -919,16 +954,25 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                             onKeyEvent: _handleReaderKeyEvent,
                             child: Stack(
                               children: [
-                                EpubPlayer(
-                                  key: epubPlayerKey,
-                                  book: _book,
-                                  cfi: widget.cfi,
-                                  showOrHideAppBarAndBottomBar:
-                                      showOrHideAppBarAndBottomBar,
-                                  onLoadEnd: onLoadEnd,
-                                  initialThemes: widget.initialThemes,
-                                  updateParent: updateState,
-                                ),
+                                if (_isPdf)
+                                  PdfPlayer(
+                                    key: pdfPlayerKey,
+                                    book: _book,
+                                    initialPosition: widget.cfi,
+                                    showOrHideAppBarAndBottomBar:
+                                        showOrHideAppBarAndBottomBar,
+                                  )
+                                else
+                                  EpubPlayer(
+                                    key: epubPlayerKey,
+                                    book: _book,
+                                    cfi: widget.cfi,
+                                    showOrHideAppBarAndBottomBar:
+                                        showOrHideAppBarAndBottomBar,
+                                    onLoadEnd: onLoadEnd,
+                                    initialThemes: widget.initialThemes,
+                                    updateParent: updateState,
+                                  ),
                                 if (_isResizingAiChat)
                                   SizedBox.expand(
                                     child: Container(

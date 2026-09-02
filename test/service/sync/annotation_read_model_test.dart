@@ -347,6 +347,31 @@ void main() {
       expect(unsupported.renderingCapability,
           AnnotationCapability.unsupportedTarget);
     });
+
+    test('exposes a supported PDF page and contextual quote target', () {
+      final model = const CanonicalAnnotationReadAdapter()
+          .read(
+            document([
+              annotation('pdf-selection', selectors: [
+                {'type': 'pdf-page', 'page': 7},
+                {
+                  'type': 'text-quote',
+                  'exact': 'selected',
+                  'prefix': 'Before ',
+                  'suffix': ' after.',
+                },
+                {'type': 'future-selector', 'value': 'kept'},
+              ]),
+            ]),
+          )
+          .single;
+
+      expect(model.epubCfi, isNull);
+      expect(model.pdfTarget?.page, 7);
+      expect(model.pdfTarget?.exact, 'selected');
+      expect(model.navigationCapability, AnnotationCapability.available);
+      expect(model.renderingCapability, AnnotationCapability.available);
+    });
   });
 
   group('EPUB CFI semantic helper', () {

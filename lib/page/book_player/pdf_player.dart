@@ -1,11 +1,19 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
+import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
+import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
+import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/current_reading.dart';
+import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
+import 'package:anx_reader/utils/toast/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -32,6 +40,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   late final int _initialPageNumber;
   int _currentPageNumber = 1;
   int _pageCount = 0;
+  int _annotationGeneration = 0;
+  Map<int, List<_PdfRenderedAnnotation>> _renderedAnnotations = const {};
 
   @override
   void initState() {
@@ -69,6 +79,156 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _currentPageNumber = value.pageNumber ??
         _initialPageNumber.clamp(1, _pageCount < 1 ? 1 : _pageCount);
     _publishReadingState();
+    unawaited(refreshAnnotations());
+  }
+
+  Future<void> _openSelectionEditor(
+    PdfTextSelectionDelegate selection,
+    VoidCallback dismissContextMenu,
+  ) async {
+    final ranges = await selection.getSelectedTextRanges();
+    dismissContextMenu();
+    if (!mounted) return;
+    if (ranges.length != 1) {
+      AnxToast.show('Select text on a single PDF page to annotate it.');
+      return;
+    }
+    final range = ranges.single;
+    final target = PdfAnnotationTarget.fromPageText(
+      page: range.pageNumber,
+      pageText: range.pageText.fullText,
+      start: range.start,
+      end: range.end,
+    );
+    final contextText = '${target.prefix}${target.exact}${target.suffix}';
+    final session = SelectionPersistenceSession(
+      SelectionSnapshot(
+        selectedText: target.exact,
+        annotationContext: contextText,
+        lookupContext: contextText,
+        chapter: 'Page ${target.page}',
+        selector: encodePdfReadingPosition(target.page),
+        pdfTarget: target,
+      ),
+    );
+    final outcome = await showAnnotationEditor(
+      context: context,
+      book: widget.book,
+      session: session,
+    );
+    if (outcome == AnnotationEditorOutcome.saved) {
+      await selection.clearTextSelection();
+      await refreshAnnotations();
+    }
+  }
+
+  Widget? _buildContextMenu(
+    BuildContext context,
+    PdfViewerContextMenuBuilderParams params,
+  ) {
+    final items = <ContextMenuButtonItem>[
+      if (params.textSelectionDelegate.isCopyAllowed &&
+          params.textSelectionDelegate.hasSelectedText)
+        ContextMenuButtonItem(
+          onPressed: params.textSelectionDelegate.copyTextSelection,
+          type: ContextMenuButtonType.copy,
+        ),
+      if (params.textSelectionDelegate.hasSelectedText)
+        ContextMenuButtonItem(
+          label: L10n.of(context).annotationEditorNewTitle,
+          onPressed: () => unawaited(_openSelectionEditor(
+            params.textSelectionDelegate,
+            params.dismissContextMenu,
+          )),
+        ),
+      if (params.isTextSelectionEnabled &&
+          !params.textSelectionDelegate.isSelectingAllText)
+        ContextMenuButtonItem(
+          onPressed: params.textSelectionDelegate.selectAllText,
+          type: ContextMenuButtonType.selectAll,
+        ),
+    ];
+    if (items.isEmpty) return null;
+    return Align(
+      alignment: Alignment.topLeft,
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: TextSelectionToolbarAnchors(
+          primaryAnchor: params.anchorA,
+          secondaryAnchor: params.anchorB,
+        ),
+        buttonItems: items,
+      ),
+    );
+  }
+
+  Future<void> refreshAnnotations() async {
+    if (!controller.isReady || widget.book.md5 == null) return;
+    final generation = ++_annotationGeneration;
+    final sharedState = annotationSyncRuntime.sharedState;
+    final document = await sharedState.annotationDocument(widget.book.md5!);
+    final presentations = await sharedState.annotationPresentations();
+    final models = document == null
+        ? const <AnnotationUiModel>[]
+        : CanonicalAnnotationReadAdapter(
+            presentations: presentations,
+            localBookAvailable: (_) => true,
+          ).read(document);
+    final resolved = <int, List<_PdfRenderedAnnotation>>{};
+    await controller.useDocument((pdf) async {
+      for (final model in models) {
+        final target = model.pdfTarget;
+        if (target == null ||
+            model.renderingCapability != AnnotationCapability.available ||
+            target.page > pdf.pages.length) {
+          continue;
+        }
+        final pageText = await pdf.pages[target.page - 1].loadStructuredText();
+        final match = target.resolve(pageText.fullText);
+        if (match == null) continue;
+        final range = PdfPageTextRange(
+          pageText: pageText,
+          start: match.start,
+          end: match.end,
+        );
+        (resolved[target.page] ??= []).add(
+          _PdfRenderedAnnotation(model: model, range: range),
+        );
+      }
+    });
+    if (!mounted || generation != _annotationGeneration) return;
+    _renderedAnnotations = resolved;
+    controller.invalidate();
+  }
+
+  void _paintAnnotations(ui.Canvas canvas, Rect pageRect, PdfPage page) {
+    for (final annotation
+        in _renderedAnnotations[page.pageNumber] ?? const []) {
+      final presentation = annotation.model.effectivePresentation(
+        defaultStyle: Prefs().annotationType,
+        defaultColor: Prefs().annotationColor,
+      );
+      final colorValue =
+          int.tryParse(presentation.color, radix: 16) ?? 0x66ccff;
+      final color = Color(0xff000000 | colorValue);
+      for (final fragment
+          in annotation.range.enumerateFragmentBoundingRects()) {
+        final rect = fragment.bounds.toRectInDocument(
+          page: page,
+          pageRect: pageRect,
+        );
+        if (presentation.style == AnnotationPresentationStyle.underline) {
+          canvas.drawLine(
+            rect.bottomLeft,
+            rect.bottomRight,
+            Paint()
+              ..color = color
+              ..strokeWidth = 2,
+          );
+        } else {
+          canvas.drawRect(rect, Paint()..color = color.withValues(alpha: 0.35));
+        }
+      }
+    }
   }
 
   void _onPageChanged(int? pageNumber) {
@@ -187,9 +347,18 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         onViewerReady: _onViewerReady,
         onPageChanged: _onPageChanged,
         onGeneralTap: _onGeneralTap,
+        buildContextMenu: _buildContextMenu,
+        pagePaintCallbacks: [_paintAnnotations],
         loadingBannerBuilder: _buildLoadingBanner,
         errorBannerBuilder: _buildErrorBanner,
       ),
     );
   }
+}
+
+class _PdfRenderedAnnotation {
+  const _PdfRenderedAnnotation({required this.model, required this.range});
+
+  final AnnotationUiModel model;
+  final PdfPageTextRange range;
 }

@@ -124,7 +124,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     setAwakeTimer(Prefs().awakeTime);
 
     _book = widget.book;
-    if (p.extension(_book.filePath).toLowerCase() == '.epub') {
+    if ({'.epub', '.pdf'}.contains(p.extension(_book.filePath).toLowerCase())) {
       try {
         _annotationFingerprint = canonicalMd5Fingerprint(_book.md5);
         unawaited(annotationSyncRuntime.openBook(
@@ -194,7 +194,11 @@ class ReadingPageState extends ConsumerState<ReadingPage>
 
   void _refreshSyncedAnnotations() {
     if (!mounted) return;
-    epubPlayerKey.currentState?.refreshAnnotations();
+    if (_isPdf) {
+      pdfPlayerKey.currentState?.refreshAnnotations();
+    } else {
+      epubPlayerKey.currentState?.refreshAnnotations();
+    }
     ref.invalidate(bookmarkProvider(_book.id));
     final fingerprint = _book.md5;
     if (fingerprint != null) {

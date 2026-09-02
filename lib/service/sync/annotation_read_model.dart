@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 
 enum AnnotationMotivation { selection, bookmark }
 
@@ -121,11 +122,13 @@ class AnnotationCapabilities {
   final AnnotationCapability navigation;
   final AnnotationCapability rendering;
   final String? epubCfi;
+  final PdfAnnotationTarget? pdfTarget;
 
   const AnnotationCapabilities({
     required this.navigation,
     required this.rendering,
     required this.epubCfi,
+    required this.pdfTarget,
   });
 }
 
@@ -147,6 +150,7 @@ class AnnotationUiModel {
   final AnnotationCapability navigationCapability;
   final AnnotationCapability renderingCapability;
   final String? epubCfi;
+  final PdfAnnotationTarget? pdfTarget;
   final double? bookmarkPercentage;
   final AnnotationPresentation? localPresentation;
   final AnnotationTombstoneState tombstoneState;
@@ -165,6 +169,7 @@ class AnnotationUiModel {
     required this.navigationCapability,
     required this.renderingCapability,
     required this.epubCfi,
+    required this.pdfTarget,
     required this.bookmarkPercentage,
     required this.localPresentation,
     required this.tombstoneState,
@@ -256,6 +261,7 @@ class CanonicalAnnotationReadAdapter {
       navigationCapability: capabilities.navigation,
       renderingCapability: capabilities.rendering,
       epubCfi: capabilities.epubCfi,
+      pdfTarget: capabilities.pdfTarget,
       bookmarkPercentage: annotation['motivation'] == 'bookmark'
           ? bookmarkProgressFraction(target)
           : null,
@@ -362,11 +368,14 @@ AnnotationCapabilities determineAnnotationCapabilities(
       navigation: AnnotationCapability.unsupportedTarget,
       rendering: AnnotationCapability.unsupportedTarget,
       epubCfi: null,
+      pdfTarget: null,
     );
   }
   final cfi = supportedEpubCfi(target);
-  final navigationSupported = cfi != null;
-  final renderingSupported = cfi != null && target['selectedText'] is String;
+  final pdfTarget = PdfAnnotationTarget.fromSelectors(target['selectors']);
+  final navigationSupported = cfi != null || pdfTarget != null;
+  final renderingSupported =
+      navigationSupported && target['selectedText'] is String;
   AnnotationCapability capability(bool supported) => !supported
       ? AnnotationCapability.unsupportedTarget
       : localBookAvailable
@@ -376,6 +385,7 @@ AnnotationCapabilities determineAnnotationCapabilities(
     navigation: capability(navigationSupported),
     rendering: capability(renderingSupported),
     epubCfi: cfi,
+    pdfTarget: pdfTarget,
   );
 }
 

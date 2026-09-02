@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 
 class SelectionSnapshot {
   final String selectedText;
@@ -8,6 +9,7 @@ class SelectionSnapshot {
   final String? lookupContext;
   final String chapter;
   final String selector;
+  final PdfAnnotationTarget? pdfTarget;
 
   const SelectionSnapshot({
     required this.selectedText,
@@ -15,6 +17,7 @@ class SelectionSnapshot {
     required this.lookupContext,
     required this.chapter,
     required this.selector,
+    this.pdfTarget,
   });
 }
 

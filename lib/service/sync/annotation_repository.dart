@@ -1,6 +1,7 @@
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,7 @@ class CanonicalSelectionCreation {
   final String epubCfi;
   final String chapter;
   final String? context;
+  final PdfAnnotationTarget? pdfTarget;
 
   const CanonicalSelectionCreation({
     required this.book,
@@ -19,7 +21,16 @@ class CanonicalSelectionCreation {
     required this.epubCfi,
     required this.chapter,
     required this.context,
-  });
+  }) : pdfTarget = null;
+
+  CanonicalSelectionCreation.pdf({
+    required this.book,
+    required this.selectedText,
+    required PdfAnnotationTarget target,
+    required this.chapter,
+    required this.context,
+  })  : epubCfi = '',
+        pdfTarget = target;
 }
 
 class AiThreadMessageInput {
@@ -271,8 +282,8 @@ class AnnotationRepository {
       CanonicalSelectionCreation input,
       {Map<String, dynamic> Function(String timestamp)? firstMaterial,
       String? firstPersonalNote}) async {
-    final fingerprint = _fingerprint(input.book);
-    _epubCfi(input.epubCfi);
+    final fingerprint = _selectionFingerprint(input);
+    final selectors = _selectionSelectors(input);
     if (firstPersonalNote != null && firstPersonalNote.isEmpty) {
       throw ArgumentError.value(
           firstPersonalNote, 'firstPersonalNote', 'must not be empty');
@@ -290,9 +301,7 @@ class AnnotationRepository {
         'selectedText': input.selectedText,
         'chapter': input.chapter,
         if (input.context?.trim().isNotEmpty == true) 'context': input.context,
-        'selectors': [
-          {'type': 'epub-cfi', 'cfi': input.epubCfi.trim()}
-        ],
+        'selectors': selectors,
       },
       'enrichments': <Object>[
         if (material != null) material,
@@ -329,8 +338,8 @@ class AnnotationRepository {
       ref = existing;
     } else {
       final creation = input.creation!;
-      final fingerprint = _fingerprint(creation.book);
-      _epubCfi(creation.epubCfi);
+      final fingerprint = _selectionFingerprint(creation);
+      final selectors = _selectionSelectors(creation);
       final timestamp = canonicalWireTimestamp(now());
       final annotationId = uuid.v4();
       final document = await _document(creation.book, fingerprint);
@@ -344,9 +353,7 @@ class AnnotationRepository {
           'chapter': creation.chapter,
           if (creation.context?.trim().isNotEmpty == true)
             'context': creation.context,
-          'selectors': [
-            {'type': 'epub-cfi', 'cfi': creation.epubCfi.trim()}
-          ],
+          'selectors': selectors,
         },
         'enrichments': <Object>[],
       };
@@ -939,6 +946,36 @@ class AnnotationRepository {
       throw UnsupportedError('Only EPUB annotations are protocol-v2 capable');
     }
     return canonicalMd5Fingerprint(book.md5);
+  }
+
+  String _selectionFingerprint(CanonicalSelectionCreation input) {
+    final extension = p.extension(input.book.filePath).toLowerCase();
+    if (input.pdfTarget != null) {
+      if (extension != '.pdf') {
+        throw UnsupportedError('PDF selectors require a PDF book');
+      }
+    } else if (extension != '.epub') {
+      throw UnsupportedError('Unsupported annotation format $extension');
+    }
+    return canonicalMd5Fingerprint(input.book.md5);
+  }
+
+  List<Map<String, Object?>> _selectionSelectors(
+    CanonicalSelectionCreation input,
+  ) {
+    final pdfTarget = input.pdfTarget;
+    if (pdfTarget != null) {
+      if (pdfTarget.exact != input.selectedText.trim()) {
+        throw ArgumentError(
+          'PDF text-quote exact must equal the selected text',
+        );
+      }
+      return pdfTarget.toSelectors();
+    }
+    _epubCfi(input.epubCfi);
+    return [
+      {'type': 'epub-cfi', 'cfi': input.epubCfi.trim()},
+    ];
   }
 
   void _epubCfi(String value) {

@@ -13,9 +13,9 @@ EPUB renderer or annotation protocol v2.
   `feature/automatic-shared-state-sync` at
   `749e7ce077ce59d84efff079c9f6efa55cde6424` (matched
   `origin/feature/automatic-shared-state-sync` after `git fetch origin`).
-- Implementation branch / current commit: `feature/pdfrx-pdf-reader`; Milestone
-  2 is implemented and ready for its self-contained commit. Milestone 1 is
-  `43eb56c2 feat(pdf): add dedicated pdfrx reader`.
+- Implementation branch / current commit: `feature/pdfrx-pdf-reader`.
+  Milestone 1 is `43eb56c2 feat(pdf): add dedicated pdfrx reader`; Milestone 2
+  is `8524e0cc feat(pdf): add zoom controls`.
 - Toolchain: Flutter 3.35.3, Dart 3.9.2.
 - Compatible current package selected: `pdfrx 2.2.24` with
   `pdfrx_engine 0.3.9`. This is the newest `pdfrx` release whose declared
@@ -78,7 +78,7 @@ EPUB renderer or annotation protocol v2.
 - [x] Milestone 2: verify native pinch/pan zoom and add minimal explicit zoom
   in/out controls backed by `PdfViewerController`; validate rebuild/rotation;
   commit separately.
-- [ ] Milestone 3: canonical PDF selection/annotation creation, quote-context
+- [x] Milestone 3: canonical PDF selection/annotation creation, quote-context
   restoration, unique repeated-text resolution, persistent overlays, and
   focused protocol/repository tests; commit separately.
 - [ ] Milestone 4: independent ordered PDF text-block extraction with lazy
@@ -120,18 +120,22 @@ EPUB renderer or annotation protocol v2.
   zoom-out/zoom-in reader-chrome controls that delegate to
   `PdfViewerController.zoomDown` / `zoomUp`. Zoom remains ephemeral
   presentation state and is not written to shared reading state.
+- Added protocol-v2-compatible `pdf-page` and contextual `text-quote`
+  selectors, pure unique quote restoration, PDF repository creation support,
+  read-model capabilities, pdfrx single-page selection integration, and
+  persistent highlight/underline painting from canonical annotations.
 
 ## Current state
 
-Milestones 1 and 2 are implemented; Milestone 2 is ready to commit. Native pdfrx
-gesture/rendering validation on representative files remains a manual device
-check because no Flutter device is attached in this environment.
+Milestones 1 through 3 are implemented; Milestone 3 is ready to commit. Native
+pdfrx gesture/rendering and selection-overlay validation on representative
+files remains a manual device check because no Flutter device is attached in
+this environment.
 
 ## Next exact step
 
-Commit Milestone 2, then implement the PDF selector model and unique
-page-plus-quote resolver as pure code/tests before wiring pdfrx selection,
-canonical repository creation, and page overlays.
+Commit Milestone 3, then implement independent ordered PDF text-block
+extraction with page-lazy loading and pure tests.
 
 ## Important decisions
 
@@ -189,3 +193,7 @@ canonical repository creation, and page overlays.
   consecutive pages, and orientation rebuild remain manual device checks; the
   code uses pdfrx's supported native gesture/controller implementation without
   a custom transform layer.
+- Milestone 3 selector/read-model/repository tests: 39 passed. Annotation editor
+  session/controller/draft/widget regression tests: 37 passed. Targeted
+  analysis compiles all changed production files with only the same two
+  pre-existing async-context informational lints in `reading_page.dart`.

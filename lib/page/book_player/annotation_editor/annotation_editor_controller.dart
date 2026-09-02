@@ -190,15 +190,7 @@ class AnnotationEditorController extends ChangeNotifier {
   }
 
   AnnotationEditorSaveInput _saveInput() => AnnotationEditorSaveInput(
-        creation: draft.existingRef == null
-            ? CanonicalSelectionCreation(
-                book: book,
-                selectedText: draft.selection.selectedText,
-                epubCfi: draft.selection.selector,
-                chapter: draft.selection.chapter,
-                context: draft.selection.annotationContext,
-              )
-            : null,
+        creation: draft.existingRef == null ? _selectionCreation() : null,
         existingRef: draft.existingRef,
         materials: [
           for (final provider in AnnotationEditorProvider.values)
@@ -229,6 +221,26 @@ class AnnotationEditorController extends ChangeNotifier {
             ),
         ],
       );
+
+  CanonicalSelectionCreation _selectionCreation() {
+    final pdfTarget = draft.selection.pdfTarget;
+    if (pdfTarget != null) {
+      return CanonicalSelectionCreation.pdf(
+        book: book,
+        selectedText: draft.selection.selectedText,
+        target: pdfTarget,
+        chapter: draft.selection.chapter,
+        context: draft.selection.annotationContext,
+      );
+    }
+    return CanonicalSelectionCreation(
+      book: book,
+      selectedText: draft.selection.selectedText,
+      epubCfi: draft.selection.selector,
+      chapter: draft.selection.chapter,
+      context: draft.selection.annotationContext,
+    );
+  }
 
   void _notifyIfAlive() {
     if (!_disposed) notifyListeners();

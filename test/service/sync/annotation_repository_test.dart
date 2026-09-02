@@ -4,6 +4,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -27,6 +28,8 @@ Book localBook() => Book(
       createTime: instant,
       updateTime: instant,
     );
+
+Book localPdf() => localBook()..filePath = 'book.pdf';
 
 CanonicalSelectionCreation creation({String? context = 'A sentence.'}) =>
     CanonicalSelectionCreation(
@@ -93,6 +96,40 @@ void main() {
     final annotation = annotationOf(visibleAtNotification!, ref.annotationId);
     expect(annotation['target']['context'], 'A sentence.');
     expect((await shared.pendingOutbox()).single.documentId, fingerprint);
+  });
+
+  test('PDF creation uses portable page and contextual quote selectors',
+      () async {
+    const pageText = 'First repeated phrase. Second repeated phrase.';
+    final start = pageText.lastIndexOf('repeated phrase');
+    final target = PdfAnnotationTarget.fromPageText(
+      page: 3,
+      pageText: pageText,
+      start: start,
+      end: start + 'repeated phrase'.length,
+    );
+
+    final ref = await repository.createAnnotation(
+      CanonicalSelectionCreation.pdf(
+        book: localPdf(),
+        selectedText: target.exact,
+        target: target,
+        chapter: 'Page 3',
+        context: pageText,
+      ),
+    );
+
+    final document = await shared.annotationDocument(fingerprint);
+    final annotation = annotationOf(document!, ref.annotationId);
+    final restored = PdfAnnotationTarget.fromSelectors(
+      annotation['target']['selectors'],
+    );
+    expect(restored?.page, 3);
+    expect(restored?.resolve(pageText)?.start, start);
+    expect(
+      CanonicalAnnotationReadAdapter().read(document).single.pdfTarget?.exact,
+      'repeated phrase',
+    );
   });
 
   test('missing context is omitted and same CFI never implies reuse', () async {

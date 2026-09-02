@@ -95,9 +95,10 @@ breaker. No domain performs an arbitrary recursive JSON merge.
 - Groups, tags, and custom themes use stable UUID records with stamped fields
   and tombstones. Parents are group UUIDs. Book-group membership uses book
   fingerprint plus group UUID. Book-tag relations use book fingerprint plus
-  tag UUID and a stamped add/remove value. Semantic group deletion durably
-  writes `deleted=true` before local projection cleanup; the tombstoned remote
-  JSON remains shared state and is not deleted from WebDAV.
+  tag UUID and a stamped add/remove value. Destructive organization mutations
+  establish portable identity and durably persist their canonical tombstone or
+  removal before local projection cleanup, including during initial bootstrap.
+  Tombstoned remote JSON remains shared state and is not deleted from WebDAV.
 
 WebDAV creation uses `If-None-Match: *`. Replacement requires the current
 strong ETag with `If-Match`. HTTP 412 triggers bounded reread, domain merge,

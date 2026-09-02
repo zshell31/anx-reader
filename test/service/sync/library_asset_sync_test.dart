@@ -5,8 +5,10 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_asset_sync.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
+import 'package:anx_reader/utils/log/common.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 class MemoryAssets implements LibraryAssetTransport {
   final Map<String, List<int>> objects = {};
@@ -141,8 +143,17 @@ void main() {
     final document = catalog(<int>[9, 10]);
     final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
     transport.objects[libraryBookAssetSegments(digest).join('/')] = [99];
+    Logger.root.level = Level.ALL;
+    final records = <LogRecord>[];
+    final subscription = AnxLog.log.onRecord.listen(records.add);
     await expectLater(service.syncBook(document),
         throwsA(isA<LibraryAssetFingerprintMismatch>()));
+    await Future<void>.delayed(Duration.zero);
+    await subscription.cancel();
+    final diagnostics = records.map((record) => record.message).join('\n');
+    expect(diagnostics, contains('action=reject reason=sha256-mismatch'));
+    expect(diagnostics, isNot(contains(digest)));
+    expect(diagnostics, isNot(contains(directory.path)));
     expect(projection.boundPath, isNull);
   });
 

@@ -5,7 +5,9 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/organization_repository.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/utils/log/common.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
@@ -240,6 +242,9 @@ void main() {
     final expectedId = const Uuid()
         .v5(Namespace.url.value, 'anx:legacy-tag:v1:$localId:Early tag');
 
+    Logger.root.level = Level.ALL;
+    final records = <LogRecord>[];
+    final subscription = AnxLog.log.onRecord.listen(records.add);
     await repository.tombstoneTag(localId);
 
     final mappings = await appDatabase.query('sync_tag_ids');
@@ -251,6 +256,15 @@ void main() {
     expect(await sharedState.outboxEntry(tagDomain, expectedId), isNotNull);
 
     await repository.tombstoneTag(localId);
+    await Future<void>.delayed(Duration.zero);
+    await subscription.cancel();
+    final diagnostics = records.map((record) => record.message).join('\n');
+    expect(diagnostics, contains('organization tag-delete'));
+    expect(diagnostics, contains('mapping=created tombstone=durable'));
+    expect(diagnostics, contains('mapping=reused tombstone=durable'));
+    expect(diagnostics, isNot(contains('Early tag')));
+    expect(diagnostics, isNot(contains(expectedId)));
+
     await repository.bootstrap();
     expect(await sharedState.documentIds(tagDomain), [expectedId]);
     expect(await appDatabase.query('sync_tag_ids'), hasLength(1));

@@ -9,7 +9,10 @@ import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
+import 'package:anx_reader/utils/log/common.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -295,6 +298,19 @@ void main() {
         strongEtag: '"clean"');
   }
 
+  Future<List<LogRecord>> captureLogs(Future<void> Function() operation) async {
+    Logger.root.level = Level.ALL;
+    final records = <LogRecord>[];
+    final subscription = AnxLog.log.onRecord.listen(records.add);
+    try {
+      await runWithSyncDiagnostics('manual', (_) => operation());
+      await Future<void>.delayed(Duration.zero);
+      return records;
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('anx_m4d2_test_');
     databasePath = p.join(directory.path, 'shared_state.db');
@@ -521,6 +537,22 @@ void main() {
     expect(remote.decoded!['annotations'], hasLength(1));
   });
 
+  test('successful sync logs safe domain action and convergence result',
+      () async {
+    await putLocal([entity('private-annotation-content')]);
+
+    final logs = await captureLogs(() => coordinator.syncBook(fingerprint));
+    final output = logs.map((record) => record.message).join('\n');
+
+    expect(output, contains('sync run='));
+    expect(output, contains('domain=annotations'));
+    expect(output, contains('action=create'));
+    expect(output, contains('result=converged'));
+    expect(output, contains('doc=01234567…'));
+    expect(output, isNot(contains(fingerprint)));
+    expect(output, isNot(contains('private-annotation-content')));
+  });
+
   test('create 412 then re-GET finds writer and merges without LOCK', () async {
     await putLocal([entity('A')]);
     var raced = false;
@@ -719,6 +751,26 @@ void main() {
     expect(remote.decoded!['annotations'], hasLength(3));
   });
 
+  test('conditional conflict logs 412 retry without payload or ETag', () async {
+    await putLocal([entity('local-private')]);
+    remote.seed(document([entity('remote-private')]));
+    var raced = false;
+    remote.onPut = () async {
+      if (raced) return;
+      raced = true;
+      remote.seed(document([entity('remote-private')]),
+          tag: '"private-etag-value"');
+    };
+
+    final logs = await captureLogs(() => coordinator.syncBook(fingerprint));
+    final output = logs.map((record) => record.message).join('\n');
+
+    expect(output, contains('action=replace conflict=412 retry=1'));
+    expect(output, isNot(contains('private-etag-value')));
+    expect(output, isNot(contains('local-private')));
+    expect(output, isNot(contains('remote-private')));
+  });
+
   test('bounded 412 retries fall back to an exclusive LOCK', () async {
     await putLocal([entity('A')]);
     remote.seed(document([entity('B')]));
@@ -902,6 +954,49 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
     expect(remote.decoded!['annotations'], hasLength(1));
+  });
+
+  test('retryable network failure logs safe scheduled retry diagnostic',
+      () async {
+    await putLocal([entity('secret-offline-content')]);
+    remote.getFailure = const WebDavTransportException(
+        'password=secret Authorization Basic credential',
+        status: 503);
+    Timer? timer;
+    await coordinator.close();
+    coordinator = createCoordinator(
+      networkBackoff: const [Duration(seconds: 10)],
+      scheduleRetry: (delay, callback) =>
+          timer = Timer(const Duration(days: 1), callback),
+    );
+
+    final logs = await captureLogs(() async {
+      await expectLater(coordinator.syncBook(fingerprint), throwsException);
+    });
+    timer?.cancel();
+    final output = logs.map((record) => record.message).join('\n');
+
+    expect(output, contains('retryScheduled=10s'));
+    expect(output, contains('error=WebDavTransportException/http-503'));
+    expect(output, isNot(contains('password')));
+    expect(output, isNot(contains('Authorization')));
+    expect(output, isNot(contains('Basic credential')));
+    expect(output, isNot(contains('secret-offline-content')));
+  });
+
+  test('exclusive-lock diagnostics never expose lock token or local path',
+      () async {
+    await putLocal([entity('/private/library/book.epub')]);
+    remote.conditionalCreateUnsupported = true;
+    remote.materializeLockPlaceholder = true;
+
+    final logs = await captureLogs(() => coordinator.syncBook(fingerprint));
+    final output = logs.map((record) => record.message).join('\n');
+
+    expect(output, contains('action=lock-fallback'));
+    expect(output, isNot(contains('<opaquelocktoken:test>')));
+    expect(output, isNot(contains('/private/library/book.epub')));
+    expect(output, isNot(contains('canonicalState')));
   });
 
   test('authentication failure stays durable and is not aggressively retried',

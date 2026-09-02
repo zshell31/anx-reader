@@ -18,7 +18,6 @@ import 'package:anx_reader/service/sync/reading_activity_repository.dart';
 import 'package:anx_reader/service/sync/reading_activity_sync_service.dart';
 import 'package:anx_reader/service/sync/organization_repository.dart';
 import 'package:anx_reader/service/sync/organization_sync_service.dart';
-import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/remote_document_discovery.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/sync/sync_run_gate.dart';

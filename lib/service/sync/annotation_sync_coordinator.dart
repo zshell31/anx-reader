@@ -26,6 +26,8 @@ typedef AnnotationRetryScheduler = Timer Function(
     Duration delay, void Function() callback);
 typedef AnnotationLockRetryDelay = Future<void> Function(Duration delay);
 typedef SharedDocumentDecoder = Map<String, dynamic> Function(Object? input);
+typedef SharedDocumentDecodeFailureLabel = String Function(Object error);
+typedef SharedDocumentRemotePlaceholder = bool Function(Uint8List body);
 typedef SharedDocumentMerger = Map<String, dynamic> Function(
     Map<String, dynamic> local, Map<String, dynamic> remote);
 typedef SharedDocumentIdValidator = bool Function(
@@ -51,6 +53,8 @@ class SharedDocumentSyncCoordinator {
   final String Function(String documentId) normalizeDocumentId;
   final List<String> Function(String documentId) remotePathFor;
   final SharedDocumentDecoder decodeDocument;
+  final SharedDocumentDecodeFailureLabel? decodeFailureLabel;
+  final SharedDocumentRemotePlaceholder? isRecoverableRemotePlaceholder;
   final SharedDocumentMerger mergeDocuments;
   final SharedDocumentIdValidator validateDocumentId;
   final SharedDocumentChanged? onDocumentChanged;
@@ -78,6 +82,8 @@ class SharedDocumentSyncCoordinator {
     String Function(String documentId)? normalizeDocumentId,
     List<String> Function(String documentId)? remotePathFor,
     SharedDocumentDecoder? decodeDocument,
+    this.decodeFailureLabel,
+    this.isRecoverableRemotePlaceholder,
     SharedDocumentMerger? mergeDocuments,
     SharedDocumentIdValidator? validateDocumentId,
     this.onDocumentChanged,
@@ -284,8 +290,14 @@ class SharedDocumentSyncCoordinator {
           continue;
         }
       }
-      final remoteDocument =
-          remote == null ? null : _decodeRemote(remote, work.documentId);
+      final placeholder = _isRecoverablePlaceholder(remote);
+      if (placeholder) {
+        syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=recover-empty-placeholder etag=present');
+      }
+      final remoteDocument = remote == null || placeholder
+          ? null
+          : _decodeRemote(remote, work.documentId);
       final merged = await _mergeRemoteSafely(work.documentId, remoteDocument,
           strongEtag: remote?.etag);
       if (merged == null ||
@@ -302,12 +314,12 @@ class SharedDocumentSyncCoordinator {
           !beforePut.dirty) {
         return;
       }
-      if (remote != null &&
+      if (remoteDocument != null &&
           _sameCanonical(
-              merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
+              merged.bytes, utf8.encode(canonicalJson(remoteDocument)))) {
         await sharedState.markConverged(
             syncDomain, work.documentId, work.localRevision,
-            strongEtag: remote.etag);
+            strongEtag: remote!.etag);
         syncDebug('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
             'action=already-converged result=converged '
             'revision=${work.localRevision} etag=present');
@@ -342,6 +354,13 @@ class SharedDocumentSyncCoordinator {
         failures++;
         syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
             'action=$action conflict=412 retry=$failures');
+      } on WebDavLocked {
+        lockContentions++;
+        syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=${remote == null ? 'create' : 'replace'} '
+            'lock=contended retry=$lockContentions');
+        if (lockContentions > maxLockContentionRetries) rethrow;
+        await _waitForLockContention(lockContentions);
       }
     }
   }
@@ -368,7 +387,13 @@ class SharedDocumentSyncCoordinator {
           continue;
         }
       }
-      final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
+      final placeholder = _isRecoverablePlaceholder(remote);
+      if (placeholder) {
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=recover-empty-placeholder etag=present');
+      }
+      final remoteDocument =
+          remote == null || placeholder ? null : _decodeRemote(remote, id);
       final local = await sharedState.documentSnapshot(syncDomain, id);
       if (local == null && remoteDocument == null) return;
 
@@ -377,12 +402,12 @@ class SharedDocumentSyncCoordinator {
       if (merged == null || merged.snapshot.dirty) return;
       await _notifyDocumentChanged(id);
 
-      if (remote != null &&
+      if (remoteDocument != null &&
           _sameCanonical(
-              merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
+              merged.bytes, utf8.encode(canonicalJson(remoteDocument)))) {
         await sharedState.markRemoteConverged(
             syncDomain, id, merged.snapshot.localRevision,
-            strongEtag: remote.etag);
+            strongEtag: remote!.etag);
         syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
             'action=already-converged result=converged '
             'revision=${merged.snapshot.localRevision} etag=present');
@@ -422,6 +447,13 @@ class SharedDocumentSyncCoordinator {
         failures++;
         syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
             'action=$action conflict=412 retry=$failures');
+      } on WebDavLocked {
+        lockContentions++;
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=${remote == null ? 'create' : 'replace'} '
+            'lock=contended retry=$lockContentions');
+        if (lockContentions > maxLockContentionRetries) rethrow;
+        await _waitForLockContention(lockContentions);
       }
     }
   }
@@ -438,7 +470,13 @@ class SharedDocumentSyncCoordinator {
         throw const WebDavTransportException(
             'LOCK returned 200 but the existing representation is unavailable');
       }
-      final remoteDocument = remote == null ? null : _decodeRemote(remote, id);
+      final placeholder = _isRecoverablePlaceholder(remote);
+      if (placeholder) {
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=recover-empty-placeholder lock=exclusive');
+      }
+      final remoteDocument =
+          remote == null || placeholder ? null : _decodeRemote(remote, id);
       final merged = await _mergeRemoteSafely(id, remoteDocument,
           strongEtag: remote?.etag);
       final targetRevision = expectedRevision ?? merged?.snapshot.localRevision;
@@ -456,17 +494,17 @@ class SharedDocumentSyncCoordinator {
         return;
       }
 
-      if (remote != null &&
+      if (remoteDocument != null &&
           _sameCanonical(
-              merged.bytes, utf8.encode(canonicalJson(remoteDocument!)))) {
+              merged.bytes, utf8.encode(canonicalJson(remoteDocument)))) {
         if (expectDirty) {
           await sharedState.markConverged(
               syncDomain, id, beforePut.localRevision,
-              strongEtag: remote.etag);
+              strongEtag: remote!.etag);
         } else {
           await sharedState.markRemoteConverged(
               syncDomain, id, beforePut.localRevision,
-              strongEtag: remote.etag);
+              strongEtag: remote!.etag);
         }
         syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
             'action=already-converged result=converged '
@@ -551,13 +589,31 @@ class SharedDocumentSyncCoordinator {
       decodeDocument(jsonDecode(utf8.decode(snapshot.canonicalState)));
 
   Map<String, dynamic> _decodeRemote(WebDavObject remote, String id) {
-    late final Map<String, dynamic> document;
+    late final String text;
     try {
-      document = decodeDocument(
-          jsonDecode(utf8.decode(remote.body, allowMalformed: false)));
+      text = utf8.decode(remote.body, allowMalformed: false);
     } catch (error) {
       syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
-          'reason=malformed-remote');
+          'reason=malformed-remote detail=invalid-utf8 '
+          'payload=${_payloadShape(remote.body)} bytes=${remote.body.length}');
+      throw MalformedRemoteAnnotationException(error);
+    }
+    late final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } catch (error) {
+      syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+          'reason=malformed-remote detail=invalid-json '
+          'payload=${_payloadShape(remote.body)} bytes=${remote.body.length}');
+      throw MalformedRemoteAnnotationException(error);
+    }
+    late final Map<String, dynamic> document;
+    try {
+      document = decodeDocument(decoded);
+    } catch (error) {
+      final detail = decodeFailureLabel?.call(error) ?? 'invalid-document';
+      syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+          'reason=malformed-remote detail=$detail');
       throw MalformedRemoteAnnotationException(error);
     }
     if (!validateDocumentId(document, id)) {
@@ -568,6 +624,24 @@ class SharedDocumentSyncCoordinator {
     }
     return document;
   }
+
+  String _payloadShape(List<int> bytes) {
+    int? first;
+    for (final byte in bytes) {
+      if (!const [9, 10, 13, 32].contains(byte)) {
+        first = byte;
+        break;
+      }
+    }
+    if (first == null) return 'empty';
+    if (first == 0x7b || first == 0x5b) return 'json-shaped';
+    if (first == 0x3c) return 'markup';
+    return 'non-json';
+  }
+
+  bool _isRecoverablePlaceholder(WebDavObject? remote) =>
+      remote != null &&
+      isRecoverableRemotePlaceholder?.call(remote.body) == true;
 
   Future<void> _notifyDocumentChanged(String id) async {
     try {
@@ -651,6 +725,8 @@ class AnnotationSyncCoordinator extends SharedDocumentSyncCoordinator {
     super.normalizeDocumentId,
     super.remotePathFor,
     super.decodeDocument,
+    super.decodeFailureLabel,
+    super.isRecoverableRemotePlaceholder,
     super.mergeDocuments,
     super.validateDocumentId,
     super.onDocumentChanged,

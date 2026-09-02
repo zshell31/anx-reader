@@ -64,6 +64,8 @@ void main() {
       final entries = await transport(fake).list(['annotations']);
 
       expect(fake.calls.single.$1, 'PROPFIND');
+      expect(fake.calls.single.$2,
+          Uri.parse('https://dav.test/base/shared/annotations/'));
       expect(fake.calls.single.$3['Depth'], '1');
       expect(entries.map((entry) => (entry.name, entry.isCollection)),
           [('abc.json', false), ('books', true)]);
@@ -153,6 +155,15 @@ void main() {
           transport(fake, remoteRoot: '').replace(
               ['annotations', 'book.json'], utf8.encode('{}'), '"old"'),
           throwsA(isA<WebDavPreconditionFailed>()));
+      expect(fake.calls.last.$3['If-Match'], '"old"');
+    });
+
+    test('maps PUT 423 to typed lock contention', () async {
+      final fake = FakeExecutor([response(405), response(423)]);
+      await expectLater(
+          transport(fake, remoteRoot: '').replace(
+              ['annotations', 'book.json'], utf8.encode('{}'), '"old"'),
+          throwsA(isA<WebDavLocked>()));
       expect(fake.calls.last.$3['If-Match'], '"old"');
     });
 

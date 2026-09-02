@@ -33,6 +33,21 @@ class MemoryActivityProjection implements ReadingActivityProjection {
 }
 
 void main() {
+  test('decode failure diagnostics never include document content', () {
+    expect(
+      readingActivityDecodeFailureLabel(
+        const FormatException('reading event is invalid'),
+      ),
+      'invalid-event-fields',
+    );
+    expect(
+      readingActivityDecodeFailureLabel(
+        const FormatException('secret remote payload'),
+      ),
+      'invalid-document',
+    );
+  });
+
   sqfliteFfiInit();
   late SharedStateDatabase store;
   late MemoryActivityProjection projection;

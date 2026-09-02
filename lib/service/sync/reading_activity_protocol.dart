@@ -86,6 +86,26 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
   return doc;
 }
 
+/// Produces a content-free diagnostic label for a rejected remote document.
+String readingActivityDecodeFailureLabel(Object error) {
+  if (error is AnnotationProtocolException) return 'invalid-fingerprint';
+  if (error is! FormatException) return 'unexpected-format';
+  return switch (error.message) {
+    'reading activity must be an object' => 'not-an-object',
+    'unsupported reading-activity schema' => 'unsupported-schema',
+    'reading activity day is invalid' => 'invalid-day',
+    'events must be a list' => 'invalid-events-list',
+    'event must be an object' => 'invalid-event-object',
+    'reading event is invalid' => 'invalid-event-fields',
+    'stamp must be an object' => 'invalid-stamp-object',
+    'stamp fields are invalid' => 'invalid-stamp-fields',
+    'stamp time is invalid' => 'invalid-stamp-time',
+    'event ID collision' => 'event-id-collision',
+    'event mutation collision' => 'event-mutation-collision',
+    _ => 'invalid-document',
+  };
+}
+
 Map<String, dynamic> mergeReadingActivityDocuments(
     Map<String, dynamic> left, Map<String, dynamic> right) {
   final a = decodeReadingActivityDocument(left);

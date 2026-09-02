@@ -273,6 +273,7 @@ void main() {
     List<Duration> lockBackoff = const [],
     AnnotationLockRetryDelay? waitForLockRetry,
     SharedDocumentChanged? onDocumentChanged,
+    SharedDocumentRemotePlaceholder? isRecoverableRemotePlaceholder,
     List<Duration> networkBackoff = const [],
     AnnotationRetryScheduler? scheduleRetry,
   }) =>
@@ -285,6 +286,7 @@ void main() {
         waitForLockRetry: waitForLockRetry,
         networkBackoff: networkBackoff,
         scheduleRetry: scheduleRetry,
+        isRecoverableRemotePlaceholder: isRecoverableRemotePlaceholder,
         onDocumentChanged: onDocumentChanged ?? notifications.add,
       );
 
@@ -1049,6 +1051,42 @@ void main() {
     expect(utf8.decode(remote.body!), '{not-json');
     expect((await store.annotationDocument(fingerprint))!['annotations'],
         hasLength(1));
+    expect(await store.pendingOutbox(), isNotEmpty);
+  });
+
+  test('explicitly recoverable empty placeholder is replaced conditionally',
+      () async {
+    await putLocal([entity('valid')]);
+    remote.body = Uint8List(0);
+    remote.etag = '"placeholder"';
+    await coordinator.close();
+    coordinator = createCoordinator(
+      isRecoverableRemotePlaceholder: (body) => body.isEmpty,
+    );
+
+    await coordinator.syncBook(fingerprint);
+
+    expect(remote.decoded!['annotations'], hasLength(1));
+    expect(remote.puts, 1);
+    expect(remote.locks, 0);
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
+  test('placeholder recovery never accepts non-empty malformed content',
+      () async {
+    await putLocal([entity('valid')]);
+    remote.body = Uint8List.fromList(utf8.encode('{not-json'));
+    remote.etag = '"bad"';
+    await coordinator.close();
+    coordinator = createCoordinator(
+      isRecoverableRemotePlaceholder: (body) => body.isEmpty,
+    );
+
+    await expectLater(coordinator.syncBook(fingerprint),
+        throwsA(isA<MalformedRemoteAnnotationException>()));
+
+    expect(utf8.decode(remote.body!), '{not-json');
+    expect(remote.puts, 0);
     expect(await store.pendingOutbox(), isNotEmpty);
   });
 

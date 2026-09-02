@@ -5,11 +5,24 @@ import 'package:fluttertoast/fluttertoast.dart';
 
 class AnxToast {
   static FToast fToast = FToast();
+  static bool _initialized = false;
 
   static void init(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      fToast.init(context);
-    });
+    fToast.init(context);
+    _initialized = true;
+  }
+
+  /// Shows a best-effort notification without allowing presentation failures
+  /// to interrupt the operation that produced it.
+  static bool tryShow(String message, {Icon? icon, int duration = 2000}) {
+    if (!_initialized || navigatorKey.currentContext == null) return false;
+    try {
+      show(message, icon: icon, duration: duration);
+      return true;
+    } catch (error) {
+      debugPrint('Unable to show toast: ${error.runtimeType}');
+      return false;
+    }
   }
 
   static void show(String message, {Icon? icon, int duration = 2000}) {

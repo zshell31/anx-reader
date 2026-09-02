@@ -10,7 +10,9 @@ export 'annotation_sync_coordinator.dart'
         AnnotationSyncStatus,
         MalformedRemoteAnnotationException,
         SharedDocumentChanged,
+        SharedDocumentDecodeFailureLabel,
         SharedDocumentDecoder,
         SharedDocumentIdValidator,
         SharedDocumentMerger,
+        SharedDocumentRemotePlaceholder,
         SharedDocumentSyncCoordinator;

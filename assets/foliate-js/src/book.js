@@ -1701,6 +1701,7 @@ const refreshLayout = () => {
 
 
 const onRelocated = (currentInfo) => {
+  const reason = currentInfo.reason
   const chapterTitle = currentInfo.tocItem?.label
   const chapterHref = currentInfo.tocItem?.href
   const chapterTotalPages = currentInfo.chapterLocation.total
@@ -1719,6 +1720,7 @@ const onRelocated = (currentInfo) => {
     bookCurrentPage,
     cfi,
     percentage,
+    reason,
     bookmark: currentInfo.bookmark,
     writingMode: reader.view.renderer.writingMode,
   })

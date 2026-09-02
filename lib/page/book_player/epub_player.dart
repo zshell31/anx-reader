@@ -107,6 +107,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   WritingModeEnum writingMode = WritingModeEnum.horizontalTb;
   String? _lastSelectionAnnotationContext;
   String? _lastSelectionLookupContext;
+  bool _hasObservedInitialRelocation = false;
+  bool _hasReadingPositionMutation = false;
+  bool _pendingExplicitReadingNavigation = false;
   final SelectionSessionBridgeState _selectionSession =
       SelectionSessionBridgeState();
 
@@ -253,8 +256,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void goToHref(String href) =>
       webViewController.evaluateJavascript(source: "goToHref('$href')");
 
-  void goToCfi(String cfi) =>
-      webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
+  void goToCfi(String cfi) {
+    _pendingExplicitReadingNavigation = true;
+    webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
+  }
 
   void addBookmarkHere() {
     webViewController.evaluateJavascript(source: '''
@@ -640,6 +645,13 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         callback: (args) {
           Map<String, dynamic> location = args[0];
           if (cfi == location['cfi']) return;
+          final isInitialRelocation = !_hasObservedInitialRelocation;
+          _hasObservedInitialRelocation = true;
+          final reason = location['reason']?.toString();
+          final isReaderMutation =
+              reason == 'snap' || reason == 'page' || reason == 'scroll';
+          final isExplicitNavigation = _pendingExplicitReadingNavigation;
+          _pendingExplicitReadingNavigation = false;
           // if (chapterHref != location['chapterHref']) {
           //   refreshToc();
           // }
@@ -666,7 +678,14 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
                 chapterTotalPages: chapterTotalPages,
               );
           widget.updateParent();
-          saveReadingProgress();
+          // Restoring the saved locator when the reader opens is not a user
+          // mutation. Publishing it would manufacture a newer LWW stamp and
+          // could overwrite a genuinely newer position from another device.
+          if (!isInitialRelocation &&
+              (isReaderMutation || isExplicitNavigation)) {
+            _hasReadingPositionMutation = true;
+            saveReadingProgress();
+          }
           readingPageKey.currentState?.resetAwakeTimer();
         });
     controller.addJavaScriptHandler(
@@ -1083,6 +1102,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   Future<void> saveReadingProgress() async {
     if (cfi == '' || widget.cfi != null) return;
     Book book = widget.book;
+    if (book.lastReadPosition == cfi && book.readingPercentage == percentage) {
+      return;
+    }
     book.lastReadPosition = cfi;
     book.readingPercentage = percentage;
     await bookDao.updateBook(book);
@@ -1096,7 +1118,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void dispose() {
     _scrollDebounceTimer?.cancel();
     _animationController?.dispose();
-    saveReadingProgress();
+    if (_hasReadingPositionMutation) saveReadingProgress();
     _selectionSession.reset();
     removeOverlay();
     super.dispose();

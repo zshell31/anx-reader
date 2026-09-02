@@ -160,7 +160,15 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
 
   /// Lists direct children only. A missing collection is treated as empty.
   Future<List<WebDavCollectionEntry>> list(List<String> path) async {
-    final collectionUri = objectUri(path);
+    final object = objectUri(path);
+    // WebDAV servers commonly canonicalize collection resources with a
+    // trailing slash. Unlike GET, PROPFIND is not reliably redirected while
+    // preserving its method and Depth header, so address the collection by
+    // its canonical URI from the outset.
+    final collectionUri = object.replace(pathSegments: [
+      ...object.pathSegments.where((segment) => segment.isNotEmpty),
+      '',
+    ]);
     final response = await _execute('PROPFIND', collectionUri,
         headers: {
           ..._headers,
@@ -299,6 +307,7 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
       'Content-Type': 'application/json; charset=utf-8'
     });
     if (response.statusCode == 412) throw const WebDavPreconditionFailed();
+    if (response.statusCode == 423) throw const WebDavLocked();
     if (response.statusCode != 200 &&
         response.statusCode != 201 &&
         response.statusCode != 204) {

@@ -18,6 +18,8 @@ class ReadingActivitySyncService {
           normalizeDocumentId: (id) => id,
           remotePathFor: readingActivityRemotePath,
           decodeDocument: decodeReadingActivityDocument,
+          decodeFailureLabel: readingActivityDecodeFailureLabel,
+          isRecoverableRemotePlaceholder: (body) => body.isEmpty,
           mergeDocuments: mergeReadingActivityDocuments,
           validateDocumentId: readingActivityMatchesId,
           onDocumentChanged: repository.projectCanonical,

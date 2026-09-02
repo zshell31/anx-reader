@@ -106,10 +106,8 @@ class Sync extends _$Sync {
     }
     _lastSkipReason = null;
     state = state.copyWith(isSyncing: true, count: 0, total: 0, fileName: '');
-    if (Prefs().syncCompletedToast) {
-      AnxToast.show(L10n.of(navigatorKey.currentContext!).webdavSyncing);
-    }
     try {
+      _showSyncToast((l10n) => l10n.webdavSyncing);
       await client.ping();
       if (trigger == SyncTrigger.manual) {
         await annotationSyncRuntime.syncNow();
@@ -121,13 +119,22 @@ class Sync extends _$Sync {
       ref?.read(bookListProvider.notifier).refresh();
       ref?.read(groupDaoProvider.notifier).refresh();
       ref?.read(syncStatusProvider.notifier).refresh();
-      if (Prefs().syncCompletedToast) {
-        AnxToast.show(L10n.of(navigatorKey.currentContext!).webdavSyncComplete);
-      }
+      _showSyncToast((l10n) => l10n.webdavSyncComplete);
     } catch (error) {
       AnxLog.severe('Automatic shared-state sync failed: ${error.runtimeType}');
     } finally {
       state = state.copyWith(isSyncing: false);
+    }
+  }
+
+  void _showSyncToast(String Function(L10n) message) {
+    if (!Prefs().syncCompletedToast) return;
+    try {
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+      AnxToast.tryShow(message(L10n.of(context)));
+    } catch (error) {
+      AnxLog.warning('Sync notification failed: ${error.runtimeType}');
     }
   }
 

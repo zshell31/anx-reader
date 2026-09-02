@@ -113,6 +113,7 @@ class GroupDao extends _$GroupDao {
   }
 
   Future<int> softDeleteGroup(int id) async {
+    await annotationSyncRuntime.tombstoneGroup(id);
     final db = await DBHelper().database;
     final now = DateTime.now().toIso8601String();
     final result = await db.update(
@@ -125,11 +126,12 @@ class GroupDao extends _$GroupDao {
       whereArgs: [id],
     );
     ref.invalidateSelf();
-    annotationSyncRuntime.notifyOrganizationMutation();
     return result;
   }
 
+  /// Removes a local projection after its canonical tombstone is durable.
   Future<void> hardDeleteGroup(int id) async {
+    await annotationSyncRuntime.tombstoneGroup(id);
     final db = await DBHelper().database;
     await db.delete(
       'tb_groups',
@@ -137,7 +139,6 @@ class GroupDao extends _$GroupDao {
       whereArgs: [id],
     );
     ref.invalidateSelf();
-    annotationSyncRuntime.notifyOrganizationMutation();
   }
 
   Future<int> moveGroup(int id, int? newParentId) async {

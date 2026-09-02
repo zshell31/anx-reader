@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/organization_protocol.dart';
@@ -31,11 +32,14 @@ void main() {
   sqfliteFfiInit();
 
   late Database appDatabase;
+  late Directory directory;
   late SharedStateDatabase sharedState;
   late OrganizationRepository repository;
 
   setUp(() async {
-    appDatabase = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    directory = await Directory.systemTemp.createTemp('anx-org-sync-test-');
+    appDatabase =
+        await databaseFactoryFfi.openDatabase('${directory.path}/app.db');
     await appDatabase.execute('''CREATE TABLE tb_groups (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
@@ -49,7 +53,7 @@ void main() {
       local_id INTEGER NOT NULL UNIQUE
     )''');
     sharedState = SharedStateDatabase(
-        path: inMemoryDatabasePath, factory: databaseFactoryFfi);
+        path: '${directory.path}/shared.db', factory: databaseFactoryFfi);
     repository = OrganizationRepository(
       sharedState: sharedState,
       deviceId: 'device-a',
@@ -61,6 +65,7 @@ void main() {
   tearDown(() async {
     await sharedState.close();
     await appDatabase.close();
+    await directory.delete(recursive: true);
   });
 
   Future<void> storeGroup(Map<String, dynamic> document) async {

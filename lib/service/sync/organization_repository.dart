@@ -251,6 +251,55 @@ class OrganizationRepository {
     await _putIfChanged(domain, id, decoded);
   }
 
+  /// Persists the distributed deletion before callers remove the local row.
+  Future<void> tombstoneGroup(int localId) async {
+    final db = await _database();
+    final rows = await db.query('tb_groups',
+        where: 'id = ?', whereArgs: [localId], limit: 1);
+    var mappings = await db.query('sync_group_ids',
+        columns: ['shared_id'],
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1);
+    if (mappings.isEmpty) {
+      if (rows.isEmpty) return;
+      final row = rows.single;
+      await _ensureMapping('sync_group_ids', localId,
+          'anx:legacy-group:v1:$localId:${row['create_time']}:${row['name']}');
+      mappings = await db.query('sync_group_ids',
+          columns: ['shared_id'],
+          where: 'local_id = ?',
+          whereArgs: [localId],
+          limit: 1);
+    }
+    final id = mappings.single['shared_id'] as String;
+    final bytes = await sharedState.canonicalDocument(groupDomain, id);
+    Map<String, dynamic> document;
+    if (bytes != null) {
+      document = decodeGroupDocument(jsonDecode(utf8.decode(bytes)));
+    } else {
+      if (rows.isEmpty) return;
+      final row = rows.single;
+      final parentLocalId = row['parent_id'] as int?;
+      String? parentId;
+      if (parentLocalId != null && parentLocalId != 0) {
+        parentId = await _sharedId('sync_group_ids', parentLocalId);
+      }
+      document = decodeGroupDocument({
+        'schemaVersion': 1,
+        'domain': groupDomain,
+        'id': id,
+        'deleted': stampedValue(false, _stamp),
+        'fields': {
+          'name': stampedValue(row['name'] as String? ?? 'Group', _stamp),
+          'parentId': stampedValue(parentId, _stamp),
+        },
+      });
+    }
+    document['deleted'] = stampedValue(true, _stamp);
+    await _putIfChanged(groupDomain, id, decodeGroupDocument(document));
+  }
+
   Future<void> publishBookTagByLocalIds(
       int bookId, int tagLocalId, bool present) async {
     final db = await _database();
@@ -479,6 +528,15 @@ class OrganizationRepository {
         whereArgs: [sharedId],
         limit: 1);
     return rows.isEmpty ? null : rows.single['local_id'] as int;
+  }
+
+  Future<String?> _sharedId(String table, int localId) async {
+    final rows = await (await _database()).query(table,
+        columns: ['shared_id'],
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1);
+    return rows.isEmpty ? null : rows.single['shared_id'] as String;
   }
 
   Future<void> _map(String table, String sharedId, int localId) async {

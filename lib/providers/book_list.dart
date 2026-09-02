@@ -165,7 +165,9 @@ class BookList extends _$BookList {
       await updateBook(book.copyWith(groupId: 0));
     }
     // delete the group
-    ref.read(groupDaoProvider.notifier).hardDeleteGroup(books.first.groupId);
+    await ref
+        .read(groupDaoProvider.notifier)
+        .hardDeleteGroup(books.first.groupId);
     await refresh();
   }
 

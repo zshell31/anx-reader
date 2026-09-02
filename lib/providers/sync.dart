@@ -49,6 +49,7 @@ class Sync extends _$Sync {
   static final Sync _instance = Sync._internal();
   factory Sync() => _instance;
   Sync._internal();
+  String? _lastSkipReason;
 
   @override
   SyncStateModel build() => const SyncStateModel(
@@ -71,10 +72,16 @@ class Sync extends _$Sync {
   }
 
   Future<bool> shouldSync() async {
-    if (!Prefs().webdavStatus) return false;
-    if (Prefs().onlySyncWhenWifi &&
-        !(await Connectivity().checkConnectivity())
-            .contains(ConnectivityResult.wifi)) {
+    if (!Prefs().webdavStatus) {
+      _logSkip('not-configured');
+      return false;
+    }
+    if (Prefs().onlySyncWhenWifi) {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity.contains(ConnectivityResult.wifi)) return true;
+      _logSkip(connectivity.contains(ConnectivityResult.none)
+          ? 'no-network'
+          : 'wifi-policy');
       if (Prefs().syncCompletedToast) {
         AnxToast.show(L10n.of(navigatorKey.currentContext!).webdavOnlyWifi);
       }
@@ -87,20 +94,30 @@ class Sync extends _$Sync {
     WidgetRef? ref, {
     SyncTrigger trigger = SyncTrigger.auto,
   }) async {
-    if (trigger == SyncTrigger.auto && !Prefs().autoSync) return;
+    if (trigger != SyncTrigger.manual && !Prefs().autoSync) {
+      _logSkip('auto-disabled');
+      return;
+    }
     if (state.isSyncing || !await shouldSync()) return;
     final client = _syncClient;
     if (client == null) {
-      AnxLog.info('No sync client configured');
+      _logSkip('not-configured');
       return;
     }
+    _lastSkipReason = null;
     state = state.copyWith(isSyncing: true, count: 0, total: 0, fileName: '');
     if (Prefs().syncCompletedToast) {
       AnxToast.show(L10n.of(navigatorKey.currentContext!).webdavSyncing);
     }
     try {
       await client.ping();
-      await annotationSyncRuntime.syncNow();
+      if (trigger == SyncTrigger.manual) {
+        await annotationSyncRuntime.syncNow();
+      } else {
+        await annotationSyncRuntime.syncAutomatic(
+          trigger: trigger == SyncTrigger.startup ? 'startup' : 'mutation',
+        );
+      }
       ref?.read(bookListProvider.notifier).refresh();
       ref?.read(groupDaoProvider.notifier).refresh();
       ref?.read(syncStatusProvider.notifier).refresh();
@@ -235,5 +252,11 @@ class Sync extends _$Sync {
         AnxLog.warning('Book asset download failed: ${error.runtimeType}');
       }
     }
+  }
+
+  void _logSkip(String reason) {
+    if (_lastSkipReason == reason) return;
+    _lastSkipReason = reason;
+    AnxLog.info('sync skipped reason=$reason');
   }
 }

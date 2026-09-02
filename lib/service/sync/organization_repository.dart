@@ -7,6 +7,7 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -42,6 +43,10 @@ class OrganizationRepository {
   Future<int> _bootstrap() async {
     final db = await _database();
     var imported = 0;
+    var importedGroups = 0;
+    var importedTags = 0;
+    var importedRelations = 0;
+    var importedThemes = 0;
     final groups = await db.query('tb_groups', orderBy: 'id');
     final groupIds = <int, String>{};
     for (final row in groups.where((row) => row['id'] != 0)) {
@@ -74,6 +79,7 @@ class OrganizationRepository {
       if (first) {
         await _receipt(sourceKey, id);
         imported++;
+        importedGroups++;
       }
     }
     final groupedBooks = await db.query('tb_books',
@@ -128,6 +134,7 @@ class OrganizationRepository {
       if (first) {
         await _receipt(sourceKey, id);
         imported++;
+        importedTags++;
       }
     }
     final relations = await db.query('tb_styles',
@@ -164,6 +171,7 @@ class OrganizationRepository {
       if (first) {
         await _receipt(sourceKey, id);
         imported++;
+        importedRelations++;
       }
     }
 
@@ -190,8 +198,12 @@ class OrganizationRepository {
       if (first) {
         await _receipt(sourceKey, id);
         imported++;
+        importedThemes++;
       }
     }
+    syncDebug('bootstrap organization groups=$importedGroups '
+        'tags=$importedTags themes=$importedThemes '
+        'relations=$importedRelations');
     return imported;
   }
 
@@ -241,7 +253,8 @@ class OrganizationRepository {
         whereArgs: [localId],
         limit: 1);
     final row = rows.isEmpty ? null : rows.single;
-    final id = await _ensureTagSharedId(localId, row: row);
+    final existing = await _sharedId('sync_tag_ids', localId);
+    final id = existing ?? await _ensureTagSharedId(localId, row: row);
     if (id == null) return;
     final bytes = await sharedState.canonicalDocument(tagDomain, id);
     Map<String, dynamic> document;
@@ -262,6 +275,9 @@ class OrganizationRepository {
     }
     document['deleted'] = stampedValue(true, _stamp);
     await _putIfChanged(tagDomain, id, decodeTagDocument(document));
+    syncDebug('organization tag-delete shared=${shortSyncId(id)} '
+        'mapping=${existing == null ? 'created' : 'reused'} '
+        'tombstone=durable');
   }
 
   /// Built-in themes are local application defaults and are never tombstoned.
@@ -274,7 +290,8 @@ class OrganizationRepository {
     final rows = await db.query('tb_themes',
         where: 'id = ? AND id > 2', whereArgs: [localId], limit: 1);
     final row = rows.isEmpty ? null : rows.single;
-    final id = await _ensureThemeSharedId(localId, row: row);
+    final existing = await _sharedId('sync_theme_ids', localId);
+    final id = existing ?? await _ensureThemeSharedId(localId, row: row);
     if (id == null) return;
     final bytes = await sharedState.canonicalDocument(themeDomain, id);
     Map<String, dynamic> document;
@@ -295,6 +312,9 @@ class OrganizationRepository {
     }
     document['deleted'] = stampedValue(true, _stamp);
     await _putIfChanged(themeDomain, id, decodeThemeDocument(document));
+    syncDebug('organization theme-delete shared=${shortSyncId(id)} '
+        'mapping=${existing == null ? 'created' : 'reused'} '
+        'tombstone=durable');
   }
 
   /// Persists the distributed deletion before callers remove the local row.
@@ -310,6 +330,7 @@ class OrganizationRepository {
         where: 'local_id = ?',
         whereArgs: [localId],
         limit: 1);
+    final mappingCreated = mappings.isEmpty;
     if (mappings.isEmpty) {
       if (rows.isEmpty) return;
       final row = rows.single;
@@ -346,6 +367,9 @@ class OrganizationRepository {
     }
     document['deleted'] = stampedValue(true, _stamp);
     await _putIfChanged(groupDomain, id, decodeGroupDocument(document));
+    syncDebug('organization group-delete shared=${shortSyncId(id)} '
+        'mapping=${mappingCreated ? 'created' : 'reused'} '
+        'tombstone=durable');
   }
 
   Future<void> publishBookTagByLocalIds(
@@ -377,6 +401,8 @@ class OrganizationRepository {
           'tagId': tagId,
           'membership': stampedValue(present, _stamp),
         }));
+    syncDebug('organization book-tag shared=${shortSyncId(id)} '
+        'membership=$present durable=true');
   }
 
   Future<void> publishBookGroupByLocalIds(int bookId, int groupLocalId) async {
@@ -600,6 +626,14 @@ class OrganizationRepository {
     if (rows.isNotEmpty) return rows.single['shared_id'] as String;
     final id = uuid.v5(Namespace.url.value, namespace);
     await _map(table, id, localId);
+    final domain = switch (table) {
+      'sync_group_ids' => 'group',
+      'sync_tag_ids' => 'tag',
+      'sync_theme_ids' => 'theme',
+      _ => 'organization',
+    };
+    syncDebug('organization domain=$domain mapping=created '
+        'shared=${shortSyncId(id)}');
     return id;
   }
 

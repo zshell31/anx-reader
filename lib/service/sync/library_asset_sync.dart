@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:crypto/crypto.dart';
 
@@ -94,10 +95,16 @@ class LibraryAssetSyncService {
     final remoteExists = await transport.exists(remotePath);
 
     if (localValid && !remoteExists) {
+      syncDebug('asset type=book digest=${shortSyncId(digest)} action=upload');
       await transport.upload(localPath, remotePath);
       return const LibraryAssetSyncResult(uploaded: true);
     }
-    if (!localValid && remoteExists && !await isReleased(fingerprint, digest)) {
+    final released = !localValid && remoteExists
+        ? await isReleased(fingerprint, digest)
+        : false;
+    if (!localValid && remoteExists && !released) {
+      syncDebug(
+          'asset type=book digest=${shortSyncId(digest)} action=download');
       final downloadRelativePath = 'file/$digest$extension';
       final downloadPath = resolveLocalPath(downloadRelativePath);
       final downloadFile = File(downloadPath);
@@ -109,6 +116,8 @@ class LibraryAssetSyncService {
         await transport.download(remotePath, partialPath);
         final actual = await _contentDigest(partialPath);
         if (actual != digest) {
+          syncWarning('asset type=book digest=${shortSyncId(digest)} '
+              'action=reject reason=sha256-mismatch');
           throw LibraryAssetFingerprintMismatch(digest, actual);
         }
         if (downloadFile.existsSync()) await downloadFile.delete();
@@ -124,6 +133,13 @@ class LibraryAssetSyncService {
       await projection.bindBookAsset(fingerprint, relativePath, extension);
       return const LibraryAssetSyncResult(bound: true);
     }
+    if (released) {
+      syncDebug('asset type=book digest=${shortSyncId(digest)} action=skip '
+          'reason=released');
+      return const LibraryAssetSyncResult(missing: true, released: true);
+    }
+    syncDebug('asset type=book digest=${shortSyncId(digest)} action=skip '
+        'reason=missing');
     return const LibraryAssetSyncResult(missing: true);
   }
 
@@ -145,10 +161,13 @@ class LibraryAssetSyncService {
         local.existsSync() && await _contentDigest(localPath) == digest;
     final remoteExists = await transport.exists(remotePath);
     if (localValid && !remoteExists) {
+      syncDebug('asset type=cover digest=${shortSyncId(digest)} action=upload');
       await transport.upload(localPath, remotePath);
       return const LibraryAssetSyncResult(uploaded: true);
     }
     if (!localValid && remoteExists) {
+      syncDebug(
+          'asset type=cover digest=${shortSyncId(digest)} action=download');
       final targetRelativePath = 'cover/$digest$extension';
       final targetPath = resolveLocalPath(targetRelativePath);
       final target = File(targetPath);
@@ -159,6 +178,8 @@ class LibraryAssetSyncService {
         await transport.download(remotePath, partial.path);
         final actual = await _contentDigest(partial.path);
         if (actual != digest) {
+          syncWarning('asset type=cover digest=${shortSyncId(digest)} '
+              'action=reject reason=sha256-mismatch');
           throw LibraryAssetFingerprintMismatch(digest, actual);
         }
         if (target.existsSync()) await target.delete();
@@ -174,6 +195,8 @@ class LibraryAssetSyncService {
       await projection.bindCoverAsset(fingerprint, relativePath, extension);
       return const LibraryAssetSyncResult(bound: true);
     }
+    syncDebug('asset type=cover digest=${shortSyncId(digest)} action=skip '
+        'reason=missing');
     return const LibraryAssetSyncResult(missing: true);
   }
 
@@ -203,11 +226,13 @@ class LibraryAssetSyncResult {
   final bool downloaded;
   final bool bound;
   final bool missing;
+  final bool released;
   const LibraryAssetSyncResult({
     this.uploaded = false,
     this.downloaded = false,
     this.bound = false,
     this.missing = false,
+    this.released = false,
   });
 
   LibraryAssetSyncResult combine(LibraryAssetSyncResult other) =>
@@ -216,5 +241,6 @@ class LibraryAssetSyncResult {
         downloaded: downloaded || other.downloaded,
         bound: bound || other.bound,
         missing: missing || other.missing,
+        released: released || other.released,
       );
 }

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 
 const annotationSyncDomain = 'annotations';
@@ -181,6 +181,7 @@ class SharedDocumentSyncCoordinator {
     final pending = (await sharedState.pendingOutbox())
         .where((entry) => entry.domain == syncDomain)
         .toList(growable: false);
+    syncDebug('domain=$syncDomain pending=${pending.length}');
     await Future.wait(pending.map((entry) async {
       try {
         await syncBook(entry.documentId);
@@ -191,7 +192,9 @@ class SharedDocumentSyncCoordinator {
   }
 
   Future<void> pullBooks(Iterable<String> fingerprints) async {
-    await Future.wait(fingerprints.map((fingerprint) async {
+    final documents = fingerprints.toList(growable: false);
+    syncDebug('domain=$syncDomain known=${documents.length}');
+    await Future.wait(documents.map((fingerprint) async {
       try {
         await pullBook(fingerprint);
       } catch (_) {
@@ -240,9 +243,12 @@ class SharedDocumentSyncCoordinator {
   Future<void> _singlePass(String id) async {
     final entry = await sharedState.outboxEntry(syncDomain, id);
     if (entry == null) {
+      syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=pull');
       await _pullClean(id);
       return;
     }
+    syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=push '
+        'revision=${entry.localRevision}');
     final work =
         await sharedState.beginSync(syncDomain, id, entry.localRevision);
     if (work == null) return;
@@ -263,12 +269,16 @@ class SharedDocumentSyncCoordinator {
       final remote = await transport.get(remotePathFor(work.documentId));
       if ((remote == null && conditionalCreateRejected) ||
           (remote != null && failures > maxPreconditionRetries)) {
+        syncDebug('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=lock-fallback revision=${work.localRevision}');
         try {
           await _writeUnderExclusiveLock(work.documentId, work.localRevision,
               expectDirty: true);
           return;
         } on WebDavLocked {
           lockContentions++;
+          syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+              'lock=contended retry=$lockContentions');
           if (lockContentions > maxLockContentionRetries) rethrow;
           await _waitForLockContention(lockContentions);
           continue;
@@ -298,10 +308,17 @@ class SharedDocumentSyncCoordinator {
         await sharedState.markConverged(
             syncDomain, work.documentId, work.localRevision,
             strongEtag: remote.etag);
+        syncDebug('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=already-converged result=converged '
+            'revision=${work.localRevision} etag=present');
         return;
       }
 
       try {
+        final action = remote == null ? 'create' : 'replace';
+        syncDebug('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=$action revision=${work.localRevision} '
+            'etag=${remote == null ? 'absent' : 'present'}');
         final write = remote == null
             ? await transport.create(
                 remotePathFor(work.documentId), merged.bytes)
@@ -310,13 +327,21 @@ class SharedDocumentSyncCoordinator {
         await sharedState.markConverged(
             syncDomain, work.documentId, work.localRevision,
             strongEtag: write.etag);
+        syncDebug('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=$action result=converged revision=${work.localRevision} '
+            'etag=${write.etag == null ? 'absent' : 'present'}');
         return;
       } on WebDavPreconditionFailed {
+        final action = remote == null ? 'create' : 'replace';
         if (remote == null) {
           conditionalCreateRejected = true;
+          syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+              'action=$action conflict=412 retry=1');
           continue;
         }
         failures++;
+        syncWarning('domain=$syncDomain doc=${shortSyncId(work.documentId)} '
+            'action=$action conflict=412 retry=$failures');
       }
     }
   }
@@ -329,11 +354,15 @@ class SharedDocumentSyncCoordinator {
       final remote = await transport.get(remotePathFor(id));
       if ((remote == null && conditionalCreateRejected) ||
           (remote != null && failures > maxPreconditionRetries)) {
+        syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=lock-fallback');
         try {
           await _writeUnderExclusiveLock(id, null, expectDirty: false);
           return;
         } on WebDavLocked {
           lockContentions++;
+          syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+              'lock=contended retry=$lockContentions');
           if (lockContentions > maxLockContentionRetries) rethrow;
           await _waitForLockContention(lockContentions);
           continue;
@@ -354,6 +383,9 @@ class SharedDocumentSyncCoordinator {
         await sharedState.markRemoteConverged(
             syncDomain, id, merged.snapshot.localRevision,
             strongEtag: remote.etag);
+        syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=already-converged result=converged '
+            'revision=${merged.snapshot.localRevision} etag=present');
         return;
       }
 
@@ -364,6 +396,10 @@ class SharedDocumentSyncCoordinator {
         return;
       }
       try {
+        final action = remote == null ? 'create' : 'replace';
+        syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=$action '
+            'revision=${merged.snapshot.localRevision} '
+            'etag=${remote == null ? 'absent' : 'present'}');
         final write = remote == null
             ? await transport.create(remotePathFor(id), merged.bytes)
             : await transport.replace(
@@ -371,13 +407,21 @@ class SharedDocumentSyncCoordinator {
         await sharedState.markRemoteConverged(
             syncDomain, id, merged.snapshot.localRevision,
             strongEtag: write.etag);
+        syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=$action '
+            'result=converged revision=${merged.snapshot.localRevision} '
+            'etag=${write.etag == null ? 'absent' : 'present'}');
         return;
       } on WebDavPreconditionFailed {
+        final action = remote == null ? 'create' : 'replace';
         if (remote == null) {
           conditionalCreateRejected = true;
+          syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+              'action=$action conflict=412 retry=1');
           continue;
         }
         failures++;
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=$action conflict=412 retry=$failures');
       }
     }
   }
@@ -424,9 +468,14 @@ class SharedDocumentSyncCoordinator {
               syncDomain, id, beforePut.localRevision,
               strongEtag: remote.etag);
         }
+        syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=already-converged result=converged '
+            'revision=${beforePut.localRevision} etag=present');
         return;
       }
 
+      syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=replace '
+          'revision=${beforePut.localRevision} lock=exclusive');
       final write = await transport.putLocked(path, merged.bytes, lock);
       putSucceeded = true;
       if (expectDirty) {
@@ -437,6 +486,9 @@ class SharedDocumentSyncCoordinator {
             syncDomain, id, beforePut.localRevision,
             strongEtag: write.etag);
       }
+      syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=replace '
+          'result=converged revision=${beforePut.localRevision} '
+          'lock=exclusive etag=${write.etag == null ? 'absent' : 'present'}');
     } catch (error, stackTrace) {
       primaryFailure = error;
       Error.throwWithStackTrace(error, stackTrace);
@@ -444,12 +496,8 @@ class SharedDocumentSyncCoordinator {
       try {
         await transport.unlock(path, lock);
       } catch (error, stackTrace) {
-        developer.log(
-          'WebDAV UNLOCK cleanup failed after annotation create attempt',
-          name: 'anx_reader.annotation_sync',
-          error: error,
-          stackTrace: stackTrace,
-        );
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=unlock-cleanup error=${safeSyncError(error)}');
         if (primaryFailure == null && !putSucceeded) {
           Error.throwWithStackTrace(error, stackTrace);
         }
@@ -477,6 +525,11 @@ class SharedDocumentSyncCoordinator {
           : remote == null
               ? local
               : mergeDocuments(local, remote);
+      final action = local == null
+          ? 'pull'
+          : remote == null
+              ? 'push'
+              : 'merge';
       final bytes = Uint8List.fromList(utf8.encode(canonicalJson(document)));
       final applied = await sharedState.applyRemoteMerge(
         syncDomain,
@@ -488,6 +541,8 @@ class SharedDocumentSyncCoordinator {
       if (!applied) continue;
       final current = await sharedState.documentSnapshot(syncDomain, id);
       if (current == null) throw StateError('Remote merge disappeared');
+      syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=$action '
+          'revision=${current.localRevision} result=canonicalized');
       return _RemoteMerge(current, bytes);
     }
   }
@@ -496,16 +551,22 @@ class SharedDocumentSyncCoordinator {
       decodeDocument(jsonDecode(utf8.decode(snapshot.canonicalState)));
 
   Map<String, dynamic> _decodeRemote(WebDavObject remote, String id) {
+    late final Map<String, dynamic> document;
     try {
-      final document = decodeDocument(
+      document = decodeDocument(
           jsonDecode(utf8.decode(remote.body, allowMalformed: false)));
-      if (!validateDocumentId(document, id)) {
-        throw const FormatException('document identity does not match path');
-      }
-      return document;
     } catch (error) {
+      syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+          'reason=malformed-remote');
       throw MalformedRemoteAnnotationException(error);
     }
+    if (!validateDocumentId(document, id)) {
+      syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+          'reason=identity-mismatch');
+      throw const MalformedRemoteAnnotationException(
+          FormatException('document identity does not match path'));
+    }
+    return document;
   }
 
   Future<void> _notifyDocumentChanged(String id) async {
@@ -527,6 +588,9 @@ class SharedDocumentSyncCoordinator {
     if (recordedAttempts > networkBackoff.length) return;
     final attempt = recordedAttempts < 1 ? 1 : recordedAttempts;
     final delay = networkBackoff[attempt - 1];
+    syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+        'retryScheduled=${_durationLabel(delay)} '
+        'error=${safeSyncError(error)}');
     _retryTimers[id] = scheduleRetry(delay, () {
       _retryTimers.remove(id);
       unawaited(syncBook(id).catchError((_) {}));
@@ -545,6 +609,14 @@ class SharedDocumentSyncCoordinator {
       if (left[index] != right[index]) return false;
     }
     return true;
+  }
+
+  String _durationLabel(Duration duration) {
+    if (duration.inMilliseconds % 1000 != 0) {
+      return '${duration.inMilliseconds}ms';
+    }
+    if (duration.inSeconds % 60 != 0) return '${duration.inSeconds}s';
+    return '${duration.inMinutes}m';
   }
 
   void _emitStatus() {

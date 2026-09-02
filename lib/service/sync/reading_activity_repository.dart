@@ -8,6 +8,7 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:uuid/uuid.dart';
 
 abstract interface class ReadingActivityProjection {
@@ -136,10 +137,14 @@ class ReadingActivityRepository {
 
   Future<int> bootstrap() async {
     var imported = 0;
+    var deferred = 0;
     for (final row in await projection.legacyAggregates()) {
       final fingerprint = await projection.fingerprintForBookId(row.bookId);
       final day = row.dateOnly;
-      if (fingerprint == null || day == null || row.readingTime < 0) continue;
+      if (fingerprint == null || day == null || row.readingTime < 0) {
+        deferred++;
+        continue;
+      }
       final sourceKey = '$fingerprint:$day:${row.readingTime}';
       if (await sharedState.importReceipt(bootstrapSource, sourceKey) != null) {
         continue;
@@ -159,6 +164,12 @@ class ReadingActivityRepository {
         status: 'complete',
       );
       imported++;
+    }
+    syncDebug('bootstrap reading-activity imported=$imported '
+        'deferred=$deferred');
+    if (deferred > 0) {
+      syncWarning('bootstrap reading-activity deferred '
+          'reason=unsupported-local-state count=$deferred');
     }
     return imported;
   }

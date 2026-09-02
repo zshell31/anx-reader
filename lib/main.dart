@@ -14,6 +14,7 @@ import 'package:anx_reader/service/book_player/book_player_server.dart';
 import 'package:anx_reader/service/network/http_proxy_overrides.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/sync/legacy_annotation_bootstrap.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/get_path/macos_migration.dart';
@@ -100,13 +101,13 @@ Future<void> migrateLegacyAnnotations() async {
     if (bootstrap.presentationChanged) {
       annotationSyncRuntime.notifyPresentationMutation();
     }
-    AnxLog.info('Legacy annotations: imported ${bootstrap.imported}, '
-        'recognized ${bootstrap.alreadyImported}, '
-        'unsupported ${bootstrap.unsupported}');
-  } catch (error, stackTrace) {
+    syncDebug('bootstrap annotations imported=${bootstrap.imported} '
+        'recognized=${bootstrap.alreadyImported} '
+        'deferred=${bootstrap.unsupported}');
+  } catch (error) {
     // The read-only import can retry on the next launch without duplicating or
     // overwriting canonical state.
-    AnxLog.warning('Legacy annotation migration failed: $error\n$stackTrace');
+    syncWarning('bootstrap annotations failed error=${safeSyncError(error)}');
   } finally {
     await sharedState.close();
   }

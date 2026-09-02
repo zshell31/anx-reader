@@ -21,6 +21,7 @@ import 'package:anx_reader/service/sync/organization_sync_service.dart';
 import 'package:anx_reader/service/sync/remote_document_discovery.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/sync/sync_run_gate.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/sync/sync_summary.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
 import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
@@ -63,6 +64,8 @@ class AnnotationSyncRuntime {
   int _lastDiscoveredDocumentCount = 0;
   bool _lastRunFailed = false;
   bool _started = false;
+  String _pendingTrigger = 'startup';
+  String? _lastSkipReason;
 
   AnnotationSyncCoordinator? get coordinator => _coordinator;
   AnnotationSyncCoordinator? get presentationCoordinator =>
@@ -137,7 +140,7 @@ class AnnotationSyncRuntime {
     final organization = await _ensureOrganizationRepository();
     await organization.bootstrap();
     await _ensureCoordinator();
-    unawaited(_runDiscovery());
+    unawaited(_runDiscovery(trigger: 'startup'));
   }
 
   Future<void> reconfigure() {
@@ -148,7 +151,7 @@ class AnnotationSyncRuntime {
     operation.then((_) {
       if (identical(_reconfiguring, operation)) {
         _reconfiguring = null;
-        unawaited(_runDiscovery());
+        unawaited(_runDiscovery(trigger: 'mutation'));
       }
     }, onError: (_, __) {
       if (identical(_reconfiguring, operation)) _reconfiguring = null;
@@ -299,9 +302,12 @@ class AnnotationSyncRuntime {
     }
   }
 
-  Future<void> syncNow() => _runDiscovery(manual: true);
-  Future<void> onResume() => _runDiscovery();
-  Future<void> onConnectivityRegained() => _runDiscovery();
+  Future<void> syncNow() => _runDiscovery(manual: true, trigger: 'manual');
+  Future<void> syncAutomatic({String trigger = 'mutation'}) =>
+      _runDiscovery(trigger: trigger);
+  Future<void> onResume() => _runDiscovery(trigger: 'resume');
+  Future<void> onConnectivityRegained() =>
+      _runDiscovery(trigger: 'connectivity');
 
   void bestEffortFlush() {
     if (!Prefs().autoSync) return;
@@ -429,7 +435,7 @@ class AnnotationSyncRuntime {
       }
     } catch (error) {
       AnxLog.warning('Shared sync target failed domain=$annotationSyncDomain '
-          'error=${_safeError(error)}');
+          'error=${safeSyncError(error)}');
     }
   }
 
@@ -446,19 +452,29 @@ class AnnotationSyncRuntime {
       }
     } catch (error) {
       AnxLog.warning('Shared sync target failed '
-          'domain=$anxPresentationSyncDomain error=${_safeError(error)}');
+          'domain=$anxPresentationSyncDomain error=${safeSyncError(error)}');
     }
   }
 
-  Future<void> _runDiscovery({bool manual = false}) {
-    if (!manual && !Prefs().autoSync) return Future.value();
+  Future<void> _runDiscovery({bool manual = false, required String trigger}) {
+    if (!manual && !Prefs().autoSync) {
+      _logSkip('auto-disabled');
+      return Future.value();
+    }
+    _pendingTrigger = trigger;
     final reconfiguring = _reconfiguring;
-    return reconfiguring ?? _runGate.run(_runDiscoveryPass);
+    return reconfiguring ??
+        _runGate.run(() {
+          final passTrigger = _pendingTrigger;
+          return runWithSyncDiagnostics(
+              passTrigger, (_) => _runDiscoveryPass(passTrigger));
+        });
   }
 
-  Future<void> _runDiscoveryPass() async {
+  Future<void> _runDiscoveryPass(String trigger) async {
     final startedAt = DateTime.now();
     var attempted = false;
+    Object? fatalError;
     _lastRunFailed = false;
     _emitStatus();
     try {
@@ -466,9 +482,19 @@ class AnnotationSyncRuntime {
       await _ensureReadingActivityRepository();
       await _ensureOrganizationRepository();
       final coordinator = await _ensureCoordinator();
-      if (coordinator == null || !await _networkPolicyAllowsSync()) return;
+      if (coordinator == null) {
+        _logSkip('not-configured');
+        return;
+      }
+      if (!await _networkPolicyAllowsSync()) return;
       attempted = true;
+      _lastSkipReason = null;
+      syncInfo('started trigger=$trigger auto=${Prefs().autoSync} '
+          'wifiOnly=${Prefs().onlySyncWhenWifi}');
+      syncDebug('phase=bootstrap started');
       await (await _ensureOrganizationRepository()).bootstrap();
+      syncDebug('phase=bootstrap completed');
+      syncDebug('phase=discovery started');
       var remote = const RemoteDocumentIndex({});
       final transport = _documentTransport;
       if (transport != null) {
@@ -476,11 +502,13 @@ class AnnotationSyncRuntime {
           remote = await RemoteDocumentDiscovery(transport.list).discover();
         } catch (error) {
           _lastRunFailed = true;
-          AnxLog.warning(
-              'Shared sync discovery failed error=${_safeError(error)}');
+          syncWarning('phase=discovery failed '
+              'error=${safeSyncError(error)}');
         }
       }
       _lastDiscoveredDocumentCount = remote.documentCount;
+      syncDebug('phase=discovery completed '
+          'documents=${remote.documentCount}');
       final initialFingerprints = {
         ...await _knownFingerprints(),
         ...remote.ids(annotationSyncDomain),
@@ -488,17 +516,22 @@ class AnnotationSyncRuntime {
         ...remote.ids(readingStateDomain),
       };
       if (_organizationService != null) {
+        syncDebug('phase=organization started');
         await _organizationService!.syncKnown(
           sharedState,
           remoteIdsByDomain: remote.idsByDomain,
         );
+        syncDebug('phase=organization completed');
       }
+      syncDebug('phase=catalog started');
       await _libraryService?.syncCatalog(initialFingerprints);
+      syncDebug('phase=catalog completed');
       final fingerprints = {
         ...initialFingerprints,
         ...await _knownFingerprints(),
         ...await sharedState.documentIds(libraryCatalogDomain),
       };
+      syncDebug('phase=content-domains started');
       await Future.wait([
         coordinator.syncDirtyAnnotations(),
         coordinator.pullBooks(fingerprints),
@@ -512,23 +545,35 @@ class AnnotationSyncRuntime {
             ...remote.ids(readingActivityDomain),
           }),
       ]);
+      syncDebug('phase=content-domains completed');
+      syncDebug('phase=assets started');
       await _syncSharedLibraryAssets();
+      syncDebug('phase=assets completed');
       await _syncTranslationCacheBestEffort();
     } catch (error) {
       _lastRunFailed = true;
-      AnxLog.warning('Shared sync run failed error=${_safeError(error)}');
+      fatalError = error;
     } finally {
       if (attempted) {
         _lastCompletedAt = DateTime.now().toUtc();
         var pending = -1;
+        var failed = -1;
         try {
-          pending = (await sharedState.pendingOutbox()).length;
+          final outbox = await sharedState.pendingOutbox();
+          pending = outbox.length;
+          failed = outbox.where((entry) => entry.lastError != null).length;
         } catch (_) {
           _lastRunFailed = true;
         }
-        AnxLog.info('Shared sync completed discovered='
-            '$_lastDiscoveredDocumentCount pending=$pending '
-            'durationMs=${DateTime.now().difference(startedAt).inMilliseconds}');
+        final duration = DateTime.now().difference(startedAt).inMilliseconds;
+        if (fatalError == null) {
+          syncInfo('completed discovered=$_lastDiscoveredDocumentCount '
+              'pending=$pending failed=$failed durationMs=$duration');
+        } else {
+          syncWarning('failed error=${safeSyncError(fatalError)} '
+              'discovered=$_lastDiscoveredDocumentCount pending=$pending '
+              'failed=$failed durationMs=$duration');
+        }
       }
       _emitStatus();
     }
@@ -549,24 +594,38 @@ class AnnotationSyncRuntime {
         return receipt?.status == 'released' && receipt?.sharedId == digest;
       },
     );
+    var checked = 0;
+    var uploaded = 0;
+    var downloaded = 0;
+    var released = 0;
+    var missing = 0;
     for (final id in await sharedState.documentIds(libraryCatalogDomain)) {
       final bytes =
           await sharedState.canonicalDocument(libraryCatalogDomain, id);
       if (bytes == null) continue;
-      await service.syncBook(
-          decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes))));
+      checked++;
+      final result = await service.syncBook(
+        decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes))),
+      );
+      if (result.uploaded) uploaded++;
+      if (result.downloaded) downloaded++;
+      if (result.released) released++;
+      if (result.missing) missing++;
     }
+    syncInfo('assets checked=$checked uploaded=$uploaded '
+        'downloaded=$downloaded released=$released missing=$missing');
   }
 
   Future<void> _syncTranslationCacheBestEffort() async {
     final client = SyncClientFactory.currentClient;
     if (client == null) return;
+    syncDebug('phase=translation-cache started');
     try {
       await TranslationCacheSyncService(client: client).sync();
+      syncDebug('phase=translation-cache completed');
     } catch (error) {
-      AnxLog.warning(
-          'Translation cache sync failed; shared domains remain safe: '
-          '${error.runtimeType}');
+      syncWarning('phase=translation-cache failed '
+          'error=${safeSyncError(error)}');
     }
   }
 
@@ -604,9 +663,14 @@ class AnnotationSyncRuntime {
 
   Future<bool> _networkPolicyAllowsSync() async {
     final connectivity = await Connectivity().checkConnectivity();
-    if (connectivity.contains(ConnectivityResult.none)) return false;
-    return !Prefs().onlySyncWhenWifi ||
+    if (connectivity.contains(ConnectivityResult.none)) {
+      _logSkip('no-network');
+      return false;
+    }
+    final allowed = !Prefs().onlySyncWhenWifi ||
         connectivity.contains(ConnectivityResult.wifi);
+    if (!allowed) _logSkip('wifi-policy');
+    return allowed;
   }
 
   Future<Set<String>> _knownFingerprints() async {
@@ -672,13 +736,10 @@ class AnnotationSyncRuntime {
         if (_organizationService != null) ..._organizationService!.coordinators,
       ];
 
-  String _safeError(Object error) {
-    if (error is WebDavTransportException) {
-      return error.status == null
-          ? 'WebDavTransportException'
-          : 'WebDavTransportException/http-${error.status}';
-    }
-    return error.runtimeType.toString();
+  void _logSkip(String reason) {
+    if (_lastSkipReason == reason) return;
+    _lastSkipReason = reason;
+    syncInfo('skipped reason=$reason');
   }
 
   Future<void> _cancelCoordinatorStatusSubscriptions() async {

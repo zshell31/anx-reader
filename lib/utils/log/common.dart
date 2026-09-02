@@ -73,6 +73,10 @@ class AnxLog {
     logFile!.writeAsStringSync('');
   }
 
+  static void debug(String message, [Object? error, StackTrace? stackTrace]) {
+    log.fine(message, error, stackTrace);
+  }
+
   static info(String message, [Object? error, StackTrace? stackTrace]) {
     log.info(message, error, stackTrace);
   }

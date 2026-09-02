@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:anx_reader/models/full_text_translation_cache.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/service/translate/translation_cache_database.dart';
 import 'package:anx_reader/service/translate/translation_cache_merge.dart';
 import 'package:anx_reader/utils/get_path/get_temp_dir.dart';
-import 'package:anx_reader/utils/log/common.dart';
 import 'package:path/path.dart';
 
 const String translationCacheRemoteDirectory = 'anx/data/translation-cache/v1';
@@ -38,17 +38,23 @@ class TranslationCacheSyncService {
     }.toList()
       ..sort();
 
+    var completed = 0;
+    var failed = 0;
+    syncDebug('translation-cache documents=${fingerprints.length}');
     for (final fingerprint in fingerprints) {
       try {
         await cacheService.synchronizeSemanticMutation(
           () =>
               _syncBook(fingerprint, remoteFingerprints.contains(fingerprint)),
         );
+        completed++;
       } catch (error) {
-        AnxLog.warning(
-            'Translation cache document sync failed: ${error.runtimeType}');
+        failed++;
+        syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
+            'failed error=${safeSyncError(error)}');
       }
     }
+    syncDebug('translation-cache completed=$completed failed=$failed');
   }
 
   Future<void> _syncBook(String fingerprint, bool remoteExists) async {
@@ -60,16 +66,17 @@ class TranslationCacheSyncService {
         if (remoteDocument.bookFingerprintAlgorithm !=
                 bookFingerprintAlgorithmMd5 ||
             remoteDocument.bookFingerprint != fingerprint) {
-          AnxLog.severe(
-              'Translation cache remote book identity mismatch; skipping');
+          syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
+              'reason=identity-mismatch');
           return;
         }
       } on UnsupportedError {
-        AnxLog.warning('Unsupported translation cache document was not merged');
+        syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
+            'reason=unsupported-remote');
         return;
       } catch (error) {
-        AnxLog.warning(
-            'Invalid remote translation cache: ${error.runtimeType}');
+        syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
+            'reason=malformed-remote error=${safeSyncError(error)}');
         return;
       }
     }
@@ -79,8 +86,8 @@ class TranslationCacheSyncService {
       remoteDocument?.entries ?? const <TranslationCacheEntry>[],
     );
     if (result.hasIdentityConflict) {
-      AnxLog.severe('Translation cache request-key collision; '
-          'both documents were left in place');
+      syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
+          'reason=identity-conflict');
       return;
     }
     final localState = <String, String>{

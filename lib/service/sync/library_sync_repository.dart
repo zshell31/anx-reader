@@ -8,8 +8,8 @@ import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
-import 'package:anx_reader/utils/log/common.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
@@ -293,9 +293,10 @@ class LibrarySyncRepository {
       }
     }
     if (unresolved > 0) {
-      AnxLog.warning(
-          'Library catalog bootstrap deferred unresolvedBooks=$unresolved');
+      syncWarning('bootstrap library deferred '
+          'reason=no-portable-fingerprint-or-asset count=$unresolved');
     }
+    syncDebug('bootstrap library imported=$imported deferred=$unresolved');
     return imported;
   }
 

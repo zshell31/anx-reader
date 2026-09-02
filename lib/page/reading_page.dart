@@ -781,6 +781,18 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                   ),
                   actions: [
                     if (EnvVar.enableAIFeature) aiButton,
+                    if (_isPdf)
+                      IconButton(
+                        icon: const Icon(Icons.zoom_out),
+                        tooltip: 'Zoom out',
+                        onPressed: () => pdfPlayerKey.currentState?.zoomOut(),
+                      ),
+                    if (_isPdf)
+                      IconButton(
+                        icon: const Icon(Icons.zoom_in),
+                        tooltip: 'Zoom in',
+                        onPressed: () => pdfPlayerKey.currentState?.zoomIn(),
+                      ),
                     if (!_isPdf)
                       IconButton(
                         icon: const Icon(Icons.copy),

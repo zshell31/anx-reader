@@ -47,6 +47,16 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
 
   Future<void> prevPage() => _goToRelativePage(-1);
 
+  Future<void> zoomIn() async {
+    if (!controller.isReady) return;
+    await controller.zoomUp();
+  }
+
+  Future<void> zoomOut() async {
+    if (!controller.isReady) return;
+    await controller.zoomDown();
+  }
+
   Future<void> _goToRelativePage(int delta) async {
     if (!controller.isReady || _pageCount < 1) return;
     final next = (_currentPageNumber + delta).clamp(1, _pageCount);
@@ -172,6 +182,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       useProgressiveLoading: true,
       params: PdfViewerParams(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        panEnabled: true,
+        scaleEnabled: true,
         onViewerReady: _onViewerReady,
         onPageChanged: _onPageChanged,
         onGeneralTap: _onGeneralTap,

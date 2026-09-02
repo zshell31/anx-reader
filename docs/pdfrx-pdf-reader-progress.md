@@ -13,8 +13,9 @@ EPUB renderer or annotation protocol v2.
   `feature/automatic-shared-state-sync` at
   `749e7ce077ce59d84efff079c9f6efa55cde6424` (matched
   `origin/feature/automatic-shared-state-sync` after `git fetch origin`).
-- Implementation branch / current commit: `feature/pdfrx-pdf-reader` at `HEAD`
-  (`feat(pdf): add dedicated pdfrx reader`).
+- Implementation branch / current commit: `feature/pdfrx-pdf-reader`; Milestone
+  2 is implemented and ready for its self-contained commit. Milestone 1 is
+  `43eb56c2 feat(pdf): add dedicated pdfrx reader`.
 - Toolchain: Flutter 3.35.3, Dart 3.9.2.
 - Compatible current package selected: `pdfrx 2.2.24` with
   `pdfrx_engine 0.3.9`. This is the newest `pdfrx` release whose declared
@@ -74,7 +75,7 @@ EPUB renderer or annotation protocol v2.
 - [x] Milestone 1: dedicated minimal `pdfrx` local PDF reader, normal lazy page
   navigation, loading/error UI, and persisted/restored page position; verify
   EPUB routing remains unchanged; commit separately.
-- [ ] Milestone 2: verify native pinch/pan zoom and add minimal explicit zoom
+- [x] Milestone 2: verify native pinch/pan zoom and add minimal explicit zoom
   in/out controls backed by `PdfViewerController`; validate rebuild/rotation;
   commit separately.
 - [ ] Milestone 3: canonical PDF selection/annotation creation, quote-context
@@ -115,18 +116,22 @@ EPUB renderer or annotation protocol v2.
   `bookDao` plus `annotationSyncRuntime.recordReadingProgress`; reopening uses
   the stored page. An explicit navigation position follows the existing EPUB
   rule and does not overwrite durable reading progress.
+- Explicitly enabled pdfrx's built-in scale and pan gestures and added minimal
+  zoom-out/zoom-in reader-chrome controls that delegate to
+  `PdfViewerController.zoomDown` / `zoomUp`. Zoom remains ephemeral
+  presentation state and is not written to shared reading state.
 
 ## Current state
 
-Milestone 1 is implemented, validated, and committed. Native pdfrx
+Milestones 1 and 2 are implemented; Milestone 2 is ready to commit. Native pdfrx
 gesture/rendering validation on representative files remains a manual device
 check because no Flutter device is attached in this environment.
 
 ## Next exact step
 
-Commit Milestone 1, then implement Milestone 2 by exposing minimal zoom-in and
-zoom-out actions in PDF reader chrome backed by `PdfViewerController.zoomUp`
-and `zoomDown`. Keep pdfrx's native `scaleEnabled`/`panEnabled` gesture system.
+Commit Milestone 2, then implement the PDF selector model and unique
+page-plus-quote resolver as pure code/tests before wiring pdfrx selection,
+canonical repository creation, and page overlays.
 
 ## Important decisions
 
@@ -178,3 +183,9 @@ and `zoomDown`. Keep pdfrx's native `scaleEnabled`/`panEnabled` gesture system.
   behavior still require an attached Flutter device and representative files;
   this environment has neither, so that limitation is explicitly carried
   forward rather than claimed as performed.
+- Milestone 2 targeted analysis of `reading_page.dart` and `pdf_player.dart`:
+  compiled with only two pre-existing async-context informational lints.
+- Milestone 2 PDF position tests: 4 passed. Pinch, pan, zoom-button interaction,
+  consecutive pages, and orientation rebuild remain manual device checks; the
+  code uses pdfrx's supported native gesture/controller implementation without
+  a custom transform layer.

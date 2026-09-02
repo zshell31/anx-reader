@@ -17,6 +17,7 @@ class OrganizationRepository {
   final DateTime Function() now;
   final Uuid uuid;
   final Future<Database> Function() _database;
+  Future<void> _serial = Future<void>.value();
 
   OrganizationRepository({
     required this.sharedState,
@@ -30,18 +31,22 @@ class OrganizationRepository {
   DomainStamp get _stamp =>
       DomainStamp(modifiedAt: now().toUtc(), deviceId: deviceId);
 
-  Future<int> bootstrap() async {
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final next = _serial.then((_) => operation());
+    _serial = next.then<void>((_) {}, onError: (_, __) {});
+    return next;
+  }
+
+  Future<int> bootstrap() => _enqueue(_bootstrap);
+
+  Future<int> _bootstrap() async {
     final db = await _database();
     var imported = 0;
     final groups = await db.query('tb_groups', orderBy: 'id');
     final groupIds = <int, String>{};
     for (final row in groups.where((row) => row['id'] != 0)) {
       final localId = row['id'] as int;
-      groupIds[localId] = await _ensureMapping(
-        'sync_group_ids',
-        localId,
-        'anx:legacy-group:v1:$localId:${row['create_time']}:${row['name']}',
-      );
+      groupIds[localId] = (await _ensureGroupSharedId(localId, row: row))!;
     }
     for (final row in groups.where((row) => row['id'] != 0)) {
       final localId = row['id'] as int;
@@ -50,7 +55,7 @@ class OrganizationRepository {
       final first =
           await sharedState.importReceipt(bootstrapSource, sourceKey) == null;
       final parent = row['parent_id'] as int?;
-      await _putIfChanged(
+      await _putBootstrapIfChanged(
           groupDomain,
           id,
           decodeGroupDocument({
@@ -101,13 +106,12 @@ class OrganizationRepository {
     final tagIds = <int, String>{};
     for (final row in tags) {
       final localId = row['id'] as int;
-      final id = await _ensureMapping('sync_tag_ids', localId,
-          'anx:legacy-tag:v1:$localId:${row['font_family']}');
+      final id = (await _ensureTagSharedId(localId, row: row))!;
       tagIds[localId] = id;
       final sourceKey = 'tag:$id';
       final first =
           await sharedState.importReceipt(bootstrapSource, sourceKey) == null;
-      await _putIfChanged(
+      await _putBootstrapIfChanged(
           tagDomain,
           id,
           decodeTagDocument({
@@ -148,7 +152,7 @@ class OrganizationRepository {
       final sourceKey = 'book-tag:$id';
       final first =
           await sharedState.importReceipt(bootstrapSource, sourceKey) == null;
-      await _putIfChanged(
+      await _putBootstrapIfChanged(
           bookTagDomain,
           id,
           decodeBookTagDocument({
@@ -166,12 +170,11 @@ class OrganizationRepository {
     final themes = await db.query('tb_themes', where: 'id > 2', orderBy: 'id');
     for (final row in themes) {
       final localId = row['id'] as int;
-      final id = await _ensureMapping('sync_theme_ids', localId,
-          'anx:legacy-theme:v1:$localId:${row['background_color']}:${row['text_color']}');
+      final id = (await _ensureThemeSharedId(localId, row: row))!;
       final sourceKey = 'theme:$id';
       final first =
           await sharedState.importReceipt(bootstrapSource, sourceKey) == null;
-      await _putIfChanged(
+      await _putBootstrapIfChanged(
           themeDomain,
           id,
           decodeThemeDocument({
@@ -227,32 +230,78 @@ class OrganizationRepository {
     }
   }
 
-  Future<void> tombstoneLocalRecord(
-      String domain, String mappingTable, int localId) async {
+  /// Persists the distributed deletion before callers remove the local row.
+  Future<void> tombstoneTag(int localId) =>
+      _enqueue(() => _tombstoneTag(localId));
+
+  Future<void> _tombstoneTag(int localId) async {
     final db = await _database();
-    final mappings = await db.query(mappingTable,
-        columns: ['shared_id'],
-        where: 'local_id = ?',
+    final rows = await db.query('tb_styles',
+        where: 'id = ? AND ABS(font_size - 1.0) < 0.0001',
         whereArgs: [localId],
         limit: 1);
-    if (mappings.isEmpty) return;
-    final id = mappings.single['shared_id'] as String;
-    final bytes = await sharedState.canonicalDocument(domain, id);
-    if (bytes == null) return;
-    final doc =
-        Map<String, dynamic>.from(jsonDecode(utf8.decode(bytes)) as Map);
-    doc['deleted'] = stampedValue(true, _stamp);
-    final decoded = switch (domain) {
-      tagDomain => decodeTagDocument(doc),
-      themeDomain => decodeThemeDocument(doc),
-      groupDomain => decodeGroupDocument(doc),
-      _ => throw ArgumentError.value(domain),
-    };
-    await _putIfChanged(domain, id, decoded);
+    final row = rows.isEmpty ? null : rows.single;
+    final id = await _ensureTagSharedId(localId, row: row);
+    if (id == null) return;
+    final bytes = await sharedState.canonicalDocument(tagDomain, id);
+    Map<String, dynamic> document;
+    if (bytes != null) {
+      document = decodeTagDocument(jsonDecode(utf8.decode(bytes)));
+    } else {
+      if (row == null) return;
+      document = decodeTagDocument({
+        'schemaVersion': 1,
+        'domain': tagDomain,
+        'id': id,
+        'deleted': stampedValue(false, _stamp),
+        'fields': {
+          'name': stampedValue(row['font_family'], _stamp),
+          'color': stampedValue((row['line_height'] as num?)?.toInt(), _stamp),
+        },
+      });
+    }
+    document['deleted'] = stampedValue(true, _stamp);
+    await _putIfChanged(tagDomain, id, decodeTagDocument(document));
+  }
+
+  /// Built-in themes are local application defaults and are never tombstoned.
+  Future<void> tombstoneTheme(int localId) =>
+      _enqueue(() => _tombstoneTheme(localId));
+
+  Future<void> _tombstoneTheme(int localId) async {
+    if (localId <= 2) return;
+    final db = await _database();
+    final rows = await db.query('tb_themes',
+        where: 'id = ? AND id > 2', whereArgs: [localId], limit: 1);
+    final row = rows.isEmpty ? null : rows.single;
+    final id = await _ensureThemeSharedId(localId, row: row);
+    if (id == null) return;
+    final bytes = await sharedState.canonicalDocument(themeDomain, id);
+    Map<String, dynamic> document;
+    if (bytes != null) {
+      document = decodeThemeDocument(jsonDecode(utf8.decode(bytes)));
+    } else {
+      if (row == null) return;
+      document = decodeThemeDocument({
+        'schemaVersion': 1,
+        'domain': themeDomain,
+        'id': id,
+        'deleted': stampedValue(false, _stamp),
+        'fields': {
+          'backgroundColor': stampedValue(row['background_color'], _stamp),
+          'textColor': stampedValue(row['text_color'], _stamp),
+        },
+      });
+    }
+    document['deleted'] = stampedValue(true, _stamp);
+    await _putIfChanged(themeDomain, id, decodeThemeDocument(document));
   }
 
   /// Persists the distributed deletion before callers remove the local row.
-  Future<void> tombstoneGroup(int localId) async {
+  Future<void> tombstoneGroup(int localId) =>
+      _enqueue(() => _tombstoneGroup(localId));
+
+  Future<void> _tombstoneGroup(int localId) async {
     final db = await _database();
     final rows = await db.query('tb_groups',
         where: 'id = ?', whereArgs: [localId], limit: 1);
@@ -264,8 +313,7 @@ class OrganizationRepository {
     if (mappings.isEmpty) {
       if (rows.isEmpty) return;
       final row = rows.single;
-      await _ensureMapping('sync_group_ids', localId,
-          'anx:legacy-group:v1:$localId:${row['create_time']}:${row['name']}');
+      await _ensureGroupSharedId(localId, row: row);
       mappings = await db.query('sync_group_ids',
           columns: ['shared_id'],
           where: 'local_id = ?',
@@ -301,18 +349,24 @@ class OrganizationRepository {
   }
 
   Future<void> publishBookTagByLocalIds(
+          int bookId, int tagLocalId, bool present) =>
+      _enqueue(() => _publishBookTagByLocalIds(bookId, tagLocalId, present));
+
+  Future<void> _publishBookTagByLocalIds(
       int bookId, int tagLocalId, bool present) async {
     final db = await _database();
-    final tagMappings = await db.query('sync_tag_ids',
-        columns: ['shared_id'],
-        where: 'local_id = ?',
-        whereArgs: [tagLocalId],
-        limit: 1);
     final books = await db.query('tb_books',
         columns: ['file_md5'], where: 'id = ?', whereArgs: [bookId], limit: 1);
-    if (tagMappings.isEmpty || books.isEmpty) return;
-    final fingerprint = canonicalMd5Fingerprint(books.single['file_md5']);
-    final tagId = tagMappings.single['shared_id'] as String;
+    if (books.isEmpty) return;
+    String fingerprint;
+    try {
+      fingerprint = canonicalMd5Fingerprint(books.single['file_md5']);
+    } catch (_) {
+      // Relations for books without a portable fingerprint stay device-local.
+      return;
+    }
+    final tagId = await _ensureTagSharedId(tagLocalId);
+    if (tagId == null) return;
     final id = bookTagDocumentId(fingerprint, tagId);
     await _putIfChanged(
         bookTagDomain,
@@ -476,6 +530,34 @@ class OrganizationRepository {
     }
   }
 
+  /// Bootstrap reflects legacy projection fields, but it is not a user
+  /// recreation/addition and therefore cannot defeat an explicit mutation
+  /// while the destructive DAO is still removing that projection.
+  Future<bool> _putBootstrapIfChanged(
+      String domain, String id, Map<String, dynamic> document) async {
+    final bytes = await sharedState.canonicalDocument(domain, id);
+    if (bytes != null) {
+      final current = jsonDecode(utf8.decode(bytes));
+      if (domain == bookTagDomain) {
+        final canonical = decodeBookTagDocument(current);
+        if ((canonical['membership'] as Map)['value'] == false) {
+          document['membership'] = canonical['membership'];
+        }
+      } else {
+        final canonical = switch (domain) {
+          groupDomain => decodeGroupDocument(current),
+          tagDomain => decodeTagDocument(current),
+          themeDomain => decodeThemeDocument(current),
+          _ => throw ArgumentError.value(domain),
+        };
+        if ((canonical['deleted'] as Map)['value'] == true) {
+          document['deleted'] = canonical['deleted'];
+        }
+      }
+    }
+    return _putIfChanged(domain, id, document);
+  }
+
   Future<bool> _putIfChanged(
       String domain, String id, Map<String, dynamic> doc) async {
     final current = await sharedState.canonicalDocument(domain, id);
@@ -519,6 +601,50 @@ class OrganizationRepository {
     final id = uuid.v5(Namespace.url.value, namespace);
     await _map(table, id, localId);
     return id;
+  }
+
+  Future<String?> _ensureGroupSharedId(int localId,
+      {Map<String, Object?>? row}) async {
+    final existing = await _sharedId('sync_group_ids', localId);
+    if (existing != null) return existing;
+    if (row == null) {
+      final rows = await (await _database())
+          .query('tb_groups', where: 'id = ?', whereArgs: [localId], limit: 1);
+      if (rows.isEmpty) return null;
+      row = rows.single;
+    }
+    return _ensureMapping('sync_group_ids', localId,
+        'anx:legacy-group:v1:$localId:${row['create_time']}:${row['name']}');
+  }
+
+  Future<String?> _ensureTagSharedId(int localId,
+      {Map<String, Object?>? row}) async {
+    final existing = await _sharedId('sync_tag_ids', localId);
+    if (existing != null) return existing;
+    if (row == null) {
+      final rows = await (await _database()).query('tb_styles',
+          where: 'id = ? AND ABS(font_size - 1.0) < 0.0001',
+          whereArgs: [localId],
+          limit: 1);
+      if (rows.isEmpty) return null;
+      row = rows.single;
+    }
+    return _ensureMapping('sync_tag_ids', localId,
+        'anx:legacy-tag:v1:$localId:${row['font_family']}');
+  }
+
+  Future<String?> _ensureThemeSharedId(int localId,
+      {Map<String, Object?>? row}) async {
+    final existing = await _sharedId('sync_theme_ids', localId);
+    if (existing != null) return existing;
+    if (row == null) {
+      final rows = await (await _database()).query('tb_themes',
+          where: 'id = ? AND id > 2', whereArgs: [localId], limit: 1);
+      if (rows.isEmpty) return null;
+      row = rows.single;
+    }
+    return _ensureMapping('sync_theme_ids', localId,
+        'anx:legacy-theme:v1:$localId:${row['background_color']}:${row['text_color']}');
   }
 
   Future<int?> _localId(String table, String sharedId) async {

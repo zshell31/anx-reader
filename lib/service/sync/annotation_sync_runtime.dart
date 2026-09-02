@@ -262,8 +262,7 @@ class AnnotationSyncRuntime {
   }
 
   Future<void> tombstoneTag(int localId) async {
-    await (await _ensureOrganizationRepository())
-        .tombstoneLocalRecord(tagDomain, 'sync_tag_ids', localId);
+    await (await _ensureOrganizationRepository()).tombstoneTag(localId);
     if (Prefs().autoSync) {
       unawaited(_organizationService?.syncKnown(sharedState));
     }
@@ -277,8 +276,7 @@ class AnnotationSyncRuntime {
   }
 
   Future<void> tombstoneTheme(int localId) async {
-    await (await _ensureOrganizationRepository())
-        .tombstoneLocalRecord(themeDomain, 'sync_theme_ids', localId);
+    await (await _ensureOrganizationRepository()).tombstoneTheme(localId);
     if (Prefs().autoSync) {
       unawaited(_organizationService?.syncKnown(sharedState));
     }

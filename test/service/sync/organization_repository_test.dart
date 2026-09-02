@@ -240,7 +240,7 @@ void main() {
     final expectedId = const Uuid()
         .v5(Namespace.url.value, 'anx:legacy-tag:v1:$localId:Early tag');
 
-    await repository.tombstoneLocalRecord(tagDomain, 'sync_tag_ids', localId);
+    await repository.tombstoneTag(localId);
 
     final mappings = await appDatabase.query('sync_tag_ids');
     expect(mappings.single['shared_id'], expectedId);
@@ -249,6 +249,15 @@ void main() {
     expect(canonical['deleted']['value'], isTrue);
     expect(canonical['fields']['name']['value'], 'Early tag');
     expect(await sharedState.outboxEntry(tagDomain, expectedId), isNotNull);
+
+    await repository.tombstoneTag(localId);
+    await repository.bootstrap();
+    expect(await sharedState.documentIds(tagDomain), [expectedId]);
+    expect(await appDatabase.query('sync_tag_ids'), hasLength(1));
+    final afterBootstrap = jsonDecode(utf8
+        .decode((await sharedState.canonicalDocument(tagDomain, expectedId))!));
+    expect(afterBootstrap['deleted']['value'], isTrue,
+        reason: 'legacy bootstrap cannot defeat an explicit tombstone');
 
     await appDatabase
         .delete('tb_styles', where: 'id = ?', whereArgs: [localId]);
@@ -276,8 +285,7 @@ void main() {
     final expectedId = const Uuid().v5(
         Namespace.url.value, 'anx:legacy-theme:v1:$localId:ff112233:ffddeeff');
 
-    await repository.tombstoneLocalRecord(
-        themeDomain, 'sync_theme_ids', localId);
+    await repository.tombstoneTheme(localId);
 
     expect((await appDatabase.query('sync_theme_ids')).single['shared_id'],
         expectedId);
@@ -290,6 +298,15 @@ void main() {
     expect(encoded, isNot(contains('background_image_path')));
     expect(encoded, isNot(contains('/device/private/theme.png')));
     expect(await sharedState.outboxEntry(themeDomain, expectedId), isNotNull);
+
+    await repository.tombstoneTheme(localId);
+    await repository.bootstrap();
+    expect(await sharedState.documentIds(themeDomain), [expectedId]);
+    expect(await appDatabase.query('sync_theme_ids'), hasLength(1));
+    final afterBootstrap = jsonDecode(utf8.decode(
+        (await sharedState.canonicalDocument(themeDomain, expectedId))!));
+    expect(afterBootstrap['deleted']['value'], isTrue,
+        reason: 'legacy bootstrap cannot defeat an explicit tombstone');
 
     await appDatabase
         .delete('tb_themes', where: 'id = ?', whereArgs: [localId]);
@@ -329,6 +346,15 @@ void main() {
     expect(canonical['membership']['value'], isFalse);
     expect(await sharedState.outboxEntry(bookTagDomain, documentId), isNotNull);
 
+    await repository.publishBookTagByLocalIds(bookId, tagLocalId, false);
+    await repository.bootstrap();
+    expect(await sharedState.documentIds(bookTagDomain), [documentId]);
+    expect(await appDatabase.query('sync_tag_ids'), hasLength(1));
+    final afterBootstrap = jsonDecode(utf8.decode(
+        (await sharedState.canonicalDocument(bookTagDomain, documentId))!));
+    expect(afterBootstrap['membership']['value'], isFalse,
+        reason: 'legacy bootstrap cannot restore an explicitly removed link');
+
     await appDatabase.delete('tb_styles',
         where:
             'ABS(font_size - 2.0) < 0.0001 AND CAST(line_height AS INTEGER) = ? AND CAST(letter_spacing AS INTEGER) = ?',
@@ -339,5 +365,150 @@ void main() {
             where: 'ABS(font_size - 2.0) < 0.0001'),
         isEmpty,
         reason: 'a later projection must not restore the relation');
+  });
+
+  test('already-bootstrapped tag and theme deletes retain their shared IDs',
+      () async {
+    const stableTagId = '10000000-0000-4000-8000-000000000001';
+    const stableThemeId = '10000000-0000-4000-8000-000000000002';
+    final stamp =
+        DomainStamp(modifiedAt: DateTime.utc(2025), deviceId: 'device-old');
+    final tagLocalId = await appDatabase.insert('tb_styles', {
+      'font_size': 1.0,
+      'font_family': 'Mapped tag',
+      'line_height': 7.0,
+    });
+    await appDatabase.insert(
+        'sync_tag_ids', {'shared_id': stableTagId, 'local_id': tagLocalId});
+    await sharedState.applyRemoteMerge(
+        tagDomain,
+        stableTagId,
+        null,
+        utf8.encode(jsonEncode(decodeTagDocument({
+          'schemaVersion': 1,
+          'domain': tagDomain,
+          'id': stableTagId,
+          'deleted': stampedValue(false, stamp),
+          'fields': {
+            'name': stampedValue('Mapped tag', stamp),
+            'color': stampedValue(7, stamp),
+          },
+        }))));
+
+    await appDatabase.insert('tb_themes', {
+      'background_color': 'fffbfbf3',
+      'text_color': 'ff343434',
+      'background_image_path': '',
+    });
+    await appDatabase.insert('tb_themes', {
+      'background_color': 'ff040404',
+      'text_color': 'fffeffeb',
+      'background_image_path': '',
+    });
+    final themeLocalId = await appDatabase.insert('tb_themes', {
+      'background_color': 'ff010203',
+      'text_color': 'fffdfcfb',
+      'background_image_path': '/local-only.png',
+    });
+    await appDatabase.insert('sync_theme_ids',
+        {'shared_id': stableThemeId, 'local_id': themeLocalId});
+    await sharedState.applyRemoteMerge(
+        themeDomain,
+        stableThemeId,
+        null,
+        utf8.encode(jsonEncode(decodeThemeDocument({
+          'schemaVersion': 1,
+          'domain': themeDomain,
+          'id': stableThemeId,
+          'deleted': stampedValue(false, stamp),
+          'fields': {
+            'backgroundColor': stampedValue('ff010203', stamp),
+            'textColor': stampedValue('fffdfcfb', stamp),
+          },
+        }))));
+
+    await repository.tombstoneTag(tagLocalId);
+    await repository.tombstoneTag(tagLocalId);
+    await repository.tombstoneTheme(themeLocalId);
+    await repository.tombstoneTheme(themeLocalId);
+
+    expect(await sharedState.documentIds(tagDomain), [stableTagId]);
+    expect(await sharedState.documentIds(themeDomain), [stableThemeId]);
+    expect((await appDatabase.query('sync_tag_ids')).single['shared_id'],
+        stableTagId);
+    expect((await appDatabase.query('sync_theme_ids')).single['shared_id'],
+        stableThemeId);
+    expect(
+        jsonDecode(utf8.decode((await sharedState.canonicalDocument(
+            tagDomain, stableTagId))!))['deleted']['value'],
+        isTrue);
+    expect(
+        jsonDecode(utf8.decode((await sharedState.canonicalDocument(
+            themeDomain, stableThemeId))!))['deleted']['value'],
+        isTrue);
+  });
+
+  test('already-bootstrapped relation removal retains its document identity',
+      () async {
+    const fingerprint = 'abcdef0123456789abcdef0123456789';
+    const stableTagId = '20000000-0000-4000-8000-000000000001';
+    final stamp =
+        DomainStamp(modifiedAt: DateTime.utc(2025), deviceId: 'device-old');
+    final bookId =
+        await appDatabase.insert('tb_books', {'file_md5': fingerprint});
+    final tagLocalId = await appDatabase.insert('tb_styles', {
+      'font_size': 1.0,
+      'font_family': 'Mapped relation tag',
+    });
+    await appDatabase.insert(
+        'sync_tag_ids', {'shared_id': stableTagId, 'local_id': tagLocalId});
+    final documentId = bookTagDocumentId(fingerprint, stableTagId);
+    await sharedState.applyRemoteMerge(
+        bookTagDomain,
+        documentId,
+        null,
+        utf8.encode(jsonEncode(decodeBookTagDocument({
+          'schemaVersion': 1,
+          'bookFingerprint': fingerprint,
+          'tagId': stableTagId,
+          'membership': stampedValue(true, stamp),
+        }))));
+
+    await repository.publishBookTagByLocalIds(bookId, tagLocalId, false);
+    await repository.publishBookTagByLocalIds(bookId, tagLocalId, false);
+
+    expect(await sharedState.documentIds(bookTagDomain), [documentId]);
+    expect((await appDatabase.query('sync_tag_ids')).single['shared_id'],
+        stableTagId);
+    final canonical = jsonDecode(utf8.decode(
+        (await sharedState.canonicalDocument(bookTagDomain, documentId))!));
+    expect(canonical['membership']['value'], isFalse);
+    expect(await sharedState.outboxEntry(bookTagDomain, documentId), isNotNull);
+  });
+
+  test('built-in themes and books without fingerprints stay device-local',
+      () async {
+    for (var id = 1; id <= 2; id++) {
+      await appDatabase.insert('tb_themes', {
+        'id': id,
+        'background_color': id == 1 ? 'fffbfbf3' : 'ff040404',
+        'text_color': id == 1 ? 'ff343434' : 'fffeffeb',
+        'background_image_path': '',
+      });
+      await repository.tombstoneTheme(id);
+    }
+    final bookId = await appDatabase.insert('tb_books', {'file_md5': null});
+    final tagLocalId = await appDatabase.insert('tb_styles', {
+      'font_size': 1.0,
+      'font_family': 'Local-only relation',
+    });
+
+    await repository.publishBookTagByLocalIds(bookId, tagLocalId, false);
+
+    expect(await appDatabase.query('tb_themes'), hasLength(2));
+    expect(await appDatabase.query('sync_theme_ids'), isEmpty);
+    expect(await appDatabase.query('sync_tag_ids'), isEmpty);
+    expect(await sharedState.documentIds(themeDomain), isEmpty);
+    expect(await sharedState.documentIds(bookTagDomain), isEmpty);
   });
 }

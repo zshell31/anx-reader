@@ -11,7 +11,7 @@ EPUB renderer or annotation protocol v2.
 
 - Source branch / commit used for analysis:
   `feature/automatic-shared-state-sync` at
-  `749e7ce077ce59d84efff079c9f6efa55cde6424` (matched
+  `2a8850d8795172f832c1672204c9a2d0c2b5c180` (matched
   `origin/feature/automatic-shared-state-sync` after `git fetch origin`).
 - Implementation branch: `feature/pdfrx-pdf-reader`. The committed milestone
   sequence is `43eb56c2 feat(pdf): add dedicated pdfrx reader`, `8524e0cc

@@ -27,6 +27,13 @@ download is rejected, the exact bytes did not match the catalog SHA-256; the
 partial file is discarded. Existing remote `database<version>.db` files are
 legacy rollback artifacts and are intentionally ignored.
 
+Shared groups use UUIDs while `tb_groups.id` and `parent_id` are local
+projection values. A full organization pass establishes UUID mappings before
+resolving parents. If hierarchy looks stale, retry **Sync now**, verify WebDAV
+connectivity, and inspect organization-domain pending/error logs. Group
+deletion retains a canonical tombstoned JSON object on WebDAV; it does not
+delete that remote object.
+
 # 简体中文
 ## 无法导入书籍
 

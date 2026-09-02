@@ -95,7 +95,9 @@ breaker. No domain performs an arbitrary recursive JSON merge.
 - Groups, tags, and custom themes use stable UUID records with stamped fields
   and tombstones. Parents are group UUIDs. Book-group membership uses book
   fingerprint plus group UUID. Book-tag relations use book fingerprint plus
-  tag UUID and a stamped add/remove value.
+  tag UUID and a stamped add/remove value. Semantic group deletion durably
+  writes `deleted=true` before local projection cleanup; the tombstoned remote
+  JSON remains shared state and is not deleted from WebDAV.
 
 WebDAV creation uses `If-None-Match: *`. Replacement requires the current
 strong ETag with `If-Match`. HTTP 412 triggers bounded reread, domain merge,
@@ -114,6 +116,13 @@ local paths before acquiring assets.
 UUIDs to device-local integer IDs. Tag relations may continue using sentinel
 `tb_styles` rows as a UI projection, never as a wire identity. Reading events
 rebuild `tb_reading_time`; dashboard/statistics aggregates are not synced.
+
+Group hierarchy projection is two-phase. The first pass establishes every live
+group UUID-to-local-ID mapping; the second resolves parent UUIDs and writes
+local `parent_id` values. A canonical null parent alone means local root (`0`).
+An unresolved non-null parent is left unresolved rather than silently changed
+to root, so remote document completion order cannot alter hierarchy semantics.
+Local hard deletion is projection cleanup, never the distributed delete action.
 
 Book and cover uploads occur only when the exact SHA-256 object is absent.
 Downloads go to a partial file, are SHA-256 verified, and are atomically bound

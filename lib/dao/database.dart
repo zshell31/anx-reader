@@ -99,7 +99,6 @@ CREATE TABLE tb_groups (
 class DBHelper {
   static final DBHelper _instance = DBHelper._internal();
   static Database? _database;
-  static bool updatedDB = false;
 
   factory DBHelper() {
     return _instance;
@@ -292,10 +291,6 @@ class DBHelper {
           shared_id TEXT PRIMARY KEY,
           local_id INTEGER NOT NULL UNIQUE
         )''');
-    }
-
-    if (oldVersion != 0 && Prefs().webdavStatus) {
-      updatedDB = true;
     }
   }
 }

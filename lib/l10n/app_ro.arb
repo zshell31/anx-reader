@@ -429,8 +429,6 @@
   "allBooksAreDownloaded": "Toate cărțile sunt descărcate",
   "syncNow": "Sincronizează acum",
   "deeplKeyTip": "Te rugăm să introduci cheia API DeepL, pe care o poți obține de pe pagina pentru dezvoltatori DeepL",
-  "syncMismatchTip": "Database version mismatch. The remote database (version {remoteVersion}) is newer than what your app supports (version {currentDbVersion}). Please update your app to the latest version.",
-  "dbUpdatedTip": "The database structure has been updated. Please update Anx Reader App on your other devices to ensure compatibility with the new database for smooth data synchronization.",
   "eInkMode": "Mod E-ink",
   "readingPageWritingDirection": "Direcția de scriere",
   "readingPageWritingDirectionAuto": "Auto",

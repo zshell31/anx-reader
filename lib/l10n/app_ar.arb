@@ -427,8 +427,6 @@
   "allBooksAreDownloaded": "تم تحميل كل الكتب",
   "syncNow": "المزامنة الآن",
   "deeplKeyTip": "يرجى إدخال مفتاح DeepL API الخاص بك ، والذي يمكن الحصول عليه من صفحة DeepL المبدع",
-  "syncMismatchTip": "إصدار قاعدة البيانات غير متطابق. القاعدة البعيدة (الإصدار {remoteVersion}) أحدث من ما يدعمه تطبيقك (الإصدار {currentDbVersion}). يرجى تحديث تطبيقك إلى الإصدار الأحدث.",
-  "dbUpdatedTip": "تم تحديث بنية قاعدة البيانات. يرجى تحديث تطبيق Anx Reader على أجهزتك الأخرى لضمان التوافق مع قاعدة البيانات الجديدة لتدفق البيانات بسلاسة.",
   "eInkMode": "وضع e-ink",
   "readingPageWritingDirection": "اتجاه الكتابة",
   "readingPageWritingDirectionAuto": "آلي",

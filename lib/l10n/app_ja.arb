@@ -427,8 +427,6 @@
   "allBooksAreDownloaded": "すべての本がダウンロード済み",
   "syncNow": "今すぐ同期",
   "deeplKeyTip": "DeepL APIキーを入力してください。DeepL開発者ページから取得できます",
-  "syncMismatchTip": "データベースバージョンが不一致です。リモートデータベース（バージョン{remoteVersion}）がアプリがサポートするバージョン（バージョン{currentDbVersion}）より新しいです。アプリを最新バージョンに更新してください",
-  "dbUpdatedTip": "データベース構造が更新されました。新しいデータベースとの互換性を確保し、スムーズなデータ同期のために、他のデバイスのAnx Readerアプリを更新してください",
   "eInkMode": "E-inkモード",
   "readingPageWritingDirection": "文字方向",
   "readingPageWritingDirectionAuto": "自動",

@@ -427,8 +427,6 @@
   "allBooksAreDownloaded": "所有書籍均已下載。",
   "syncNow": "立即同步",
   "deeplKeyTip": "請輸入您的 DeepL API 金鑰，此金鑰可於 DeepL 開發者頁面取得。",
-  "syncMismatchTip": "資料庫版本不符。遠端資料庫版本 ({remoteVersion}) 比您 App 支援的版本 ({currentDbVersion}) 還要新。請將您的 App 更新至最新版本。",
-  "dbUpdatedTip": "資料庫結構已更新。為確保資料同步順暢，請將您其他裝置上的 Anx Reader App 更新至最新版本，以相容新的資料庫。",
   "eInkMode": "電子墨水模式",
   "readingPageWritingDirection": "書寫方向",
   "readingPageWritingDirectionAuto": "自動",

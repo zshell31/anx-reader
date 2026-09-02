@@ -429,8 +429,6 @@
   "allBooksAreDownloaded": "Tüm kitaplar indirildi",
   "syncNow": "Şimdi senkronize",
   "deeplKeyTip": "Lütfen DeepL API anahtarınızı girin, DeepL geliştirici sayfasından alın",
-  "syncMismatchTip": "Veritabanı sürümü eşleşmiyor. Uzak veritabanı (sürüm {remoteVersion}) size uygulamanızın desteklediği sürümden (sürüm {currentDbVersion}) daha yeni. Lütfen uygulamanızı en son sürüme güncelleyin.",
-  "dbUpdatedTip": "Veritabanı yapısı güncellendi. Lütfen diğer cihazlarda Anx Reader uygulamasını güncelleyin, yeni veritabanıyla uyumlu olması için verilerin eşitlemesini sağlayın.",
   "eInkMode": "E-mürekkep modu",
   "readingPageWritingDirection": "Yazma yönü",
   "readingPageWritingDirectionAuto": "Otomatik",

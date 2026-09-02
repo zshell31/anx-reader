@@ -427,8 +427,6 @@
   "allBooksAreDownloaded": "Tutti i libri sono scaricati",
   "syncNow": "Sincronizza Ora",
   "deeplKeyTip": "Per favore inserisci la tua chiave API DeepL, che può essere ottenuta dalla pagina sviluppatori DeepL",
-  "syncMismatchTip": "Versione database non corrispondente. Il database remoto (versione {remoteVersion}) è più recente di quello che la tua app supporta (versione {currentDbVersion}). Per favore aggiorna la tua app all'ultima versione.",
-  "dbUpdatedTip": "La struttura del database è stata aggiornata. Per favore aggiorna Anx Reader App sui tuoi altri dispositivi per garantire la compatibilità con il nuovo database per una sincronizzazione dati fluida.",
   "eInkMode": "Modalità E-ink",
   "readingPageWritingDirection": "Direzione Scrittura",
   "readingPageWritingDirectionAuto": "Auto",

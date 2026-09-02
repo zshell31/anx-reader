@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/page/home_page/ai_page.dart';
@@ -83,24 +82,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _showDbUpdatedDialog() {
-    SmartDialog.show(
-      clickMaskDismiss: false,
-      builder: (context) => AlertDialog(
-        title: Text(L10n.of(context).commonAttention),
-        content: Text(L10n.of(context).dbUpdatedTip),
-        actions: [
-          TextButton(
-            onPressed: () {
-              SmartDialog.dismiss();
-            },
-            child: Text(L10n.of(context).commonOk),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> initAnx() async {
     if (EnvVar.enableInAppPurchase) {
       ref.read(iapProvider.future);
@@ -120,10 +101,6 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     if (AnxPlatform.isAndroid || AnxPlatform.isIOS || AnxPlatform.isOhos) {
       receiveShareIntent(ref);
-    }
-
-    if (DBHelper.updatedDB) {
-      _showDbUpdatedDialog();
     }
   }
 

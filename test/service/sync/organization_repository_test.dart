@@ -82,6 +82,8 @@ void main() {
   test('child projected before parent resolves hierarchy in one final pass',
       () async {
     await storeGroup(groupDocument(childId, 'Child', parentId: parentId));
+    final canonicalChildBefore =
+        await sharedState.canonicalDocument(groupDomain, childId);
     await repository.projectCanonical(groupDomain, childId);
     expect((await appDatabase.query('tb_groups')).single['parent_id'], isNot(0),
         reason: 'an unresolved shared parent is not semantic root');
@@ -96,8 +98,24 @@ void main() {
             .query('tb_groups', where: 'id = ?', whereArgs: [childLocalId]))
         .single;
     expect(child['parent_id'], parentLocalId);
+    expect(await sharedState.canonicalDocument(groupDomain, childId),
+        canonicalChildBefore,
+        reason: 'projection order must not mutate canonical shared state');
+  });
+
+  test('parent projected before child resolves the same hierarchy', () async {
+    await storeGroup(groupDocument(parentId, 'Parent'));
+    await repository.projectCanonical(groupDomain, parentId);
+    await storeGroup(groupDocument(childId, 'Child', parentId: parentId));
+    await repository.projectCanonical(groupDomain, childId);
+    await repository.projectAllCanonicalGroups();
+
+    final childLocalId = await localId(childId);
     expect(
-        (await sharedState.canonicalDocument(groupDomain, childId)), isNotNull);
+        (await appDatabase
+                .query('tb_groups', where: 'id = ?', whereArgs: [childLocalId]))
+            .single['parent_id'],
+        await localId(parentId));
   });
 
   test('group hierarchy projection is idempotent at depth greater than one',
@@ -154,5 +172,36 @@ void main() {
 
     await repository.projectAllCanonicalGroups();
     expect(await appDatabase.query('tb_groups'), isEmpty);
+  });
+
+  test('semantic delete reconstructs a missing canonical group before cleanup',
+      () async {
+    const stableId = '00000000-0000-4000-8000-000000000004';
+    final localId = await appDatabase.insert('tb_groups', {
+      'name': 'Local group',
+      'parent_id': 0,
+      'is_deleted': 0,
+      'create_time': '2025-01-01T00:00:00Z',
+      'update_time': '2025-01-01T00:00:00Z',
+    });
+    await appDatabase
+        .insert('sync_group_ids', {'shared_id': stableId, 'local_id': localId});
+    expect(await sharedState.canonicalDocument(groupDomain, stableId), isNull);
+
+    await repository.tombstoneGroup(localId);
+    await appDatabase
+        .delete('tb_groups', where: 'id = ?', whereArgs: [localId]);
+    await repository.projectAllCanonicalGroups();
+
+    final bytes = await sharedState.canonicalDocument(groupDomain, stableId);
+    final canonical = jsonDecode(utf8.decode(bytes!));
+    expect(canonical['id'], stableId);
+    expect(canonical['deleted']['value'], isTrue);
+    expect(canonical['fields']['name']['value'], 'Local group');
+    expect(jsonEncode(canonical), isNot(contains('local_id')));
+    expect(await sharedState.outboxEntry(groupDomain, stableId), isNotNull);
+    expect(await appDatabase.query('tb_groups'), isEmpty);
+    expect((await appDatabase.query('sync_group_ids')).single['shared_id'],
+        stableId);
   });
 }

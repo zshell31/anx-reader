@@ -91,6 +91,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   late double _aiChatHeight;
   bool _isResizingAiChat = false;
   bool bookmarkExists = false;
+  bool _pdfReflowMode = false;
   String? _annotationFingerprint;
   late final void Function() _annotationRefresh;
 
@@ -787,11 +788,22 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                     if (EnvVar.enableAIFeature) aiButton,
                     if (_isPdf)
                       IconButton(
+                        icon: Icon(_pdfReflowMode
+                            ? Icons.picture_as_pdf_outlined
+                            : Icons.chrome_reader_mode_outlined),
+                        tooltip: _pdfReflowMode
+                            ? 'Show original PDF'
+                            : 'Show bilingual reflow',
+                        onPressed: () =>
+                            pdfPlayerKey.currentState?.toggleReadingMode(),
+                      ),
+                    if (_isPdf && !_pdfReflowMode)
+                      IconButton(
                         icon: const Icon(Icons.zoom_out),
                         tooltip: 'Zoom out',
                         onPressed: () => pdfPlayerKey.currentState?.zoomOut(),
                       ),
-                    if (_isPdf)
+                    if (_isPdf && !_pdfReflowMode)
                       IconButton(
                         icon: const Icon(Icons.zoom_in),
                         tooltip: 'Zoom in',
@@ -977,6 +989,13 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                                     initialPosition: widget.cfi,
                                     showOrHideAppBarAndBottomBar:
                                         showOrHideAppBarAndBottomBar,
+                                    onReadingModeChanged: (reflow) {
+                                      if (mounted) {
+                                        setState(() {
+                                          _pdfReflowMode = reflow;
+                                        });
+                                      }
+                                    },
                                   )
                                 else
                                   EpubPlayer(

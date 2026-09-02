@@ -7,12 +7,15 @@ import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
+import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
+import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/current_reading.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
+import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,11 +27,13 @@ class PdfPlayer extends ConsumerStatefulWidget {
     required this.book,
     this.initialPosition,
     required this.showOrHideAppBarAndBottomBar,
+    required this.onReadingModeChanged,
   });
 
   final Book book;
   final String? initialPosition;
   final void Function(bool show) showOrHideAppBarAndBottomBar;
+  final ValueChanged<bool> onReadingModeChanged;
 
   @override
   ConsumerState<PdfPlayer> createState() => PdfPlayerState();
@@ -42,6 +47,9 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   int _pageCount = 0;
   int _annotationGeneration = 0;
   Map<int, List<_PdfRenderedAnnotation>> _renderedAnnotations = const {};
+  late final PdfTextBlockPageLoader _textBlockLoader;
+  PageController? _reflowPageController;
+  bool _reflowMode = false;
 
   @override
   void initState() {
@@ -51,6 +59,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         ) ??
         1;
     _currentPageNumber = _initialPageNumber;
+    _textBlockLoader = PdfTextBlockPageLoader(loadPageText: _loadPageText);
   }
 
   Future<void> nextPage() => _goToRelativePage(1);
@@ -68,10 +77,70 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   }
 
   Future<void> _goToRelativePage(int delta) async {
-    if (!controller.isReady || _pageCount < 1) return;
+    if (_pageCount < 1) return;
     final next = (_currentPageNumber + delta).clamp(1, _pageCount);
     if (next == _currentPageNumber) return;
+    if (_reflowMode) {
+      await _reflowPageController?.animateToPage(
+        next - 1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    if (!controller.isReady) return;
     await controller.goToPage(pageNumber: next);
+  }
+
+  void toggleReadingMode() {
+    if (_pageCount < 1) return;
+    if (_reflowMode) {
+      setState(() => _reflowMode = false);
+      widget.onReadingModeChanged(false);
+      unawaited(controller.goToPage(pageNumber: _currentPageNumber));
+      return;
+    }
+    _reflowPageController?.dispose();
+    _reflowPageController = PageController(initialPage: _currentPageNumber - 1);
+    setState(() => _reflowMode = true);
+    widget.onReadingModeChanged(true);
+  }
+
+  Future<PdfPageTextSource> _loadPageText(int pageNumber) async {
+    final source = await controller.useDocument((pdf) async {
+      if (pageNumber > pdf.pages.length) {
+        throw RangeError.range(
+          pageNumber,
+          1,
+          pdf.pages.length,
+          'pageNumber',
+        );
+      }
+      final pageText = await pdf.pages[pageNumber - 1].loadStructuredText();
+      return PdfPageTextSource(
+        pageNumber: pageNumber,
+        fullText: pageText.fullText,
+      );
+    });
+    if (source == null) {
+      throw StateError('The PDF document is not ready');
+    }
+    return source;
+  }
+
+  Future<String> _translateBlock(
+    PdfTextBlock block,
+    String contextText,
+  ) {
+    final preferences = Prefs();
+    return fullTextTranslationCoordinator.translate(
+      text: block.text,
+      contextText: contextText,
+      book: widget.book,
+      service: preferences.fullTextTranslateService,
+      from: preferences.fullTextTranslateFrom,
+      to: preferences.fullTextTranslateTo,
+    );
   }
 
   void _onViewerReady(PdfDocument document, PdfViewerController value) {
@@ -329,29 +398,52 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   @override
   void dispose() {
     _saveDebounce?.cancel();
+    _reflowPageController?.dispose();
     unawaited(saveReadingProgress());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return PdfViewer.file(
-      widget.book.fileFullPath,
-      controller: controller,
-      initialPageNumber: _initialPageNumber,
-      useProgressiveLoading: true,
-      params: PdfViewerParams(
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        panEnabled: true,
-        scaleEnabled: true,
-        onViewerReady: _onViewerReady,
-        onPageChanged: _onPageChanged,
-        onGeneralTap: _onGeneralTap,
-        buildContextMenu: _buildContextMenu,
-        pagePaintCallbacks: [_paintAnnotations],
-        loadingBannerBuilder: _buildLoadingBanner,
-        errorBannerBuilder: _buildErrorBanner,
-      ),
+    return Stack(
+      children: [
+        Offstage(
+          offstage: _reflowMode,
+          child: PdfViewer.file(
+            widget.book.fileFullPath,
+            controller: controller,
+            initialPageNumber: _initialPageNumber,
+            useProgressiveLoading: true,
+            params: PdfViewerParams(
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+              panEnabled: true,
+              scaleEnabled: true,
+              onViewerReady: _onViewerReady,
+              onPageChanged: _onPageChanged,
+              onGeneralTap: _onGeneralTap,
+              buildContextMenu: _buildContextMenu,
+              pagePaintCallbacks: [_paintAnnotations],
+              loadingBannerBuilder: _buildLoadingBanner,
+              errorBannerBuilder: _buildErrorBanner,
+            ),
+          ),
+        ),
+        if (_reflowMode)
+          Positioned.fill(
+            child: ColoredBox(
+              color: Theme.of(context).colorScheme.surface,
+              child: PdfReflowView(
+                pageCount: _pageCount,
+                pageController: _reflowPageController!,
+                blockLoader: _textBlockLoader,
+                translateBlock: _translateBlock,
+                onPageChanged: _onPageChanged,
+                onTap: () => widget.showOrHideAppBarAndBottomBar(true),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

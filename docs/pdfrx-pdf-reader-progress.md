@@ -83,10 +83,10 @@ EPUB renderer or annotation protocol v2.
   focused protocol/repository tests; commit separately.
 - [x] Milestone 4: independent ordered PDF text-block extraction with lazy
   per-page loading and pure tests; commit separately.
-- [ ] Milestone 5: original/reflow mode switch, lazy source-plus-translation
+- [x] Milestone 5: original/reflow mode switch, lazy source-plus-translation
   blocks using the existing translation coordinator/cache, and semantic page
   anchoring in both directions; commit separately.
-- [ ] Final validation: formatting, static analysis, all relevant Flutter/Dart
+- [x] Final validation: formatting, static analysis, all relevant Flutter/Dart
   tests, clean worktree, and documented MVP limitations.
 
 ## Completed work
@@ -128,19 +128,25 @@ EPUB renderer or annotation protocol v2.
   offsets, wrapped-line and conservative hyphen normalization, plus a
   memoizing page loader that loads nothing until a page is requested and
   retries failed loads.
+- Added an original/bilingual-reflow toolbar switch. Reflow opens on the fixed
+  layout's current page and returns fixed layout to the reflow page, while both
+  paths continue to publish and persist the same `pdf-page` semantic anchor.
+  Reflow extracts only requested pages and starts translation only for blocks
+  built by the scrolling list, using the existing coordinator, settings,
+  fingerprinted requests, and persistent translation cache.
 
 ## Current state
 
-Milestones 1 through 4 are implemented; Milestone 4 is ready to commit. Native
-pdfrx gesture/rendering and selection-overlay validation on representative
-files remains a manual device check because no Flutter device is attached in
-this environment.
+All five milestones and automated final validation are complete; Milestone 5
+is ready to commit. Native pdfrx gesture/rendering, selection-overlay, and
+bilingual reflow validation on representative files remains a manual device
+check because no Flutter device is attached in this environment.
 
 ## Next exact step
 
-Commit Milestone 4, then add the original/reflow switch, lazy bilingual block
-translation through the existing coordinator/cache, and semantic page anchors
-in both directions.
+Commit Milestone 5. On a device, validate fixed-layout rendering and gestures,
+single-page annotation selection/restoration, the original/reflow page anchor,
+and cached bilingual output with representative text and scanned PDFs.
 
 ## Important decisions
 
@@ -172,6 +178,12 @@ in both directions.
   unavailable selectable text in reflow. OCR is intentionally out of scope.
 - Password-protected PDF UX is not part of the requested MVP unless an existing
   Anx convention is discovered to require it.
+- Reflow grouping follows the ordered text and line breaks exposed by pdfrx,
+  treating blank-line-separated text as blocks and conservatively repairing
+  wrapped lines/hyphenation. Complex multi-column or irregularly tagged PDFs
+  may therefore need future layout heuristics.
+- Reflow anchoring is page-semantic rather than intra-page: switching modes
+  preserves the page, not the exact vertical block/character offset.
 
 ## Validation performed
 
@@ -204,3 +216,9 @@ in both directions.
   pre-existing async-context informational lints in `reading_page.dart`.
 - Milestone 4 pure extraction/lazy-loader tests: 5 passed. Targeted analysis:
   no issues.
+- Milestone 5 reflow widget coverage validates initial semantic page anchoring,
+  page changes, page-lazy extraction, source-plus-translation rendering, and
+  block-lazy translation.
+- Final `flutter test`: all 411 tests passed.
+- Final `flutter analyze`: no errors or warnings; 43 pre-existing
+  informational lints remain.

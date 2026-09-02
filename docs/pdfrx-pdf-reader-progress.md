@@ -81,7 +81,7 @@ EPUB renderer or annotation protocol v2.
 - [x] Milestone 3: canonical PDF selection/annotation creation, quote-context
   restoration, unique repeated-text resolution, persistent overlays, and
   focused protocol/repository tests; commit separately.
-- [ ] Milestone 4: independent ordered PDF text-block extraction with lazy
+- [x] Milestone 4: independent ordered PDF text-block extraction with lazy
   per-page loading and pure tests; commit separately.
 - [ ] Milestone 5: original/reflow mode switch, lazy source-plus-translation
   blocks using the existing translation coordinator/cache, and semantic page
@@ -124,18 +124,23 @@ EPUB renderer or annotation protocol v2.
   selectors, pure unique quote restoration, PDF repository creation support,
   read-model capabilities, pdfrx single-page selection integration, and
   persistent highlight/underline painting from canonical annotations.
+- Added renderer-independent, ordered page text blocks with portable source
+  offsets, wrapped-line and conservative hyphen normalization, plus a
+  memoizing page loader that loads nothing until a page is requested and
+  retries failed loads.
 
 ## Current state
 
-Milestones 1 through 3 are implemented; Milestone 3 is ready to commit. Native
+Milestones 1 through 4 are implemented; Milestone 4 is ready to commit. Native
 pdfrx gesture/rendering and selection-overlay validation on representative
 files remains a manual device check because no Flutter device is attached in
 this environment.
 
 ## Next exact step
 
-Commit Milestone 3, then implement independent ordered PDF text-block
-extraction with page-lazy loading and pure tests.
+Commit Milestone 4, then add the original/reflow switch, lazy bilingual block
+translation through the existing coordinator/cache, and semantic page anchors
+in both directions.
 
 ## Important decisions
 
@@ -197,3 +202,5 @@ extraction with page-lazy loading and pure tests.
   session/controller/draft/widget regression tests: 37 passed. Targeted
   analysis compiles all changed production files with only the same two
   pre-existing async-context informational lints in `reading_page.dart`.
+- Milestone 4 pure extraction/lazy-loader tests: 5 passed. Targeted analysis:
+  no issues.

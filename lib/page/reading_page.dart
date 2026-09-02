@@ -15,6 +15,7 @@ import 'package:anx_reader/models/read_theme.dart';
 import 'package:anx_reader/page/book_detail.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
 import 'package:anx_reader/page/book_player/pdf_player.dart';
+import 'package:anx_reader/page/book_player/reader_key_navigation.dart';
 import 'package:anx_reader/page/book_player/selection_ai_persistence_context.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/providers/book_notes.dart';
@@ -323,18 +324,12 @@ class ReadingPageState extends ConsumerState<ReadingPage>
       }
     }
 
-    if (Prefs().volumeKeyTurnPage) {
-      if (event.physicalKey == PhysicalKeyboardKey.audioVolumeUp) {
-        epubPlayerKey.currentState?.prevPage();
-        return KeyEventResult.handled;
-      }
-      if (event.physicalKey == PhysicalKeyboardKey.audioVolumeDown) {
-        epubPlayerKey.currentState?.nextPage();
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
+    return handleVolumePageKey(
+      enabled: Prefs().volumeKeyTurnPage,
+      physicalKey: event.physicalKey,
+      previousPage: _previousPage,
+      nextPage: _nextPage,
+    );
   }
 
   @override

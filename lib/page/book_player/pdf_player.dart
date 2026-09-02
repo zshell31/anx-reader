@@ -6,6 +6,7 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
+import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
@@ -50,6 +51,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   late final PdfTextBlockPageLoader _textBlockLoader;
   PageController? _reflowPageController;
   bool _reflowMode = false;
+  bool _annotationEditorOpen = false;
 
   @override
   void initState() {
@@ -244,20 +246,26 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
           ).read(document);
     final resolved = <int, List<_PdfRenderedAnnotation>>{};
     await controller.useDocument((pdf) async {
-      for (final model in models) {
+      final renderable = models.where((model) {
         final target = model.pdfTarget;
-        if (target == null ||
-            model.renderingCapability != AnnotationCapability.available ||
-            target.page > pdf.pages.length) {
-          continue;
-        }
-        final pageText = await pdf.pages[target.page - 1].loadStructuredText();
-        final match = target.resolve(pageText.fullText);
-        if (match == null) continue;
+        return target != null &&
+            model.renderingCapability == AnnotationCapability.available &&
+            target.page <= pdf.pages.length;
+      });
+      final resolutions = await resolvePdfAnnotationsByPage(
+        annotations: renderable,
+        targetFor: (model) => model.pdfTarget,
+        loadPageText: (pageNumber) =>
+            pdf.pages[pageNumber - 1].loadStructuredText(),
+        fullTextFor: (pageText) => pageText.fullText,
+      );
+      for (final resolution in resolutions) {
+        final model = resolution.annotation;
+        final target = model.pdfTarget!;
         final range = PdfPageTextRange(
-          pageText: pageText,
-          start: match.start,
-          end: match.end,
+          pageText: resolution.pageText,
+          start: resolution.match.start,
+          end: resolution.match.end,
         );
         (resolved[target.page] ??= []).add(
           _PdfRenderedAnnotation(model: model, range: range),
@@ -345,11 +353,69 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     PdfViewerController value,
     PdfViewerGeneralTapHandlerDetails details,
   ) {
-    if (details.type == PdfViewerGeneralTapType.tap &&
-        details.tapOn != PdfViewerPart.selectedText) {
+    if (details.type != PdfViewerGeneralTapType.tap) return false;
+    final hit = hitTestPdfAnnotations(
+      position: details.documentPosition,
+      annotations: _renderedAnnotations.values.expand((value) => value),
+      rectsFor: (annotation) sync* {
+        for (final fragment
+            in annotation.range.enumerateFragmentBoundingRects()) {
+          yield controller
+              .calcRectForRectInsidePage(
+                pageNumber: annotation.range.pageNumber,
+                rect: fragment.bounds,
+              )
+              .inflate(2);
+        }
+      },
+    );
+    if (hit.kind == PdfAnnotationHitKind.unique) {
+      unawaited(_openRenderedAnnotationEditor(hit.annotation!));
+      return true;
+    }
+    if (hit.kind == PdfAnnotationHitKind.ambiguous) return true;
+    if (details.tapOn != PdfViewerPart.selectedText) {
       widget.showOrHideAppBarAndBottomBar(true);
     }
     return false;
+  }
+
+  Future<void> _openRenderedAnnotationEditor(
+    _PdfRenderedAnnotation annotation,
+  ) async {
+    if (_annotationEditorOpen || !mounted) return;
+    _annotationEditorOpen = true;
+    final model = annotation.model;
+    final target = model.pdfTarget!;
+    final contextText = model.annotationContext ??
+        '${target.prefix}${target.exact}${target.suffix}';
+    final session = SelectionPersistenceSession(
+      SelectionSnapshot(
+        selectedText:
+            model.selectedText.isEmpty ? target.exact : model.selectedText,
+        annotationContext: contextText,
+        lookupContext: contextText,
+        chapter: model.chapter ?? 'Page ${target.page}',
+        selector: encodePdfReadingPosition(target.page),
+        pdfTarget: target,
+      ),
+      existingAnnotation: SelectionAnnotationHandle(ref: model.ref),
+    );
+    try {
+      final outcome = await showAnnotationEditor(
+        context: context,
+        book: widget.book,
+        session: session,
+      );
+      if (outcome == AnnotationEditorOutcome.saved ||
+          outcome == AnnotationEditorOutcome.deleted) {
+        await refreshAnnotations();
+      }
+    } catch (error) {
+      if (mounted) AnxToast.show(error.toString());
+    } finally {
+      _annotationEditorOpen = false;
+    }
   }
 
   Widget _buildLoadingBanner(

@@ -13,9 +13,12 @@ EPUB renderer or annotation protocol v2.
   `feature/automatic-shared-state-sync` at
   `749e7ce077ce59d84efff079c9f6efa55cde6424` (matched
   `origin/feature/automatic-shared-state-sync` after `git fetch origin`).
-- Implementation branch / current commit: `feature/pdfrx-pdf-reader`.
-  Milestone 1 is `43eb56c2 feat(pdf): add dedicated pdfrx reader`; Milestone 2
-  is `8524e0cc feat(pdf): add zoom controls`.
+- Implementation branch: `feature/pdfrx-pdf-reader`. The committed milestone
+  sequence is `43eb56c2 feat(pdf): add dedicated pdfrx reader`, `8524e0cc
+  feat(pdf): add zoom controls`, `0c9be8c5 feat(pdf): add canonical text
+  annotations`, `844833bb feat(pdf): add lazy text block extraction`, and
+  `d3269595 feat(pdf): add bilingual reflow mode`. The cleanup commit on top is
+  `fix(pdf): finish annotation interaction and restoration`.
 - Toolchain: Flutter 3.35.3, Dart 3.9.2.
 - Compatible current package selected: `pdfrx 2.2.24` with
   `pdfrx_engine 0.3.9`. This is the newest `pdfrx` release whose declared
@@ -24,12 +27,11 @@ EPUB renderer or annotation protocol v2.
 
 ## Architecture discovered
 
-- Current reader routing: `pushToReadingPage` always opens `ReadingPage`, and
-  `ReadingPage` unconditionally builds `EpubPlayer`. `EpubPlayer` hosts
-  Foliate in `flutter_inappwebview`; Foliate's `book.js` detects PDF and loads
-  `assets/foliate-js/src/pdf.js` plus bundled PDF.js. The smallest dedicated
-  routing seam is the player child in `ReadingPage`: route `.pdf` to a new
-  `PdfPlayer`, leave all other formats on `EpubPlayer`.
+- Current reader routing: `pushToReadingPage` opens shared `ReadingPage`, whose
+  player child routes `.pdf` to `PdfPlayer` and leaves EPUB and all other
+  formats on `EpubPlayer`. `EpubPlayer` still hosts Foliate in
+  `flutter_inappwebview`; the old bundled PDF.js path is no longer used for
+  normal PDF reading.
 - Reading position: EPUB relocation updates `Book.lastReadPosition` and
   `Book.readingPercentage`, persists through `bookDao.updateBook`, then calls
   `annotationSyncRuntime.recordReadingProgress(book)`. PDF should encode a
@@ -40,13 +42,11 @@ EPUB renderer or annotation protocol v2.
   create `CanonicalSelectionCreation`; `AnnotationRepository` commits the
   canonical protocol-v2 document to `SharedStateDatabase` before renderer
   refresh. `BookNote` and local database IDs are not authoritative.
-- Annotation protocol: protocol v2 already preserves an array of arbitrary
-  selector maps. The read adapter currently exposes only one valid
-  `epub-cfi`, and `AnnotationRepository._fingerprint` rejects non-EPUB books.
-  PDF therefore needs a minimal repository/input/read-model extension using
-  existing selector extensibility: one `pdf-page` selector plus one
-  `text-quote` selector (`exact`, `prefix`, `suffix`). No schema-version change
-  is needed. Unsupported selectors remain canonical and must not be deleted.
+- Annotation protocol: protocol v2 preserves an array of arbitrary selector
+  maps. The repository/input/read-model path now supports one `pdf-page`
+  selector plus one `text-quote` selector (`exact`, `prefix`, `suffix`) while
+  retaining EPUB CFI support. No schema-version change was made, and
+  unsupported selectors remain canonical rather than being deleted.
 - PDF annotation restoration: restrict lookup to the stored page; match
   `exact`; use `prefix` and `suffix` to resolve repeated occurrences; render
   only a unique safe match. Character bounds may be used for rendering after
@@ -61,7 +61,7 @@ EPUB renderer or annotation protocol v2.
   `fullTextTranslateTo`. The coordinator creates the existing fingerprinted
   `FullTextTranslationRequest` and uses
   `FullTextTranslationCacheService`/`TranslationCacheDatabase`. PDF reflow
-  will call this same coordinator lazily per extracted block.
+  calls this same coordinator lazily per extracted block.
 - `pdfrx` API verified from the official 2.2.24 source: `PdfViewer.file` uses
   progressive loading; `PdfViewerParams` supplies loading/error builders,
   page-change callbacks, selection/context-menu hooks, and per-page overlays;
@@ -134,19 +134,35 @@ EPUB renderer or annotation protocol v2.
   Reflow extracts only requested pages and starts translation only for blocks
   built by the scrolling list, using the existing coordinator, settings,
   fingerprinted requests, and persistent translation cache.
+- Added rendered PDF annotation hit testing in document coordinates. A unique
+  highlight/underline hit opens the existing unified editor with the same
+  canonical `AnnotationRef`; saves use the canonical editor/repository path and
+  deletes tombstone that same annotation. Overlapping targets are deliberately
+  left unopened rather than selecting an arbitrary annotation.
+- Changed annotation restoration to group renderable targets by PDF page and
+  load structured text once per referenced page per refresh. Existing
+  page-plus-contextual-quote resolution and unresolved/unsupported behavior are
+  unchanged, and unrelated pages are not loaded.
+- Routed volume-up/down through the shared format-aware previous/next-page
+  methods, preserving EPUB behavior while enabling PDF page turning.
 
 ## Current state
 
-All five milestones and automated final validation are complete; Milestone 5
-is ready to commit. Native pdfrx gesture/rendering, selection-overlay, and
-bilingual reflow validation on representative files remains a manual device
-check because no Flutter device is attached in this environment.
+All five milestones are committed through `d3269595`, and the MVP cleanup is
+complete at the current `fix(pdf): finish annotation interaction and
+restoration` HEAD. Automated validation passes. Native pdfrx rendering and
+gestures, tapping/editing/deleting restored annotations, hardware volume-key
+navigation, and bilingual reflow on representative files remain physical-device
+checks because no Flutter device is attached in this environment.
 
 ## Next exact step
 
-Commit Milestone 5. On a device, validate fixed-layout rendering and gestures,
-single-page annotation selection/restoration, the original/reflow page anchor,
-and cached bilingual output with representative text and scanned PDFs.
+On a physical device, validate fixed-layout rendering and gestures; create and
+restore multiple single-page annotations; tap each highlight and underline to
+open, edit, and delete the same annotation; verify ambiguous overlapping
+annotations do not open arbitrarily; verify volume-up/down page turning in both
+PDF and EPUB; and exercise original/reflow anchoring and cached bilingual output
+with representative text and scanned PDFs.
 
 ## Important decisions
 
@@ -184,6 +200,10 @@ and cached bilingual output with representative text and scanned PDFs.
   may therefore need future layout heuristics.
 - Reflow anchoring is page-semantic rather than intra-page: switching modes
   preserves the page, not the exact vertical block/character offset.
+- Rendered-annotation tap targeting, editor save/delete round trips, and
+  hardware volume buttons have pure/architectural automated coverage but still
+  require physical-device interaction validation with both highlight and
+  underline presentations.
 
 ## Validation performed
 
@@ -219,6 +239,12 @@ and cached bilingual output with representative text and scanned PDFs.
 - Milestone 5 reflow widget coverage validates initial semantic page anchoring,
   page changes, page-lazy extraction, source-plus-translation rendering, and
   block-lazy translation.
-- Final `flutter test`: all 411 tests passed.
-- Final `flutter analyze`: no errors or warnings; 43 pre-existing
-  informational lints remain.
+- Cleanup focused tests: 82 passed across rendered PDF annotation hit
+  selection, overlap ambiguity, page-grouped restoration, shared volume-key
+  routing, selection persistence, the unified editor, annotation repository,
+  and canonical read model. The focused restoration test proves two annotations
+  on one PDF page cause exactly one structured-text load.
+- Cleanup final `flutter test`: all 421 tests passed.
+- Cleanup final `flutter analyze`: no errors or warnings; the same 43
+  pre-existing informational lints remain (the command exits nonzero because
+  informational lints are reported).

@@ -34,6 +34,21 @@ connectivity, and inspect organization-domain pending/error logs. Group
 deletion retains a canonical tombstoned JSON object on WebDAV; it does not
 delete that remote object.
 
+Each attempted full cycle logs an INFO start and completion (or sanitized
+failure) using one correlation key such as `sync run=42`. Search the exported
+log for that exact key to reconstruct its phases. Useful broader searches are
+`sync run=`, `domain=`, `reason=`, `result=`, `conflict=412`, and
+`retryScheduled=`. INFO contains lifecycle and summaries, FINE/DEBUG contains
+normal per-domain and per-document decisions, and WARNING contains recoverable
+conflicts, retries, malformed remote state, deferrals, and verification
+failures.
+
+Skip messages explain intentional non-execution with `reason=auto-disabled`,
+`not-configured`, `no-network`, or `wifi-policy`. Logs deliberately omit
+WebDAV URLs and credentials, headers and lock tokens, full identifiers and
+digests, local paths, book metadata, annotations, translations, AI content,
+serialized documents, and network bodies.
+
 # 简体中文
 ## 无法导入书籍
 

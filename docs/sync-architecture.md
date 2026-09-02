@@ -177,12 +177,28 @@ downloading/uploading/released asset availability. Local book IDs are UI keys
 only after portable state is resolved. Database timestamps, database versions,
 and upload/download choices are not synchronization concepts.
 
-`AnxLog` reports cycle lifecycle and count-only summaries at INFO, per-domain
-decisions at DEBUG, retryable malformed/conflict/deferred cases at WARNING,
-and unresolved failures at ERROR/SEVERE. Logs may include cycle/trigger/domain,
-revisions, ETags, action type, pending counts, asset digest, verification, and
-outcome when useful. They must not include credentials, Authorization headers,
-annotation/book/translation content, AI commentary, or serialized documents.
+`AnxLog` writes INFO, WARNING, SEVERE, and DEBUG (`package:logging` FINE)
+records to the existing local log file; debug builds also show them in the
+console. Every full pass receives a cheap, process-local monotonic identifier.
+Its lifecycle and all run-scoped diagnostics begin with `sync run=<id>`, so a
+developer can correlate startup, resume, connectivity, manual, and mutation
+triggers through bootstrap, discovery, organization, catalog, content-domain,
+asset, and translation-cache phases.
+
+INFO is reserved for lifecycle and count-only summaries. DEBUG records
+per-domain counts and per-document pull/push/merge/create/replace/convergence
+decisions. WARNING records recoverable 412 retries, lock contention, scheduled
+network retries, malformed or identity-mismatched remote state, deferred
+bootstrap objects, and failed asset verification. SEVERE remains reserved for
+unrecoverable failures. ETags are recorded only as present/absent; UUIDs,
+fingerprints, compound IDs, and SHA-256 digests are shortened to eight
+characters plus an ellipsis.
+
+Diagnostics intentionally omit WebDAV URLs and credentials, Authorization and
+other raw HTTP headers, lock tokens, filesystem paths, book metadata,
+annotation/translation/AI content, canonical JSON, and request or response
+bodies. Logging observes values already available in the normal pass and does
+not perform additional network requests, hashing, or document decoding.
 
 For a stuck sync, verify WebDAV configuration, connectivity and Wi-Fi policy,
 then inspect pending/error counts and sanitized logs. A missing book file with

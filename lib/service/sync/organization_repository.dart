@@ -7,6 +7,7 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 class OrganizationRepository {
@@ -15,19 +16,22 @@ class OrganizationRepository {
   final String deviceId;
   final DateTime Function() now;
   final Uuid uuid;
+  final Future<Database> Function() _database;
 
   OrganizationRepository({
     required this.sharedState,
     required this.deviceId,
     DateTime Function()? now,
+    Future<Database> Function()? database,
     this.uuid = const Uuid(),
-  }) : now = now ?? DateTime.now;
+  })  : now = now ?? DateTime.now,
+        _database = database ?? (() => DBHelper().database);
 
   DomainStamp get _stamp =>
       DomainStamp(modifiedAt: now().toUtc(), deviceId: deviceId);
 
   Future<int> bootstrap() async {
-    final db = await DBHelper().database;
+    final db = await _database();
     var imported = 0;
     final groups = await db.query('tb_groups', orderBy: 'id');
     final groupIds = <int, String>{};
@@ -204,9 +208,28 @@ class OrganizationRepository {
     }
   }
 
+  /// Reconciles group projections in two passes so shared parent UUIDs never
+  /// depend on the order in which remote documents completed.
+  Future<void> projectAllCanonicalGroups() async {
+    final documents = <Map<String, dynamic>>[];
+    final ids = (await sharedState.documentIds(groupDomain)).toList()..sort();
+    for (final id in ids) {
+      final bytes = await sharedState.canonicalDocument(groupDomain, id);
+      if (bytes != null) {
+        documents.add(decodeGroupDocument(jsonDecode(utf8.decode(bytes))));
+      }
+    }
+    for (final document in documents) {
+      await _ensureGroupProjectionIdentity(document);
+    }
+    for (final document in documents) {
+      await _projectGroup(document);
+    }
+  }
+
   Future<void> tombstoneLocalRecord(
       String domain, String mappingTable, int localId) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final mappings = await db.query(mappingTable,
         columns: ['shared_id'],
         where: 'local_id = ?',
@@ -230,7 +253,7 @@ class OrganizationRepository {
 
   Future<void> publishBookTagByLocalIds(
       int bookId, int tagLocalId, bool present) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final tagMappings = await db.query('sync_tag_ids',
         columns: ['shared_id'],
         where: 'local_id = ?',
@@ -254,7 +277,7 @@ class OrganizationRepository {
   }
 
   Future<void> publishBookGroupByLocalIds(int bookId, int groupLocalId) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final books = await db.query('tb_books',
         columns: ['file_md5'], where: 'id = ?', whereArgs: [bookId], limit: 1);
     if (books.isEmpty) return;
@@ -282,35 +305,47 @@ class OrganizationRepository {
   }
 
   Future<void> _projectGroup(Map<String, dynamic> doc) async {
-    final db = await DBHelper().database;
-    final id = doc['id'] as String;
-    final localId = await _localId('sync_group_ids', id) ??
-        await db.insert('tb_groups', {
-          'name': 'Group',
-          'parent_id': 0,
-          'is_deleted': 0,
-          'create_time': now().toIso8601String(),
-          'update_time': now().toIso8601String(),
-        });
-    await _map('sync_group_ids', id, localId);
+    final db = await _database();
+    final localId = await _ensureGroupProjectionIdentity(doc);
+    if (localId == null) return;
     final fields = doc['fields'] as Map<String, dynamic>;
     final parentId = (fields['parentId'] as Map)['value'] as String?;
-    await db.update(
-        'tb_groups',
-        {
-          'name': (fields['name'] as Map)['value'],
-          'parent_id': parentId == null
-              ? 0
-              : (await _localId('sync_group_ids', parentId) ?? 0),
-          'is_deleted': (doc['deleted'] as Map)['value'] == true ? 1 : 0,
-          'update_time': now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [localId]);
+    final parentLocalId =
+        parentId == null ? null : await _localId('sync_group_ids', parentId);
+    final values = <String, Object?>{
+      'name': (fields['name'] as Map)['value'],
+      'is_deleted': (doc['deleted'] as Map)['value'] == true ? 1 : 0,
+      'update_time': now().toIso8601String(),
+    };
+    if (parentId == null) {
+      values['parent_id'] = 0;
+    } else if (parentLocalId != null) {
+      values['parent_id'] = parentLocalId;
+    }
+    await db.update('tb_groups', values, where: 'id = ?', whereArgs: [localId]);
+  }
+
+  Future<int?> _ensureGroupProjectionIdentity(Map<String, dynamic> doc) async {
+    final id = doc['id'] as String;
+    final mapped = await _localId('sync_group_ids', id);
+    if (mapped != null) return mapped;
+    if ((doc['deleted'] as Map)['value'] == true) return null;
+    final timestamp = now().toIso8601String();
+    final localId = await (await _database()).insert('tb_groups', {
+      'name': 'Group',
+      // Null means unresolved during projection. Only a canonical null parent
+      // is projected to the application's local root sentinel (0).
+      'parent_id': null,
+      'is_deleted': 0,
+      'create_time': timestamp,
+      'update_time': timestamp,
+    });
+    await _map('sync_group_ids', id, localId);
+    return localId;
   }
 
   Future<void> _projectTag(Map<String, dynamic> doc) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final id = doc['id'] as String;
     var localId = await _localId('sync_tag_ids', id);
     final deleted = (doc['deleted'] as Map)['value'] == true;
@@ -340,7 +375,7 @@ class OrganizationRepository {
   }
 
   Future<void> _projectTheme(Map<String, dynamic> doc) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final id = doc['id'] as String;
     var localId = await _localId('sync_theme_ids', id);
     final deleted = (doc['deleted'] as Map)['value'] == true;
@@ -370,7 +405,7 @@ class OrganizationRepository {
   }
 
   Future<void> _projectBookTag(Map<String, dynamic> doc) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final tagLocalId = await _localId('sync_tag_ids', doc['tagId'] as String);
     final books = await db.query('tb_books',
         columns: ['id'],
@@ -425,7 +460,7 @@ class OrganizationRepository {
 
   Future<String> _ensureMapping(
       String table, int localId, String namespace) async {
-    final db = await DBHelper().database;
+    final db = await _database();
     final rows = await db.query(table,
         columns: ['shared_id'],
         where: 'local_id = ?',
@@ -438,7 +473,7 @@ class OrganizationRepository {
   }
 
   Future<int?> _localId(String table, String sharedId) async {
-    final rows = await (await DBHelper().database).query(table,
+    final rows = await (await _database()).query(table,
         columns: ['local_id'],
         where: 'shared_id = ?',
         whereArgs: [sharedId],
@@ -447,7 +482,7 @@ class OrganizationRepository {
   }
 
   Future<void> _map(String table, String sharedId, int localId) async {
-    await (await DBHelper().database).rawInsert(
+    await (await _database()).rawInsert(
         'INSERT OR REPLACE INTO $table (shared_id, local_id) VALUES (?, ?)',
         [sharedId, localId]);
   }

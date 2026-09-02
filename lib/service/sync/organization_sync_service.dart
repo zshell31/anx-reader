@@ -6,10 +6,11 @@ import 'package:anx_reader/service/sync/shared_state_database.dart';
 
 class OrganizationSyncService {
   final List<SharedDocumentSyncCoordinator> coordinators;
+  final OrganizationRepository repository;
 
   OrganizationSyncService({
     required SharedStateDatabase sharedState,
-    required OrganizationRepository repository,
+    required this.repository,
     required AnnotationWebDavTransport transport,
   }) : coordinators = [
           _coordinator(
@@ -86,6 +87,7 @@ class OrganizationSyncService {
       }));
     }
     await Future.wait(work);
+    await repository.projectAllCanonicalGroups();
   }
 
   Future<void> close() =>

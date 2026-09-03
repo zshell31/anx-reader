@@ -520,10 +520,12 @@ class AnnotationSyncRuntime {
       syncDebug('phase=bootstrap completed');
       syncDebug('phase=discovery started');
       var remote = const RemoteDocumentIndex({});
+      var remoteIndexAuthoritative = false;
       final transport = _documentTransport;
       if (transport != null) {
         try {
           remote = await RemoteDocumentDiscovery(transport.list).discover();
+          remoteIndexAuthoritative = true;
         } catch (error) {
           _lastRunFailed = true;
           syncWarning('phase=discovery failed '
@@ -545,12 +547,17 @@ class AnnotationSyncRuntime {
           sharedState,
           remoteIdsByDomain: remote.idsByDomain,
           remoteStrongEtagsByDomain: remote.strongEtagsByDomain,
+          remoteIndexAuthoritative: remoteIndexAuthoritative,
         );
         syncDebug('phase=organization completed');
       }
       syncDebug('phase=catalog started');
       await _libraryService?.syncCatalog(
-        initialFingerprints,
+        remoteDocumentPullTargets(
+          localIds: initialFingerprints,
+          remoteIds: remote.ids(libraryCatalogDomain),
+          remoteIndexAuthoritative: remoteIndexAuthoritative,
+        ),
         remoteStrongEtags: remote.strongEtags(libraryCatalogDomain),
       );
       syncDebug('phase=catalog completed');
@@ -567,22 +574,31 @@ class AnnotationSyncRuntime {
       await Future.wait([
         coordinator.syncDirtyAnnotations(),
         coordinator.pullBooks(
-          fingerprints,
+          remoteDocumentPullTargets(
+            localIds: fingerprints,
+            remoteIds: remote.ids(annotationSyncDomain),
+            remoteIndexAuthoritative: remoteIndexAuthoritative,
+          ),
           discoveredStrongEtags: remote.strongEtags(annotationSyncDomain),
         ),
         _presentationCoordinator!.syncDirtyAnnotations(),
         _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
         if (_libraryService != null)
           _libraryService!.syncReadingState(
-            fingerprints,
+            remoteDocumentPullTargets(
+              localIds: fingerprints,
+              remoteIds: remote.ids(readingStateDomain),
+              remoteIndexAuthoritative: remoteIndexAuthoritative,
+            ),
             remoteStrongEtags: remote.strongEtags(readingStateDomain),
           ),
         if (_readingActivityService != null)
           _readingActivityService!.syncKnown(
-            {
-              ...await sharedState.documentIds(readingActivityDomain),
-              ...remote.ids(readingActivityDomain),
-            },
+            remoteDocumentPullTargets(
+              localIds: await sharedState.documentIds(readingActivityDomain),
+              remoteIds: remote.ids(readingActivityDomain),
+              remoteIndexAuthoritative: remoteIndexAuthoritative,
+            ),
             remoteStrongEtags: remote.strongEtags(readingActivityDomain),
           ),
       ]);

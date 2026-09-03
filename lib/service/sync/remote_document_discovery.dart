@@ -8,6 +8,13 @@ import 'package:anx_reader/service/sync/reading_activity_protocol.dart';
 typedef RemoteCollectionList = Future<List<WebDavCollectionEntry>> Function(
     List<String> path);
 
+Set<String> remoteDocumentPullTargets({
+  required Iterable<String> localIds,
+  required Iterable<String> remoteIds,
+  required bool remoteIndexAuthoritative,
+}) =>
+    remoteIndexAuthoritative ? remoteIds.toSet() : {...localIds, ...remoteIds};
+
 class RemoteDocumentIndex {
   final Map<String, Set<String>> idsByDomain;
   final Map<String, Map<String, String>> strongEtagsByDomain;

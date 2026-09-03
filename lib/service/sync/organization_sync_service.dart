@@ -1,6 +1,7 @@
 import 'package:anx_reader/service/sync/conditional_webdav_transport.dart';
 import 'package:anx_reader/service/sync/organization_protocol.dart';
 import 'package:anx_reader/service/sync/organization_repository.dart';
+import 'package:anx_reader/service/sync/remote_document_discovery.dart';
 import 'package:anx_reader/service/sync/shared_document_sync_coordinator.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 
@@ -78,14 +79,17 @@ class OrganizationSyncService {
     SharedStateDatabase state, {
     Map<String, Set<String>> remoteIdsByDomain = const {},
     Map<String, Map<String, String>> remoteStrongEtagsByDomain = const {},
+    bool remoteIndexAuthoritative = false,
   }) async {
     final work = <Future<void>>[];
     for (final coordinator in coordinators) {
       work.add(coordinator.syncDirtyAnnotations());
-      final documentIds = {
-        ...await state.documentIds(coordinator.syncDomain),
-        ...remoteIdsByDomain[coordinator.syncDomain] ?? const <String>{},
-      };
+      final documentIds = remoteDocumentPullTargets(
+        localIds: await state.documentIds(coordinator.syncDomain),
+        remoteIds:
+            remoteIdsByDomain[coordinator.syncDomain] ?? const <String>{},
+        remoteIndexAuthoritative: remoteIndexAuthoritative,
+      );
       work.add(coordinator.pullBooks(
         documentIds,
         discoveredStrongEtags:

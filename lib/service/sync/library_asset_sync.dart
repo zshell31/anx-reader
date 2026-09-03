@@ -398,7 +398,11 @@ String? libraryLocalAssetVerificationMismatch(
   if (verification == null) return 'receipt-missing';
   if (verification.digest != expectedDigest) return 'digest-changed';
   if (verification.size != actualSize) return 'size-changed';
-  if (verification.modified != actualModified) return 'modified-changed';
+  // FileStat reports local time on Android, while persisted ISO timestamps
+  // are restored as UTC. Compare the instant rather than the representation.
+  if (!verification.modified.isAtSameMomentAs(actualModified)) {
+    return 'modified-changed';
+  }
   return null;
 }
 

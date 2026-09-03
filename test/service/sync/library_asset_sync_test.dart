@@ -298,6 +298,7 @@ void main() {
     );
     expect(mismatch(digest: 'b' * 64), 'digest-changed');
     expect(mismatch(size: 43), 'size-changed');
+    expect(mismatch(timestamp: modified.toLocal()), isNull);
     expect(
       mismatch(timestamp: modified.add(const Duration(seconds: 1))),
       'modified-changed',

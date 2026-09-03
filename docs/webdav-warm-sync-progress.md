@@ -13,6 +13,8 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 5. Avoid object GETs for locally known documents absent from successful
    discovery.
 6. Diagnose cold local asset-verification misses without exposing file paths.
+7. Preserve local asset-verification hits across local/UTC timestamp
+   serialization.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -116,6 +118,19 @@ Stage 6 diagnostics:
   persistence/restart test remains unchanged and continues to prove that a
   stable file avoids a second digest calculation.
 
+Stage 7 implementation:
+
+- Samsung diagnostics showed that every persisted book and cover receipt was
+  rejected solely as `modified-changed`; digest and size checks had passed.
+- Android `FileStat.modified` uses a local `DateTime`, while the persisted ISO
+  value is canonicalized and restored as UTC. The cache now compares whether
+  both values identify the same instant instead of comparing their timezone
+  representation.
+- Digest, size, and genuine modification-time changes still invalidate the
+  receipt and trigger the full SHA-256 safety check.
+- Added a regression assertion for equal local/UTC timestamps while retaining
+  the existing assertion that a real one-second modification is rejected.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -135,6 +150,8 @@ Stage 6 diagnostics:
 - After stages 4 and 5, the combined `test/service/sync` and
   `test/service/translate` run passed all 347 tests.
 - Stage 6 asset diagnostics suite passed all 15 tests; focused analysis of the
+  implementation and tests reported no issues.
+- Stage 7 asset suite passed all 15 tests; focused analysis of the
   implementation and tests reported no issues.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
@@ -189,6 +206,22 @@ application data. Two startup runs were captured:
   why persisted local verification misses after a process restart (receipt
   absence versus file-stat mismatch) before changing trust semantics.
 
+### Stage 6 device diagnosis
+
+Release commit `2cda24c0` was installed on Samsung SM-M315F without clearing
+application data. One startup run was sufficient to identify the invalidation
+reason:
+
+- Total sync time was 4.025 s; discovery took about 1.288 s and the startup
+  asset-status task took 3.550 s.
+- Both book assets and both covers reported `modified-changed`, then passed
+  their SHA-256 fallback. The large book digest alone took 3.432 s.
+- The asset phase reused both remote-presence receipts (`trustedRemote=2`) and
+  completed as soon as the shared local verification finished. The immediate
+  post-asset status refresh took 44 ms.
+- This isolates the remaining delay to timezone-sensitive `DateTime` equality,
+  not WebDAV, missing receipts, changed content, or status propagation.
+
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
@@ -197,3 +230,4 @@ application data. Two startup runs were captured:
 - `b4a96865 perf(sync): reuse recent remote asset presence`
 - `c6efbb0f perf(sync): trust successful discovery targets`
 - `dc7d8ea2 diagnostics(sync): explain local asset verification misses`
+- `6d873e2b perf(sync): compare asset timestamps by instant`

@@ -20,6 +20,11 @@ void main() {
     );
     expect(runtime, contains('onConnectivityRegained()'));
     expect(runtime, contains('Connectivity().onConnectivityChanged'));
+    expect(
+      runtime.indexOf('await organization.bootstrap();'),
+      lessThan(runtime.indexOf('Connectivity().onConnectivityChanged')),
+      reason: 'connectivity must not race startup bootstrap',
+    );
     expect(reader, contains('annotationSyncRuntime.openBook('));
     expect(reader, contains('annotationSyncRuntime.closeBook('));
   });

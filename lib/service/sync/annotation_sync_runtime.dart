@@ -138,11 +138,6 @@ class AnnotationSyncRuntime {
   Future<void> start() async {
     if (_started) return;
     _started = true;
-    _connectivity = Connectivity().onConnectivityChanged.listen((results) {
-      if (results.any((result) => result != ConnectivityResult.none)) {
-        unawaited(onConnectivityRegained());
-      }
-    });
     final library = await _ensureLibraryRepository();
     await library.bootstrap();
     final activity = await _ensureReadingActivityRepository();
@@ -150,6 +145,11 @@ class AnnotationSyncRuntime {
     final organization = await _ensureOrganizationRepository();
     await organization.bootstrap();
     await _ensureCoordinator();
+    _connectivity = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.any((result) => result != ConnectivityResult.none)) {
+        unawaited(onConnectivityRegained());
+      }
+    });
     unawaited(_runDiscovery(trigger: 'startup'));
   }
 

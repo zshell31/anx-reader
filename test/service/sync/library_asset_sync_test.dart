@@ -168,6 +168,32 @@ void main() {
     expect(transport.existenceChecks, 1);
   });
 
+  test('persisted remote presence avoids a cold network check', () async {
+    final bytes = <int>[29, 30, 31, 32];
+    final document = catalog(bytes);
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+
+    final availability =
+        await service.bookAvailability(document, knownRemote: true);
+
+    expect(availability.localVerified, isTrue);
+    expect(availability.remote, isTrue);
+    expect(transport.existenceChecks, 0);
+  });
+
+  test('concurrent availability checks share one remote request', () async {
+    final document = catalog(<int>[33, 34, 35, 36]);
+
+    await Future.wait([
+      service.bookAvailability(document),
+      service.bookAvailability(document),
+    ]);
+
+    expect(transport.existenceChecks, 1);
+  });
+
   test('remote presence is checked again after the short cache lifetime',
       () async {
     final bytes = <int>[31, 32, 33, 34];

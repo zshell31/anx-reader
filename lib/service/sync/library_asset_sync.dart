@@ -8,6 +8,7 @@ import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:crypto/crypto.dart';
 
 const libraryAssetReleaseSource = 'library-asset-release-v1';
+const libraryAssetPresenceSource = 'library-asset-presence-v1';
 
 List<String> libraryBookAssetSegments(String digest) => [
       'anx',
@@ -61,6 +62,7 @@ class LibraryAssetSyncService {
   final Future<bool> Function(String fingerprint, String digest) isReleased;
   final DateTime Function() _clock;
   final Map<String, DateTime> _knownRemoteAssets = {};
+  final Map<String, Future<bool>> _remotePresenceChecks = {};
   final Map<String, _VerifiedLocalAsset> _verifiedLocalAssets = {};
 
   LibraryAssetSyncService({
@@ -88,7 +90,9 @@ class LibraryAssetSyncService {
   /// Returns the current book-asset state while reusing the digest and remote
   /// presence caches populated by [syncBook].
   Future<LibraryBookAssetAvailability> bookAvailability(
-      Map<String, dynamic> catalogDocument) async {
+    Map<String, dynamic> catalogDocument, {
+    bool? knownRemote,
+  }) async {
     final document = decodeLibraryCatalogDocument(catalogDocument);
     final membership = document['membership'] as Map<String, dynamic>;
     if (membership['value'] != true) {
@@ -105,7 +109,8 @@ class LibraryAssetSyncService {
       File(resolveLocalPath(relativePath)),
       digest,
     );
-    final remoteExists = await _remoteExists(libraryBookAssetSegments(digest));
+    final remoteExists =
+        knownRemote ?? await _remoteExists(libraryBookAssetSegments(digest));
     final released =
         !localValid && remoteExists && await isReleased(fingerprint, digest);
     return LibraryBookAssetAvailability(
@@ -249,13 +254,23 @@ class LibraryAssetSyncService {
         _clock().isBefore(checkedAt.add(remotePresenceCacheLifetime))) {
       return true;
     }
-    final exists = await transport.exists(path);
-    if (exists) {
-      _knownRemoteAssets[key] = _clock();
-    } else {
-      _knownRemoteAssets.remove(key);
+    final active = _remotePresenceChecks[key];
+    if (active != null) return active;
+    final check = transport.exists(path);
+    _remotePresenceChecks[key] = check;
+    try {
+      final exists = await check;
+      if (exists) {
+        _knownRemoteAssets[key] = _clock();
+      } else {
+        _knownRemoteAssets.remove(key);
+      }
+      return exists;
+    } finally {
+      if (identical(_remotePresenceChecks[key], check)) {
+        _remotePresenceChecks.remove(key);
+      }
     }
-    return exists;
   }
 
   void _rememberRemoteAsset(List<String> path) {

@@ -547,6 +547,10 @@ class AnnotationSyncRuntime {
       syncDebug('phase=catalog started');
       await _libraryService?.syncCatalog(initialFingerprints);
       syncDebug('phase=catalog completed');
+      syncDebug('phase=assets started');
+      await _syncSharedLibraryAssets();
+      syncDebug('phase=assets completed');
+      _emitAssetChanges();
       final fingerprints = {
         ...initialFingerprints,
         ...await _knownFingerprints(),
@@ -567,10 +571,6 @@ class AnnotationSyncRuntime {
           }),
       ]);
       syncDebug('phase=content-domains completed');
-      syncDebug('phase=assets started');
-      await _syncSharedLibraryAssets();
-      syncDebug('phase=assets completed');
-      _emitAssetChanges();
       await _syncTranslationCacheBestEffort();
     } catch (error) {
       _lastRunFailed = true;
@@ -619,9 +619,11 @@ class AnnotationSyncRuntime {
           await sharedState.canonicalDocument(libraryCatalogDomain, id);
       if (bytes == null) continue;
       checked++;
-      final result = await service.syncBook(
-        decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes))),
-      );
+      final document =
+          decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes)));
+      final result = await service.syncBook(document);
+      final availability = await service.bookAvailability(document);
+      await _recordAssetPresence(document, availability.remote);
       if (result.uploaded) uploaded++;
       if (result.downloaded) downloaded++;
       if (result.released) released++;
@@ -668,7 +670,39 @@ class AnnotationSyncRuntime {
     final client = SyncClientFactory.currentClient;
     if (client == null) return null;
     _ensureAuxiliarySyncServices(client);
-    return _assetSyncService!.bookAvailability(catalogDocument);
+    final document = decodeLibraryCatalogDocument(catalogDocument);
+    final fingerprint = document['fingerprint'] as String;
+    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+        as Map<String, dynamic>;
+    final digest = (asset['digest'] as String).toLowerCase();
+    final receipt = await sharedState.importReceipt(
+        libraryAssetPresenceSource, fingerprint);
+    final knownRemote =
+        receipt?.status == 'present' && receipt?.sharedId == digest
+            ? true
+            : null;
+    return _assetSyncService!.bookAvailability(
+      document,
+      knownRemote: knownRemote,
+    );
+  }
+
+  Future<void> _recordAssetPresence(
+      Map<String, dynamic> catalogDocument, bool remote) async {
+    final fingerprint = catalogDocument['fingerprint'] as String;
+    final asset = (catalogDocument['bookAsset']
+        as Map<String, dynamic>)['value'] as Map<String, dynamic>;
+    final digest = (asset['digest'] as String).toLowerCase();
+    final status = remote ? 'present' : 'missing';
+    final current = await sharedState.importReceipt(
+        libraryAssetPresenceSource, fingerprint);
+    if (current?.sharedId == digest && current?.status == status) return;
+    await sharedState.recordImport(
+      source: libraryAssetPresenceSource,
+      sourceKey: fingerprint,
+      sharedId: digest,
+      status: status,
+    );
   }
 
   Future<LibrarySyncRepository> _ensureLibraryRepository() async {

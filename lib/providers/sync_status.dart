@@ -5,6 +5,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/sync_status.dart';
 import 'package:anx_reader/providers/sync.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
+import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'sync_status.g.dart';
@@ -18,6 +19,7 @@ class SyncStatus extends _$SyncStatus {
 
   @override
   Future<SyncStatusModel> build() async {
+    final stopwatch = Stopwatch()..start();
     if (_assetChangesSubscription == null) {
       _assetChangesSubscription = annotationSyncRuntime.assetChanges.listen(
         (_) => unawaited(refresh()),
@@ -34,7 +36,7 @@ class SyncStatus extends _$SyncStatus {
         .where((entry) => include(entry.value))
         .map((entry) => entry.book.id)
         .toList();
-    return SyncStatusModel(
+    final result = SyncStatusModel(
       localOnly: ids((value) => value.localVerified && !value.remote),
       remoteOnly: ids(
           (value) => !value.localVerified && value.remote && !value.released),
@@ -44,6 +46,13 @@ class SyncStatus extends _$SyncStatus {
       downloading: const [],
       uploading: const [],
     );
+    syncDebug('asset-status books=${entries.length} '
+        'localOnly=${result.localOnly.length} '
+        'remoteOnly=${result.remoteOnly.length} both=${result.both.length} '
+        'missing=${result.nonExistent.length} '
+        'released=${result.released.length} '
+        'durationMs=${stopwatch.elapsedMilliseconds}');
+    return result;
   }
 
   Future<void> refresh() async {

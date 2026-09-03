@@ -55,7 +55,7 @@ class SqliteReadingActivityProjection implements ReadingActivityProjection {
 }
 
 class ReadingActivityRepository {
-  static const bootstrapSource = 'reading-activity-v1';
+  static const bootstrapSource = readingActivityLegacySource;
   static const bootstrapReceiptSource = 'reading-activity-v2';
   final SharedStateDatabase sharedState;
   final ReadingActivityProjection projection;
@@ -161,7 +161,7 @@ class ReadingActivityRepository {
         continue;
       }
       final eventId =
-          uuid.v5(Namespace.url.value, 'anx:legacy-reading:v1:$sourceKey');
+          legacyReadingActivityEventId(fingerprint, day, row.readingTime);
       final documentId = readingActivityDocumentId(fingerprint, day);
       final current = await _read(documentId);
       final existing = current == null

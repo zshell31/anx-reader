@@ -116,6 +116,79 @@ void main() {
         throwsFormatException);
   });
 
+  test('old and stable legacy event shapes converge without an ID collision',
+      () {
+    const day = '2025-03-04';
+    const duration = 90;
+    final eventId = legacyReadingActivityEventId(fingerprint, day, duration);
+    Map<String, dynamic> document(Map<String, dynamic> event) => {
+          'schemaVersion': 1,
+          'fingerprint': fingerprint,
+          'day': day,
+          'events': [event],
+        };
+    final oldShape = document({
+      'eventId': eventId,
+      'startedAt': '2025-03-03T21:00:00.000Z',
+      'durationSeconds': duration,
+      'deviceId': 'old-device',
+      'deleted': false,
+      'stamp': {
+        'modifiedAt': '2025-03-04T08:00:00.000Z',
+        'deviceId': 'old-device',
+      },
+    });
+    final stableShape = document({
+      'eventId': eventId,
+      'startedAt': '2025-03-04T00:00:00.000Z',
+      'durationSeconds': duration,
+      'deviceId': readingActivityLegacySource,
+      'deleted': false,
+      'stamp': {
+        'modifiedAt': '2025-03-04T00:00:00.000Z',
+        'deviceId': readingActivityLegacySource,
+      },
+    });
+
+    final merged = mergeReadingActivityDocuments(oldShape, stableShape);
+
+    expect(merged['events'], hasLength(1));
+    expect(merged['events'].single, stableShape['events'].single);
+  });
+
+  test('legacy normalization preserves a newer deletion stamp', () {
+    const day = '2025-03-04';
+    const duration = 90;
+    final eventId = legacyReadingActivityEventId(fingerprint, day, duration);
+    final decoded = decodeReadingActivityDocument({
+      'schemaVersion': 1,
+      'fingerprint': fingerprint,
+      'day': day,
+      'events': [
+        {
+          'eventId': eventId,
+          'startedAt': '2025-03-03T21:00:00.000Z',
+          'durationSeconds': duration,
+          'deviceId': 'old-device',
+          'deleted': true,
+          'stamp': {
+            'modifiedAt': '2025-03-05T10:00:00.000Z',
+            'deviceId': 'deleting-device',
+          },
+        }
+      ],
+    });
+    final event = decoded['events'].single as Map<String, dynamic>;
+
+    expect(event['startedAt'], '2025-03-04T00:00:00.000Z');
+    expect(event['deviceId'], readingActivityLegacySource);
+    expect(event['deleted'], isTrue);
+    expect(event['stamp'], {
+      'modifiedAt': '2025-03-05T10:00:00.000Z',
+      'deviceId': 'deleting-device',
+    });
+  });
+
   test('legacy aggregate import has deterministic identity and is idempotent',
       () async {
     projection = MemoryActivityProjection(
@@ -229,7 +302,8 @@ void main() {
     final decoded = jsonDecode(utf8
         .decode((await store.canonicalDocument(readingActivityDomain, id))!));
     expect(decoded['events'], hasLength(1));
-    expect(decoded['events'].single['deviceId'], 'device-a');
+    expect(decoded['events'].single['deviceId'],
+        ReadingActivityRepository.bootstrapSource);
   });
 
   test('legacy import does not resurrect an event deleted on another device',

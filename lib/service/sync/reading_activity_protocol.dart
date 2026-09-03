@@ -3,6 +3,14 @@ import 'package:anx_reader/service/sync/domain_stamp.dart';
 
 const readingActivityDomain = 'reading-activity';
 const readingActivitySchemaVersion = 1;
+const readingActivityLegacySource = 'reading-activity-v1';
+
+String legacyReadingActivityEventId(
+        String fingerprint, String day, int durationSeconds) =>
+    deterministicMigrationUuid(
+      'anx:legacy-reading:v1:'
+      '${canonicalMd5Fingerprint(fingerprint)}:$day:$durationSeconds',
+    );
 
 String readingActivityDocumentId(String fingerprint, String day) =>
     '${canonicalMd5Fingerprint(fingerprint)}@$day';
@@ -50,14 +58,28 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
         deleted is! bool) {
       throw const FormatException('reading event is invalid');
     }
-    event['startedAt'] = DateTime.parse(startedAt).toUtc().toIso8601String();
+    final isLegacyAggregate = id ==
+        legacyReadingActivityEventId(
+          doc['fingerprint'] as String,
+          day,
+          duration,
+        );
+    event['startedAt'] = isLegacyAggregate
+        ? DateTime.parse('${day}T00:00:00Z').toIso8601String()
+        : DateTime.parse(startedAt).toUtc().toIso8601String();
+    if (isLegacyAggregate) event['deviceId'] = readingActivityLegacySource;
     event['deleted'] = deleted;
-    event['stamp'] = event['stamp'] == null
+    event['stamp'] = isLegacyAggregate && !deleted
         ? DomainStamp(
-                modifiedAt: DateTime.parse(startedAt).toUtc(),
-                deviceId: deviceId)
-            .toJson()
-        : DomainStamp.fromJson(event['stamp']).toJson();
+            modifiedAt: DateTime.parse('${day}T00:00:00Z'),
+            deviceId: readingActivityLegacySource,
+          ).toJson()
+        : event['stamp'] == null
+            ? DomainStamp(
+                    modifiedAt: DateTime.parse(startedAt).toUtc(),
+                    deviceId: deviceId)
+                .toJson()
+            : DomainStamp.fromJson(event['stamp']).toJson();
     final previous = byId[id];
     if (previous != null) {
       for (final field in const [

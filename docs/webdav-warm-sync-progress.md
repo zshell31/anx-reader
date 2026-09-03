@@ -18,6 +18,7 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 8. Finish all durable bootstrap imports before connectivity can start a sync.
 9. Schedule each dirty shared document only once per synchronization pass.
 10. Normalize legacy reading-event wire variants before merging.
+11. Collapse legacy aggregate feedback cascades without deleting old history.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -25,10 +26,9 @@ branch is considered complete.
 
 ## Current stage
 
-Stages 1-10 and cross-device release validation are complete. Historical
-reading-activity aggregate-cascade cleanup is intentionally left as a separate
-migration stage because it requires different retention rules for legacy-only
-days and days which also contain real session events.
+Stages 1-11 are implemented and covered by the full relevant test suite. Stage
+11 requires one Onyx synchronization and a read-only WebDAV audit to confirm
+the expected one-time cleanup on the real documents.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -176,6 +176,23 @@ Stage 10 implementation:
   also retains its deletion stamp, so compatibility normalization cannot
   resurrect deleted history.
 
+Stage 11 implementation:
+
+- Deterministic UUIDv5 migration entries are treated as daily aggregate
+  snapshots rather than independent reading deltas. Multiple live snapshots
+  are collapsed to one conservative pre-session baseline, or removed when
+  real UUIDv4 sessions fully represent that baseline.
+- Historical import timestamps, when present, allow real sessions already
+  represented at snapshot time to be subtracted. A stable-wire fallback uses
+  an exact chronological real-session prefix match; it performs no heuristic
+  deletion when equivalence cannot be established.
+- A single legacy-only aggregate remains unchanged because it can be the sole
+  history for an older day. Deleted legacy events retain their tombstones.
+- Bootstrap canonicalizes stored reading documents before legacy import. It
+  increments and queues only documents whose bytes actually change, ensuring
+  ETag short-circuiting cannot hide the migration. A second bootstrap is a
+  no-op and does not advance the revision again.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -210,6 +227,10 @@ Stage 10 implementation:
   focused analysis reported no issues.
 - After stage 10, the combined `test/service/sync` and
   `test/service/translate` run passed all 351 tests.
+- Stage 11 focused reading-activity/coordinator suites passed all 64 tests;
+  focused analysis reported no issues.
+- After stage 11, the combined `test/service/sync` and
+  `test/service/translate` run passed all 355 tests.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -364,6 +385,22 @@ skipped. The subsequent connected startup pass completed in 1.883 s.
   side, so compatibility repair loses no data but does not reduce the inflated
   aggregate cascade. The independent cleanup migration remains necessary.
 
+### Stage 11 pre-install data validation
+
+The production cleanup function was run offline against the three previously
+downloaded affected WebDAV documents. It produced the expected conservative
+results without modifying the server:
+
+- Book `9c512ac7...`, 2026-09-03: 12 to 2 events, 10 to 0 legacy snapshots,
+  corrected total 331 seconds.
+- Book `e2127512...`, 2026-09-02: 38 to 7 events, 32 to 1 legacy snapshot,
+  retaining the 2758-second historical baseline plus real sessions for a
+  corrected total of 2820 seconds.
+- Book `e2127512...`, 2026-09-03: 56 to 31 events, 25 to 0 legacy snapshots,
+  corrected total 8569 seconds.
+- The other nine daily documents each contain one legacy-only aggregate and
+  remain unchanged.
+
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
@@ -377,3 +414,4 @@ skipped. The subsequent connected startup pass completed in 1.883 s.
 - `6eebcd88 fix(sync): avoid duplicate dirty document scheduling`
 - `e35507bc test(sync): follow coordinated known-document sync`
 - `76bae54f fix(sync): normalize legacy reading events`
+- `37744729 fix(sync): collapse legacy reading cascades`

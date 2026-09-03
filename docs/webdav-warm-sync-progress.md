@@ -148,6 +148,31 @@ device timing validation is still required. Discovery still takes about
 1.323 s. Stage 5 reduces post-discovery object requests without caching away
 cross-device changes; device timing validation is still required.
 
+### Stages 4-5 device validation
+
+Release commit `2165da47` was installed on Samsung SM-M315F without clearing
+application data. Two startup runs were captured:
+
+- First run: 3.857 s total; discovery 1.888 s, organization 0.194 s,
+  catalog 0.108 s, assets 1.303 s, content domains 0.131 s, and translation
+  cache 0.043 s.
+- Second run: 3.541 s total; discovery 1.289 s, organization 0.179 s,
+  catalog 0.089 s, assets 1.549 s, content domains 0.116 s, and translation
+  cache 0.032 s.
+- Both runs reported `trustedRemote=2`, `pending=0`, and `failed=0`. This
+  confirms that the asset phase reused both persisted remote-presence receipts
+  and made no per-book remote existence checks.
+- Authoritative discovery reduced catalog pull targets from 5 to 2 and
+  reading-state targets from 5 to 2. Annotation targets fell from 5 to the 4
+  objects actually present remotely. No fallback or expected 404 pull was
+  observed.
+- Total warm time remained within noise of the earlier 3.493 s baseline. The
+  cold startup asset-status task still took 3.115-3.434 s and the asset phase
+  waited 1.303-1.549 s for its in-flight local verification. Its immediate
+  post-asset refresh took only 45-53 ms. The next investigation must determine
+  why persisted local verification misses after a process restart (receipt
+  absence versus file-stat mismatch) before changing trust semantics.
+
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`

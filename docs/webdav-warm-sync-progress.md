@@ -9,6 +9,7 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 1. Stop repeated legacy reading-activity bootstrap imports.
 2. Skip clean document downloads when the WebDAV ETag is unchanged.
 3. Persist translation-cache synchronization checkpoints across restarts.
+4. Reuse recent persisted remote asset-presence checks during warm sync.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -16,8 +17,8 @@ branch is considered complete.
 
 ## Current stage
 
-All three planned implementation stages, repository verification, and Samsung
-release-device timing validation are complete.
+The original three stages and Samsung timing validation are complete. Follow-up
+optimization of the measured warm-run bottlenecks is in progress.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -70,6 +71,20 @@ Stage 3 implementation:
 - Updated the runtime-order boundary test to match the ETag-enabled multiline
   calls without weakening its ordering assertion.
 
+Stage 4 implementation:
+
+- Remote book assets are immutable and content-addressed, so a successful
+  presence check is now reused by both startup status and the asset sync pass
+  for up to 24 hours when the catalog still references the same SHA-256.
+- Once the bounded receipt expires, the normal WebDAV existence check runs
+  again. Its result refreshes the receipt, so remote deletion is eventually
+  detected and a valid local asset can repair it.
+- Missing assets are never negatively cached: another device can upload them
+  and the next sync will discover them normally.
+- Added `trustedRemote` to asset-phase diagnostics for device validation and a
+  regression test proving that a fresh persisted presence avoids a cold
+  network request without changing local digest verification.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -82,6 +97,8 @@ Stage 3 implementation:
   no issues.
 - Final combined `test/service/sync` and `test/service/translate` run passed
   all 344 tests.
+- Stage 4 focused asset/database suites passed all 32 tests; focused analysis
+  of the four affected Dart files reported no issues.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -104,12 +121,14 @@ were captured after installation:
 
 The remaining warm-run critical path is the startup book-asset status task. It
 took 3.092 s and overlapped earlier phases; the explicit asset phase then spent
-about 1.454 s waiting for the shared work to finish. Discovery still took
-about 1.323 s. Further work should target asset-status initialization/locking
-first, then discovery round trips.
+about 1.454 s waiting for the shared work to finish. Stage 4 removes the
+per-book remote-presence requests from that path while the receipt is fresh;
+device timing validation is still required. Discovery still takes about
+1.323 s and is the next implementation target.
 
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
 - `ded9efeb perf(sync): skip unchanged WebDAV documents by ETag`
 - `perf(sync): persist translation sync checkpoints` (stage 3 commit subject)
+- `b4a96865 perf(sync): reuse recent remote asset presence`

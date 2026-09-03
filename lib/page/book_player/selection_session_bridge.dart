@@ -10,6 +10,7 @@ typedef HideSelectionActionsInJavaScript = Future<Object?> Function(
 /// the player bind an OverlayEntry to the matching JavaScript generation.
 class SelectionSessionBridgeState {
   int? _generation;
+  int _retiredGeneration = 0;
   Map<String, dynamic>? _selection;
   SelectionSessionBridgePhase _phase = SelectionSessionBridgePhase.idle;
 
@@ -20,6 +21,7 @@ class SelectionSessionBridgeState {
   bool selectionChanged(Map<String, dynamic> payload) {
     final generation = _readGeneration(payload);
     if (generation == null ||
+        generation <= _retiredGeneration ||
         (_generation != null && generation < _generation!)) {
       return false;
     }
@@ -64,14 +66,30 @@ class SelectionSessionBridgeState {
       _phase == SelectionSessionBridgePhase.actionsVisible;
 
   bool selectionCleared(int generation) {
+    if (generation > _retiredGeneration) {
+      _retiredGeneration = generation;
+    }
     if (generation != _generation) return false;
-    reset();
+    _clearActive();
     return true;
   }
 
   bool matches(int generation) => generation == _generation;
 
   void reset() {
+    if (_generation != null && _generation! > _retiredGeneration) {
+      _retiredGeneration = _generation!;
+    }
+    _clearActive();
+  }
+
+  /// Starts a fresh bridge epoch after the JavaScript runtime is recreated.
+  void resetForNewRuntime() {
+    _retiredGeneration = 0;
+    _clearActive();
+  }
+
+  void _clearActive() {
     _generation = null;
     _selection = null;
     _phase = SelectionSessionBridgePhase.idle;

@@ -62,6 +62,36 @@ void main() {
     expect(state.selection, isNull);
   });
 
+  test('cleared generation cannot be resurrected by late bridge messages', () {
+    final state = SelectionSessionBridgeState();
+    state.selectionChanged(selection(16));
+    state.actionsRequested(selection(16));
+
+    expect(state.selectionCleared(16), isTrue);
+    expect(state.selectionChanged(selection(16, 'late')), isFalse);
+    expect(state.actionsRequested(selection(16)), isFalse);
+    expect(state.phase, SelectionSessionBridgePhase.idle);
+  });
+
+  test('clear arriving before selection retires that generation', () {
+    final state = SelectionSessionBridgeState();
+
+    expect(state.selectionCleared(17), isFalse);
+    expect(state.selectionChanged(selection(17, 'late')), isFalse);
+    expect(state.phase, SelectionSessionBridgePhase.idle);
+    expect(state.selectionChanged(selection(18, 'new')), isTrue);
+  });
+
+  test('local reset retires current generation until a new runtime starts', () {
+    final state = SelectionSessionBridgeState();
+    state.selectionChanged(selection(19));
+
+    state.reset();
+    expect(state.selectionChanged(selection(19, 'late')), isFalse);
+    state.resetForNewRuntime();
+    expect(state.selectionChanged(selection(1, 'fresh runtime')), isTrue);
+  });
+
   test('stale callbacks cannot open or remove a replacement session', () {
     final state = SelectionSessionBridgeState();
     state.selectionChanged(selection(4));

@@ -751,7 +751,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       callback: (args) {
         final payload = Map<String, dynamic>.from(args[0] as Map);
         final generation = (payload['sessionId'] as num).toInt();
-        if (!_selectionSession.actionsHidden(generation)) return;
+        _selectionSession.actionsHidden(generation);
         removeOverlay(selectionSessionGeneration: generation);
       },
     );
@@ -760,9 +760,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       callback: (args) {
         final payload = Map<String, dynamic>.from(args[0] as Map);
         final generation = (payload['sessionId'] as num).toInt();
-        if (!_selectionSession.selectionCleared(generation)) return;
-        _lastSelectionAnnotationContext = null;
-        _lastSelectionLookupContext = null;
+        if (_selectionSession.selectionCleared(generation)) {
+          _lastSelectionAnnotationContext = null;
+          _lastSelectionLookupContext = null;
+        }
         removeOverlay(selectionSessionGeneration: generation);
       },
     );
@@ -949,7 +950,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> onWebViewCreated(InAppWebViewController controller) async {
-    _selectionSession.reset();
+    _selectionSession.resetForNewRuntime();
     removeOverlay();
     if (AnxPlatform.isAndroid) {
       await InAppWebViewController.setWebContentsDebuggingEnabled(true);
@@ -981,8 +982,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void hideSelectionActions(int generation) {
-    if (!_selectionSession.actionsHidden(generation)) return;
+    final wasVisible = _selectionSession.actionsHidden(generation);
     removeOverlay(selectionSessionGeneration: generation);
+    if (!wasVisible) return;
     webViewController.evaluateJavascript(
       source: 'hideSelectionActions($generation)',
     );

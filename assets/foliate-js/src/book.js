@@ -271,6 +271,13 @@ const setSelectionHandler = (view, doc, index) => {
       e.clientY,
     );
     if (!range || session?.owner !== doc) {
+      // A platform view can lose the visible DOM Range without dispatching a
+      // final selectionchange. Never leave that stale session owning all
+      // subsequent reader taps.
+      if (!range && session?.owner === doc) {
+        endSelectionSession(view, doc, session.generation);
+        coordinator.gestureOwnership.cancelPointer(doc, e.pointerId);
+      }
       coordinator.pendingPointer = {
         doc,
         pointerId: e.pointerId,

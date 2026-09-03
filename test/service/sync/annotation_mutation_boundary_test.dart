@@ -225,6 +225,20 @@ void main() {
         bookSource,
         contains('if (pending.inside) {\n'
             '      toggleSelectionActions('));
+    expect(bookSource, contains('if (!range && session?.owner === doc) {'));
+    expect(bookSource,
+        contains('endSelectionSession(view, doc, session.generation);'));
+  });
+
+  test('selection action overlay has an independent outside-tap dismiss layer',
+      () {
+    final menuSource =
+        File('lib/widgets/context_menu/context_menu.dart').readAsStringSync();
+
+    expect(menuSource, contains('StackFit.expand'));
+    expect(menuSource, contains('Positioned.fill('));
+    expect(menuSource, contains('behavior: HitTestBehavior.opaque'));
+    expect(menuSource, contains('onTap: onClose'));
   });
 
   test('internal editor handoff clears only its owning DOM selection', () {

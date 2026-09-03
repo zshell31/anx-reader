@@ -151,29 +151,42 @@ Future<void> showContextMenu(
   );
 
   playerKey.contextMenuEntry = OverlayEntry(builder: (context) {
-    return _ContextMenuOverlay(
-      axis: axis,
-      selectionRect: selectionRect,
-      viewportRect: viewportRect,
-      annoContent: annoContent,
-      annoCfi: annoCfi,
-      footnote: footnote,
-      chapter: chapter,
-      annotationContext: annotationContext,
-      lookupContext: lookupContext,
-      annotationRef: annotationRef,
-      annotationType: annotationType,
-      annotationColor: annotationColor,
-      decoration: decoration,
-      onClose: onClose,
-      prepareExternalAction: prepareExternalAction,
-      prepareInternalAction: prepareInternalAction,
-      menuConstraints: menuConstraints,
-      initialPlacement: initialPlacement,
-      horizontalMargin: horizontalMargin,
-      verticalMargin: verticalMargin,
-      gap: gap,
-      initialBottomInset: keyboardInset,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: PointerInterceptor(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onClose,
+            ),
+          ),
+        ),
+        _ContextMenuOverlay(
+          axis: axis,
+          selectionRect: selectionRect,
+          viewportRect: viewportRect,
+          annoContent: annoContent,
+          annoCfi: annoCfi,
+          footnote: footnote,
+          chapter: chapter,
+          annotationContext: annotationContext,
+          lookupContext: lookupContext,
+          annotationRef: annotationRef,
+          annotationType: annotationType,
+          annotationColor: annotationColor,
+          decoration: decoration,
+          onClose: onClose,
+          prepareExternalAction: prepareExternalAction,
+          prepareInternalAction: prepareInternalAction,
+          menuConstraints: menuConstraints,
+          initialPlacement: initialPlacement,
+          horizontalMargin: horizontalMargin,
+          verticalMargin: verticalMargin,
+          gap: gap,
+          initialBottomInset: keyboardInset,
+        ),
+      ],
     );
   });
 

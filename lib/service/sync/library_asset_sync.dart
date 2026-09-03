@@ -9,6 +9,15 @@ import 'package:crypto/crypto.dart';
 
 const libraryAssetReleaseSource = 'library-asset-release-v1';
 const libraryAssetPresenceSource = 'library-asset-presence-v1';
+const libraryLocalAssetVerificationSource =
+    'library-local-asset-verification-v1';
+
+typedef LibraryLocalAssetVerificationLoader
+    = Future<LibraryLocalAssetVerification?> Function(String path);
+typedef LibraryLocalAssetVerificationSaver = Future<void> Function(
+  String path,
+  LibraryLocalAssetVerification? verification,
+);
 
 List<String> libraryBookAssetSegments(String digest) => [
       'anx',
@@ -60,19 +69,27 @@ class LibraryAssetSyncService {
   final LibraryProjection projection;
   final String Function(String relativePath) resolveLocalPath;
   final Future<bool> Function(String fingerprint, String digest) isReleased;
+  final LibraryLocalAssetVerificationLoader? loadLocalVerification;
+  final LibraryLocalAssetVerificationSaver? saveLocalVerification;
+  final Future<String> Function(String path) contentDigest;
   final DateTime Function() _clock;
   final Map<String, DateTime> _knownRemoteAssets = {};
   final Map<String, Future<bool>> _remotePresenceChecks = {};
-  final Map<String, _VerifiedLocalAsset> _verifiedLocalAssets = {};
+  final Map<String, Future<bool>> _localVerificationChecks = {};
+  final Map<String, LibraryLocalAssetVerification> _verifiedLocalAssets = {};
 
   LibraryAssetSyncService({
     required this.transport,
     required this.projection,
     String Function(String relativePath)? resolveLocalPath,
     Future<bool> Function(String fingerprint, String digest)? isReleased,
+    this.loadLocalVerification,
+    this.saveLocalVerification,
+    Future<String> Function(String path)? contentDigest,
     DateTime Function()? clock,
   })  : resolveLocalPath = resolveLocalPath ?? getBasePath,
         isReleased = isReleased ?? ((_, __) async => false),
+        contentDigest = contentDigest ?? _sha256File,
         _clock = clock ?? DateTime.now;
 
   Future<LibraryAssetSyncResult> syncBook(
@@ -156,7 +173,7 @@ class LibraryAssetSyncService {
       if (partial.existsSync()) await partial.delete();
       try {
         await transport.download(remotePath, partialPath);
-        final actual = await _contentDigest(partialPath);
+        final actual = await contentDigest(partialPath);
         if (actual != digest) {
           syncWarning('asset type=book digest=${shortSyncId(digest)} '
               'action=reject reason=sha256-mismatch');
@@ -219,7 +236,7 @@ class LibraryAssetSyncService {
       if (partial.existsSync()) await partial.delete();
       try {
         await transport.download(remotePath, partial.path);
-        final actual = await _contentDigest(partial.path);
+        final actual = await contentDigest(partial.path);
         if (actual != digest) {
           syncWarning('asset type=cover digest=${shortSyncId(digest)} '
               'action=reject reason=sha256-mismatch');
@@ -243,9 +260,6 @@ class LibraryAssetSyncService {
         'reason=missing');
     return const LibraryAssetSyncResult(missing: true);
   }
-
-  Future<String> _contentDigest(String path) async =>
-      (await sha256.bind(File(path).openRead()).first).toString();
 
   Future<bool> _remoteExists(List<String> path) async {
     final key = path.join('/');
@@ -277,44 +291,69 @@ class LibraryAssetSyncService {
     _knownRemoteAssets[path.join('/')] = _clock();
   }
 
-  Future<bool> _matchesLocalDigest(File file, String expected) async {
+  Future<bool> _matchesLocalDigest(File file, String expected) {
+    final key = '${file.path}\u0000$expected';
+    final active = _localVerificationChecks[key];
+    if (active != null) return active;
+    late final Future<bool> check;
+    check = _checkLocalDigest(file, expected).whenComplete(() {
+      if (identical(_localVerificationChecks[key], check)) {
+        _localVerificationChecks.remove(key);
+      }
+    });
+    _localVerificationChecks[key] = check;
+    return check;
+  }
+
+  Future<bool> _checkLocalDigest(File file, String expected) async {
     if (!file.existsSync()) {
       _verifiedLocalAssets.remove(file.path);
+      await saveLocalVerification?.call(file.path, null);
       return false;
     }
     final stat = await file.stat();
-    final cached = _verifiedLocalAssets[file.path];
+    final cached = _verifiedLocalAssets[file.path] ??
+        await loadLocalVerification?.call(file.path);
     if (cached != null &&
         cached.digest == expected &&
         cached.size == stat.size &&
         cached.modified == stat.modified) {
+      _verifiedLocalAssets[file.path] = cached;
       return true;
     }
-    final actual = await _contentDigest(file.path);
+    final actual = await contentDigest(file.path);
     if (actual != expected) {
       _verifiedLocalAssets.remove(file.path);
+      await saveLocalVerification?.call(file.path, null);
       return false;
     }
-    _verifiedLocalAssets[file.path] = _VerifiedLocalAsset(
+    final verification = LibraryLocalAssetVerification(
       digest: actual,
       size: stat.size,
       modified: stat.modified,
     );
+    _verifiedLocalAssets[file.path] = verification;
+    await saveLocalVerification?.call(file.path, verification);
     return true;
   }
 
   Future<void> _rememberLocalDigest(File file, String digest) async {
     final stat = await file.stat();
-    _verifiedLocalAssets[file.path] = _VerifiedLocalAsset(
+    final verification = LibraryLocalAssetVerification(
       digest: digest,
       size: stat.size,
       modified: stat.modified,
     );
+    _verifiedLocalAssets[file.path] = verification;
+    await saveLocalVerification?.call(file.path, verification);
   }
 }
 
-class _VerifiedLocalAsset {
-  const _VerifiedLocalAsset({
+Future<String> _sha256File(String path) async =>
+    (await sha256.bind(File(path).openRead()).first).toString();
+
+class LibraryLocalAssetVerification {
+  const LibraryLocalAssetVerification({
     required this.digest,
     required this.size,
     required this.modified,

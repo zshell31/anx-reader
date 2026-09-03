@@ -28,6 +28,7 @@ import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 
@@ -658,6 +659,8 @@ class AnnotationSyncRuntime {
             libraryAssetReleaseSource, fingerprint);
         return receipt?.status == 'released' && receipt?.sharedId == digest;
       },
+      loadLocalVerification: _loadLocalAssetVerification,
+      saveLocalVerification: _saveLocalAssetVerification,
     );
     _translationCacheSyncService = TranslationCacheSyncService(client: client);
   }
@@ -702,6 +705,68 @@ class AnnotationSyncRuntime {
       sourceKey: fingerprint,
       sharedId: digest,
       status: status,
+    );
+  }
+
+  String _localAssetVerificationKey(String path) =>
+      sha256.convert(utf8.encode(path)).toString();
+
+  Future<LibraryLocalAssetVerification?> _loadLocalAssetVerification(
+      String path) async {
+    final receipt = await sharedState.importReceipt(
+      libraryLocalAssetVerificationSource,
+      _localAssetVerificationKey(path),
+    );
+    if (receipt?.status != 'verified' ||
+        receipt?.sharedId == null ||
+        receipt?.detail == null) {
+      return null;
+    }
+    try {
+      final detail = jsonDecode(receipt!.detail!) as Map<String, dynamic>;
+      return LibraryLocalAssetVerification(
+        digest: receipt.sharedId!,
+        size: detail['size'] as int,
+        modified: DateTime.parse(detail['modified'] as String),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveLocalAssetVerification(
+    String path,
+    LibraryLocalAssetVerification? verification,
+  ) async {
+    final key = _localAssetVerificationKey(path);
+    final current = await sharedState.importReceipt(
+      libraryLocalAssetVerificationSource,
+      key,
+    );
+    if (verification == null) {
+      if (current == null || current.status == 'invalid') return;
+      await sharedState.recordImport(
+        source: libraryLocalAssetVerificationSource,
+        sourceKey: key,
+        status: 'invalid',
+      );
+      return;
+    }
+    final detail = jsonEncode({
+      'size': verification.size,
+      'modified': verification.modified.toUtc().toIso8601String(),
+    });
+    if (current?.status == 'verified' &&
+        current?.sharedId == verification.digest &&
+        current?.detail == detail) {
+      return;
+    }
+    await sharedState.recordImport(
+      source: libraryLocalAssetVerificationSource,
+      sourceKey: key,
+      sharedId: verification.digest,
+      status: 'verified',
+      detail: detail,
     );
   }
 

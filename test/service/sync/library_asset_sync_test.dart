@@ -194,6 +194,60 @@ void main() {
     expect(transport.existenceChecks, 1);
   });
 
+  test('recreated service trusts persisted digest while file stat is stable',
+      () async {
+    final bytes = <int>[37, 38, 39, 40];
+    final document = catalog(bytes);
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+    final persisted = <String, LibraryLocalAssetVerification>{};
+    var digestCalculations = 0;
+
+    LibraryAssetSyncService createService() => LibraryAssetSyncService(
+          transport: transport,
+          projection: projection,
+          resolveLocalPath: (relative) => '${directory.path}/$relative',
+          loadLocalVerification: (path) async => persisted[path],
+          saveLocalVerification: (path, verification) async {
+            if (verification == null) {
+              persisted.remove(path);
+            } else {
+              persisted[path] = verification;
+            }
+          },
+          contentDigest: (path) async {
+            digestCalculations++;
+            return (await sha256.bind(File(path).openRead()).first).toString();
+          },
+        );
+
+    service = createService();
+    expect(
+      (await service.bookAvailability(document, knownRemote: true))
+          .localVerified,
+      isTrue,
+    );
+    expect(digestCalculations, 1);
+
+    service = createService();
+    expect(
+      (await service.bookAvailability(document, knownRemote: true))
+          .localVerified,
+      isTrue,
+    );
+    expect(digestCalculations, 1);
+
+    await file.writeAsBytes(<int>[41, 42, 43, 44]);
+    await file.setLastModified(DateTime.now().add(const Duration(seconds: 2)));
+    expect(
+      (await service.bookAvailability(document, knownRemote: true))
+          .localVerified,
+      isFalse,
+    );
+    expect(digestCalculations, 2);
+  });
+
   test('remote presence is checked again after the short cache lifetime',
       () async {
     final bytes = <int>[31, 32, 33, 34];

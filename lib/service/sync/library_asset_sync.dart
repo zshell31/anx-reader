@@ -93,14 +93,19 @@ class LibraryAssetSyncService {
         _clock = clock ?? DateTime.now;
 
   Future<LibraryAssetSyncResult> syncBook(
-      Map<String, dynamic> catalogDocument) async {
+    Map<String, dynamic> catalogDocument, {
+    bool? knownBookRemote,
+  }) async {
     final document = decodeLibraryCatalogDocument(catalogDocument);
     final membership = document['membership'] as Map<String, dynamic>;
     if (membership['value'] != true) {
       return const LibraryAssetSyncResult();
     }
     final cover = await _syncCover(document);
-    final book = await _syncBookAsset(document);
+    final book = await _syncBookAsset(
+      document,
+      knownRemote: knownBookRemote,
+    );
     return cover.combine(book);
   }
 
@@ -138,7 +143,9 @@ class LibraryAssetSyncService {
   }
 
   Future<LibraryAssetSyncResult> _syncBookAsset(
-      Map<String, dynamic> document) async {
+    Map<String, dynamic> document, {
+    bool? knownRemote,
+  }) async {
     final fingerprint = document['fingerprint'] as String;
     final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
         as Map<String, dynamic>;
@@ -150,7 +157,7 @@ class LibraryAssetSyncService {
     final localPath = resolveLocalPath(relativePath);
     final local = File(localPath);
     final localValid = await _matchesLocalDigest(local, digest);
-    final remoteExists = await _remoteExists(remotePath);
+    final remoteExists = knownRemote ?? await _remoteExists(remotePath);
 
     if (localValid && !remoteExists) {
       syncDebug('asset type=book digest=${shortSyncId(digest)} action=upload');

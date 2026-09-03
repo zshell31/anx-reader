@@ -236,6 +236,7 @@ class LegacyImportReceipt {
   final String? sharedId;
   final String status;
   final String? detail;
+  final DateTime importedAt;
 
   const LegacyImportReceipt({
     required this.source,
@@ -243,6 +244,7 @@ class LegacyImportReceipt {
     required this.sharedId,
     required this.status,
     required this.detail,
+    required this.importedAt,
   });
 }
 
@@ -707,6 +709,7 @@ class SharedStateDatabase {
       sharedId: row['shared_id'] as String?,
       status: row['status'] as String,
       detail: row['detail'] as String?,
+      importedAt: DateTime.parse(row['imported_at'] as String).toUtc(),
     );
   }
 

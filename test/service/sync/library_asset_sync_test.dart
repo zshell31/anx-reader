@@ -168,6 +168,24 @@ void main() {
     expect(transport.existenceChecks, 1);
   });
 
+  test('fresh persisted presence skips a cold sync network check', () async {
+    final bytes = <int>[45, 46, 47, 48];
+    final document = catalog(bytes);
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+
+    final result = await service.syncBook(
+      document,
+      knownBookRemote: true,
+    );
+
+    expect(result.bound, isTrue);
+    expect(transport.existenceChecks, 0);
+    expect(transport.uploads, 0);
+    expect(transport.downloads, 0);
+  });
+
   test('persisted remote presence avoids a cold network check', () async {
     final bytes = <int>[29, 30, 31, 32];
     final document = catalog(bytes);

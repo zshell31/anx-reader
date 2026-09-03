@@ -43,6 +43,8 @@ class AnnotationSyncRuntime {
   AnnotationSyncRuntime._();
   static final AnnotationSyncRuntime instance = AnnotationSyncRuntime._();
 
+  static const assetPresenceReceiptLifetime = Duration(hours: 24);
+
   final SharedStateDatabase sharedState = SharedStateDatabase();
   final Map<String, Set<void Function()>> _openBookRefresh = {};
   AnnotationSyncCoordinator? _coordinator;
@@ -628,6 +630,7 @@ class AnnotationSyncRuntime {
     var downloaded = 0;
     var released = 0;
     var missing = 0;
+    var trustedRemote = 0;
     for (final id in await sharedState.documentIds(libraryCatalogDomain)) {
       final bytes =
           await sharedState.canonicalDocument(libraryCatalogDomain, id);
@@ -635,16 +638,29 @@ class AnnotationSyncRuntime {
       checked++;
       final document =
           decodeLibraryCatalogDocument(jsonDecode(utf8.decode(bytes)));
-      final result = await service.syncBook(document);
-      final availability = await service.bookAvailability(document);
-      await _recordAssetPresence(document, availability.remote);
+      final knownRemote = await _knownRemoteAsset(document);
+      if (knownRemote == true) trustedRemote++;
+      final result = await service.syncBook(
+        document,
+        knownBookRemote: knownRemote,
+      );
+      final availability = await service.bookAvailability(
+        document,
+        knownRemote: knownRemote,
+      );
+      await _recordAssetPresence(
+        document,
+        availability.remote,
+        refresh: knownRemote == null,
+      );
       if (result.uploaded) uploaded++;
       if (result.downloaded) downloaded++;
       if (result.released) released++;
       if (result.missing) missing++;
     }
     syncInfo('assets checked=$checked uploaded=$uploaded '
-        'downloaded=$downloaded released=$released missing=$missing');
+        'downloaded=$downloaded released=$released missing=$missing '
+        'trustedRemote=$trustedRemote');
   }
 
   Future<void> _syncTranslationCacheBestEffort() async {
@@ -687,16 +703,7 @@ class AnnotationSyncRuntime {
     if (client == null) return null;
     _ensureAuxiliarySyncServices(client);
     final document = decodeLibraryCatalogDocument(catalogDocument);
-    final fingerprint = document['fingerprint'] as String;
-    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
-        as Map<String, dynamic>;
-    final digest = (asset['digest'] as String).toLowerCase();
-    final receipt = await sharedState.importReceipt(
-        libraryAssetPresenceSource, fingerprint);
-    final knownRemote =
-        receipt?.status == 'present' && receipt?.sharedId == digest
-            ? true
-            : null;
+    final knownRemote = await _knownRemoteAsset(document);
     return _assetSyncService!.bookAvailability(
       document,
       knownRemote: knownRemote,
@@ -704,7 +711,10 @@ class AnnotationSyncRuntime {
   }
 
   Future<void> _recordAssetPresence(
-      Map<String, dynamic> catalogDocument, bool remote) async {
+    Map<String, dynamic> catalogDocument,
+    bool remote, {
+    bool refresh = false,
+  }) async {
     final fingerprint = catalogDocument['fingerprint'] as String;
     final asset = (catalogDocument['bookAsset']
         as Map<String, dynamic>)['value'] as Map<String, dynamic>;
@@ -712,13 +722,29 @@ class AnnotationSyncRuntime {
     final status = remote ? 'present' : 'missing';
     final current = await sharedState.importReceipt(
         libraryAssetPresenceSource, fingerprint);
-    if (current?.sharedId == digest && current?.status == status) return;
+    if (!refresh && current?.sharedId == digest && current?.status == status) {
+      return;
+    }
     await sharedState.recordImport(
       source: libraryAssetPresenceSource,
       sourceKey: fingerprint,
       sharedId: digest,
       status: status,
     );
+  }
+
+  Future<bool?> _knownRemoteAsset(Map<String, dynamic> catalogDocument) async {
+    final fingerprint = catalogDocument['fingerprint'] as String;
+    final asset = (catalogDocument['bookAsset']
+        as Map<String, dynamic>)['value'] as Map<String, dynamic>;
+    final digest = (asset['digest'] as String).toLowerCase();
+    final receipt = await sharedState.importReceipt(
+        libraryAssetPresenceSource, fingerprint);
+    if (receipt?.status != 'present' || receipt?.sharedId != digest) {
+      return null;
+    }
+    final expiresAt = receipt!.importedAt.add(assetPresenceReceiptLifetime);
+    return DateTime.now().toUtc().isBefore(expiresAt) ? true : null;
   }
 
   String _localAssetVerificationKey(String path) =>

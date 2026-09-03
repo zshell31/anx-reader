@@ -118,6 +118,8 @@ Stage 5 implementation:
   of the four affected Dart files reported no issues.
 - Stage 5 focused discovery/runtime/organization suites passed all 23 tests;
   focused analysis of all four affected files reported no issues.
+- After stages 4 and 5, the combined `test/service/sync` and
+  `test/service/translate` run passed all 347 tests.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.

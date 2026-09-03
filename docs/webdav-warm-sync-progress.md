@@ -12,6 +12,7 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 4. Reuse recent persisted remote asset-presence checks during warm sync.
 5. Avoid object GETs for locally known documents absent from successful
    discovery.
+6. Diagnose cold local asset-verification misses without exposing file paths.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -102,6 +103,19 @@ Stage 5 implementation:
   not include `sync-collection`, so a safe one-request incremental discovery
   is not available on this server.
 
+Stage 6 diagnostics:
+
+- Local asset checks now report whether verification was restored from a
+  persisted receipt or reused from memory.
+- A cold miss identifies `receipt-missing`, `digest-changed`, `size-changed`,
+  `modified-changed`, or `file-absent`, and records the complete SHA-256
+  fallback duration separately.
+- Diagnostics include only the existing shortened content digest; local paths,
+  timestamps, sizes, and full hashes are not logged.
+- Added direct coverage for every receipt invalidation reason. The existing
+  persistence/restart test remains unchanged and continues to prove that a
+  stable file avoids a second digest calculation.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -120,6 +134,8 @@ Stage 5 implementation:
   focused analysis of all four affected files reported no issues.
 - After stages 4 and 5, the combined `test/service/sync` and
   `test/service/translate` run passed all 347 tests.
+- Stage 6 asset diagnostics suite passed all 15 tests; focused analysis of the
+  implementation and tests reported no issues.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -180,3 +196,4 @@ application data. Two startup runs were captured:
 - `perf(sync): persist translation sync checkpoints` (stage 3 commit subject)
 - `b4a96865 perf(sync): reuse recent remote asset presence`
 - `c6efbb0f perf(sync): trust successful discovery targets`
+- `dc7d8ea2 diagnostics(sync): explain local asset verification misses`

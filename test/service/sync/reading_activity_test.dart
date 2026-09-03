@@ -6,6 +6,7 @@ import 'package:anx_reader/service/sync/reading_activity_repository.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uuid/uuid.dart';
 
 const fingerprint = 'abcdef0123456789abcdef0123456789';
 const eventA = '00000000-0000-4000-8000-000000000001';
@@ -134,7 +135,90 @@ void main() {
     final decoded = jsonDecode(utf8
         .decode((await store.canonicalDocument(readingActivityDomain, id))!));
     expect(decoded['events'], hasLength(1));
+    expect(decoded['events'].single['deviceId'],
+        ReadingActivityRepository.bootstrapSource);
+    expect(decoded['events'].single['startedAt'], '2025-05-06T00:00:00.000Z');
     expect(projection.aggregates[id], 90);
+  });
+
+  test('legacy import recognizes an event created by another device', () async {
+    final legacy = [
+      ReadingTime(id: 9, bookId: 7, date: '2025-05-06', readingTime: 90)
+    ];
+    const sourceKey = '$fingerprint:2025-05-06:90';
+    final legacyEventId = const Uuid().v5(
+      Namespace.url.value,
+      'anx:legacy-reading:v1:$sourceKey',
+    );
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: MemoryActivityProjection(),
+      deviceId: 'device-a',
+    );
+    await repository.recordSession(
+      fingerprint: fingerprint,
+      startedAt: DateTime.parse('2025-05-06T00:00:00Z'),
+      durationSeconds: 90,
+      eventId: legacyEventId,
+    );
+
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: MemoryActivityProjection(
+        legacy: legacy,
+        fingerprints: const {7: fingerprint},
+      ),
+      deviceId: 'device-b',
+    );
+
+    expect(await repository.bootstrap(), 0);
+    final receipt = await store.importReceipt(
+      ReadingActivityRepository.bootstrapSource,
+      sourceKey,
+    );
+    expect(receipt?.status, 'complete');
+    expect(receipt?.detail, 'already-present');
+    final id = readingActivityDocumentId(fingerprint, '2025-05-06');
+    final decoded = jsonDecode(utf8
+        .decode((await store.canonicalDocument(readingActivityDomain, id))!));
+    expect(decoded['events'], hasLength(1));
+    expect(decoded['events'].single['deviceId'], 'device-a');
+  });
+
+  test('legacy import does not resurrect an event deleted on another device',
+      () async {
+    final legacy = [
+      ReadingTime(id: 9, bookId: 7, date: '2025-05-06', readingTime: 90)
+    ];
+    projection = MemoryActivityProjection(
+      legacy: legacy,
+      fingerprints: const {7: fingerprint},
+    );
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: projection,
+      deviceId: 'device-a',
+    );
+    expect(await repository.bootstrap(), 1);
+    expect(await repository.deleteHistoryForFingerprints([fingerprint]),
+        {'$fingerprint@2025-05-06'});
+
+    await (await store.database).delete('legacy_import_receipts');
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: MemoryActivityProjection(
+        legacy: legacy,
+        fingerprints: const {7: fingerprint},
+      ),
+      deviceId: 'device-b',
+    );
+
+    expect(await repository.bootstrap(), 0);
+    final id = readingActivityDocumentId(fingerprint, '2025-05-06');
+    final decoded = jsonDecode(utf8
+        .decode((await store.canonicalDocument(readingActivityDomain, id))!));
+    expect(decoded['events'], hasLength(1));
+    expect(decoded['events'].single['deleted'], isTrue);
   });
 
   test('remote union projection recomputes statistics rather than LWW',

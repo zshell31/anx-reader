@@ -137,6 +137,7 @@ class ReadingActivityRepository {
 
   Future<int> bootstrap() async {
     var imported = 0;
+    var recognized = 0;
     var deferred = 0;
     for (final row in await projection.legacyAggregates()) {
       final fingerprint = await projection.fingerprintForBookId(row.bookId);
@@ -151,11 +152,34 @@ class ReadingActivityRepository {
       }
       final eventId =
           uuid.v5(Namespace.url.value, 'anx:legacy-reading:v1:$sourceKey');
-      await recordSession(
+      final documentId = readingActivityDocumentId(fingerprint, day);
+      final current = await _read(documentId);
+      final existing = current == null
+          ? null
+          : (current['events'] as List)
+              .cast<Map<String, dynamic>>()
+              .where((event) => event['eventId'] == eventId)
+              .firstOrNull;
+      if (existing != null) {
+        if (existing['durationSeconds'] != row.readingTime) {
+          throw const FormatException('legacy reading event ID collision');
+        }
+        await sharedState.recordImport(
+          source: bootstrapSource,
+          sourceKey: sourceKey,
+          sharedId: eventId,
+          status: 'complete',
+          detail: 'already-present',
+        );
+        recognized++;
+        continue;
+      }
+      await _recordLegacyAggregate(
         fingerprint: fingerprint,
-        startedAt: DateTime.parse('${day}T00:00:00'),
+        day: day,
         durationSeconds: row.readingTime,
         eventId: eventId,
+        current: current,
       );
       await sharedState.recordImport(
         source: bootstrapSource,
@@ -166,12 +190,46 @@ class ReadingActivityRepository {
       imported++;
     }
     syncDebug('bootstrap reading-activity imported=$imported '
-        'deferred=$deferred');
+        'recognized=$recognized deferred=$deferred');
     if (deferred > 0) {
       syncWarning('bootstrap reading-activity deferred '
           'reason=unsupported-local-state count=$deferred');
     }
     return imported;
+  }
+
+  Future<void> _recordLegacyAggregate({
+    required String fingerprint,
+    required String day,
+    required int durationSeconds,
+    required String eventId,
+    required Map<String, dynamic>? current,
+  }) async {
+    final startedAt = DateTime.parse('${day}T00:00:00Z');
+    final event = <String, dynamic>{
+      'eventId': eventId,
+      'startedAt': startedAt.toIso8601String(),
+      'durationSeconds': durationSeconds,
+      'deviceId': bootstrapSource,
+      'deleted': false,
+      'stamp': DomainStamp(
+        modifiedAt: startedAt,
+        deviceId: bootstrapSource,
+      ).toJson(),
+    };
+    final next = mergeReadingActivityDocuments(
+      current ?? _empty(fingerprint, day),
+      {
+        ..._empty(fingerprint, day),
+        'events': [event],
+      },
+    );
+    await sharedState.putCanonicalDocument(
+      readingActivityDomain,
+      readingActivityDocumentId(fingerprint, day),
+      encodeDomainDocument(next),
+    );
+    await _project(next);
   }
 
   Future<Map<String, dynamic>?> _read(String id) async {

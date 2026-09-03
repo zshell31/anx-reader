@@ -21,7 +21,7 @@ void main() {
     expect(source, contains('LibraryAssetSyncService'));
     expect(source, contains('TranslationCacheSyncService'));
     expect(source.indexOf('syncCatalog('),
-        lessThan(source.indexOf('coordinator.pullBooks(')));
+        lessThan(source.indexOf('coordinator.syncKnown(')));
   });
 
   test('sync transport cannot transfer either local SQLite database', () {

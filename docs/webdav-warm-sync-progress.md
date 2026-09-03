@@ -153,6 +153,8 @@ Stage 7 implementation:
   implementation and tests reported no issues.
 - Stage 7 asset suite passed all 15 tests; focused analysis of the
   implementation and tests reported no issues.
+- After stage 7, the combined `test/service/sync` and
+  `test/service/translate` run passed all 348 tests.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.

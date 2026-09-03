@@ -17,6 +17,7 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
    serialization.
 8. Finish all durable bootstrap imports before connectivity can start a sync.
 9. Schedule each dirty shared document only once per synchronization pass.
+10. Normalize legacy reading-event wire variants before merging.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -24,9 +25,9 @@ branch is considered complete.
 
 ## Current stage
 
-Stages 1-9 are implemented and covered by the full relevant test suite. Stages
-8-9 still require release validation on the second reader to confirm that the
-observed reading-activity failure no longer recurs.
+Stages 1-10 are implemented and covered by the full relevant test suite. Stage
+10 requires release validation on the second reader to confirm that its dirty
+reading-activity document now converges.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -158,6 +159,22 @@ Stage 9 implementation:
   and normalized error type/status. Document payloads, remote response bodies,
   credentials, and raw exception text are not logged.
 
+Stage 10 implementation:
+
+- The Onyx validation trace identified the remaining failure as a
+  `FormatException` while merging a dirty reading-activity document.
+- Historical builds generated deterministic UUIDv5 IDs for legacy daily
+  aggregates but embedded the current device and local-midnight timestamp in
+  the event. A later idempotency fix retained the ID while switching those
+  fields to stable values, so the same logical event could fail as an immutable
+  ID collision across versions.
+- Reading-activity decoding now recognizes the exact deterministic migration
+  ID from fingerprint, day, and duration, then canonicalizes both historical
+  and current live forms to the same stable source, UTC timestamp, and stamp.
+- Real UUIDv4 sessions retain strict collision checks. A newer legacy deletion
+  also retains its deletion stamp, so compatibility normalization cannot
+  resurrect deleted history.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -188,6 +205,10 @@ Stage 9 implementation:
   tests; focused analysis reported no issues.
 - After stages 8-9, the combined `test/service/sync` and
   `test/service/translate` run passed all 349 tests.
+- Stage 10 focused reading-activity/coordinator suites passed all 60 tests;
+  focused analysis reported no issues.
+- After stage 10, the combined `test/service/sync` and
+  `test/service/translate` run passed all 351 tests.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -295,6 +316,33 @@ state, and catalog data otherwise converged.
   converges or whether the new safe diagnostic exposes an additional server
   error requiring a separate fix.
 
+### Onyx validation after stages 8-9
+
+Release commit `b33049ed` was installed on Onyx LOMONOSOV3 without clearing
+application data. The startup pass took 1.751 s.
+
+- All bootstrap imports finished before the run began, and the connectivity
+  notification was correctly coalesced into the active startup run.
+- Local asset status took 77 ms, both books remained available locally and
+  remotely, and no asset transfer or SHA-256 fallback occurred.
+- The dirty reading-activity document was scheduled for one push rather than
+  both a dirty push and a duplicate pull.
+- That push still failed, now explicitly as `FormatException`, leaving
+  `pending=1 failed=1`. Read-only inspection showed a valid server document;
+  Git history then confirmed the incompatible legacy wire variants addressed
+  by stage 10.
+- The 11 known activity objects are distinct daily documents. Their shortened
+  diagnostics share the same book fingerprint and only appear duplicated
+  because the date suffix is intentionally omitted from logs.
+
+The read-only WebDAV audit found 12 daily activity documents. Nine older days
+contain one legacy-only aggregate which must be retained as their only history.
+Three affected documents contain cascades created by the retired reimport bug:
+10 legacy/2 real events, 21 legacy/6 real events, and 25 legacy/31 real events.
+Their projected totals are inflated. Server-only deletion is unsafe because a
+device would merge its local cascade back; cleanup must be a separate protocol
+migration applied identically to local and remote canonical documents.
+
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
@@ -307,3 +355,4 @@ state, and catalog data otherwise converged.
 - `8fc238ca fix(sync): finish bootstrap before connectivity runs`
 - `6eebcd88 fix(sync): avoid duplicate dirty document scheduling`
 - `e35507bc test(sync): follow coordinated known-document sync`
+- `76bae54f fix(sync): normalize legacy reading events`

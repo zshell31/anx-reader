@@ -137,6 +137,7 @@ class ReadingActivityRepository {
   }
 
   Future<int> bootstrap() async {
+    final collapsed = await _collapseStoredLegacyCascades();
     var imported = 0;
     var recognized = 0;
     var deferred = 0;
@@ -213,13 +214,36 @@ class ReadingActivityRepository {
       await _recordBootstrapDayReceipt(daySourceKey);
       imported++;
     }
-    syncDebug('bootstrap reading-activity imported=$imported '
+    syncDebug('bootstrap reading-activity collapsed=$collapsed '
+        'imported=$imported '
         'recognized=$recognized deferred=$deferred');
     if (deferred > 0) {
       syncWarning('bootstrap reading-activity deferred '
           'reason=unsupported-local-state count=$deferred');
     }
     return imported;
+  }
+
+  Future<int> _collapseStoredLegacyCascades() async {
+    var collapsed = 0;
+    for (final id in await sharedState.documentIds(readingActivityDomain)) {
+      final current =
+          await sharedState.canonicalDocument(readingActivityDomain, id);
+      if (current == null) continue;
+      final document = decodeReadingActivityDocument(
+        jsonDecode(utf8.decode(current)),
+      );
+      final canonical = encodeDomainDocument(document);
+      if (_sameBytes(current, canonical)) continue;
+      await sharedState.putCanonicalDocument(
+        readingActivityDomain,
+        id,
+        canonical,
+      );
+      await _project(document);
+      collapsed++;
+    }
+    return collapsed;
   }
 
   Future<void> _recordBootstrapDayReceipt(String sourceKey) =>
@@ -291,5 +315,13 @@ class ReadingActivityRepository {
     final total = _liveDuration(document);
     await projection.replaceAggregate(
         document['fingerprint'] as String, document['day'] as String, total);
+  }
+
+  bool _sameBytes(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
   }
 }

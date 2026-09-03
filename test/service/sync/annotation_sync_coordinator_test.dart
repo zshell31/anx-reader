@@ -443,6 +443,50 @@ void main() {
     expect(remote.puts, 0, reason: 'remote-only pulls must not upload-loop');
   });
 
+  test('clean pull skips GET when discovered strong ETag is unchanged',
+      () async {
+    await putLocal([entity('A')]);
+    await makeClean();
+    remote.seed(document([entity('A')]), tag: '"clean"');
+
+    await coordinator.pullBook(
+      fingerprint,
+      discoveredStrongEtag: '"clean"',
+    );
+
+    expect(remote.gets, 0);
+    expect(remote.puts, 0);
+    expect(notifications, isEmpty);
+  });
+
+  test('clean pull falls back to GET when discovered ETag changed', () async {
+    await putLocal([entity('A')]);
+    await makeClean();
+    remote.seed(document([entity('A'), entity('B')]), tag: '"changed"');
+
+    await coordinator.pullBook(
+      fingerprint,
+      discoveredStrongEtag: '"changed"',
+    );
+
+    expect(remote.gets, 1);
+    expect((await store.annotationDocument(fingerprint))!['annotations'],
+        hasLength(2));
+  });
+
+  test('discovered matching ETag never skips dirty local work', () async {
+    await putLocal([entity('A')]);
+    remote.seed(document([entity('A')]), tag: '"v1"');
+
+    await coordinator.pullBook(
+      fingerprint,
+      discoveredStrongEtag: '"v1"',
+    );
+
+    expect(remote.gets, 1);
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
   test('clean pull preserves remote note edits and unknown target data',
       () async {
     await putLocal([entity('A')]);

@@ -25,10 +25,16 @@ class ReadingActivitySyncService {
           onDocumentChanged: repository.projectCanonical,
         );
 
-  Future<void> syncKnown(Iterable<String> documentIds) async {
+  Future<void> syncKnown(
+    Iterable<String> documentIds, {
+    Map<String, String> remoteStrongEtags = const {},
+  }) async {
     await Future.wait([
       coordinator.syncDirtyAnnotations(),
-      coordinator.pullBooks(documentIds),
+      coordinator.pullBooks(
+        documentIds,
+        discoveredStrongEtags: remoteStrongEtags,
+      ),
     ]);
   }
 

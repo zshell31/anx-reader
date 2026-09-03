@@ -542,11 +542,15 @@ class AnnotationSyncRuntime {
         await _organizationService!.syncKnown(
           sharedState,
           remoteIdsByDomain: remote.idsByDomain,
+          remoteStrongEtagsByDomain: remote.strongEtagsByDomain,
         );
         syncDebug('phase=organization completed');
       }
       syncDebug('phase=catalog started');
-      await _libraryService?.syncCatalog(initialFingerprints);
+      await _libraryService?.syncCatalog(
+        initialFingerprints,
+        remoteStrongEtags: remote.strongEtags(libraryCatalogDomain),
+      );
       syncDebug('phase=catalog completed');
       syncDebug('phase=assets started');
       await _syncSharedLibraryAssets();
@@ -560,16 +564,25 @@ class AnnotationSyncRuntime {
       syncDebug('phase=content-domains started');
       await Future.wait([
         coordinator.syncDirtyAnnotations(),
-        coordinator.pullBooks(fingerprints),
+        coordinator.pullBooks(
+          fingerprints,
+          discoveredStrongEtags: remote.strongEtags(annotationSyncDomain),
+        ),
         _presentationCoordinator!.syncDirtyAnnotations(),
         _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
         if (_libraryService != null)
-          _libraryService!.syncReadingState(fingerprints),
+          _libraryService!.syncReadingState(
+            fingerprints,
+            remoteStrongEtags: remote.strongEtags(readingStateDomain),
+          ),
         if (_readingActivityService != null)
-          _readingActivityService!.syncKnown({
-            ...await sharedState.documentIds(readingActivityDomain),
-            ...remote.ids(readingActivityDomain),
-          }),
+          _readingActivityService!.syncKnown(
+            {
+              ...await sharedState.documentIds(readingActivityDomain),
+              ...remote.ids(readingActivityDomain),
+            },
+            remoteStrongEtags: remote.strongEtags(readingActivityDomain),
+          ),
       ]);
       syncDebug('phase=content-domains completed');
       await _syncTranslationCacheBestEffort();

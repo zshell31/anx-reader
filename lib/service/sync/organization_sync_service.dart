@@ -77,14 +77,20 @@ class OrganizationSyncService {
   Future<void> syncKnown(
     SharedStateDatabase state, {
     Map<String, Set<String>> remoteIdsByDomain = const {},
+    Map<String, Map<String, String>> remoteStrongEtagsByDomain = const {},
   }) async {
     final work = <Future<void>>[];
     for (final coordinator in coordinators) {
       work.add(coordinator.syncDirtyAnnotations());
-      work.add(coordinator.pullBooks({
+      final documentIds = {
         ...await state.documentIds(coordinator.syncDomain),
         ...remoteIdsByDomain[coordinator.syncDomain] ?? const <String>{},
-      }));
+      };
+      work.add(coordinator.pullBooks(
+        documentIds,
+        discoveredStrongEtags:
+            remoteStrongEtagsByDomain[coordinator.syncDomain] ?? const {},
+      ));
     }
     await Future.wait(work);
     await repository.projectAllCanonicalGroups();

@@ -10,9 +10,15 @@ typedef RemoteCollectionList = Future<List<WebDavCollectionEntry>> Function(
 
 class RemoteDocumentIndex {
   final Map<String, Set<String>> idsByDomain;
-  const RemoteDocumentIndex(this.idsByDomain);
+  final Map<String, Map<String, String>> strongEtagsByDomain;
+  const RemoteDocumentIndex(
+    this.idsByDomain, [
+    this.strongEtagsByDomain = const {},
+  ]);
 
   Set<String> ids(String domain) => idsByDomain[domain] ?? const {};
+  Map<String, String> strongEtags(String domain) =>
+      strongEtagsByDomain[domain] ?? const {};
   int get documentCount =>
       idsByDomain.values.fold(0, (total, ids) => total + ids.length);
 }
@@ -25,25 +31,31 @@ class RemoteDocumentDiscovery {
 
   Future<RemoteDocumentIndex> discover() async {
     final result = <String, Set<String>>{};
+    final strongEtags = <String, Map<String, String>>{};
     await Future.wait([
-      _flat(result, annotationSyncDomain, const ['annotations'], _fingerprint),
-      _flat(result, libraryCatalogDomain,
-          const ['shared', 'v1', 'catalog', 'books'], _fingerprint),
-      _flat(result, readingStateDomain, const ['shared', 'v1', 'reading-state'],
+      _flat(result, strongEtags, annotationSyncDomain, const ['annotations'],
           _fingerprint),
-      _flat(result, groupDomain, const ['shared', 'v1', 'groups'], _uuid),
-      _flat(result, tagDomain, const ['shared', 'v1', 'tags'], _uuid),
-      _flat(result, themeDomain, const ['shared', 'v1', 'themes'], _uuid),
-      _nested(result, readingActivityDomain,
+      _flat(result, strongEtags, libraryCatalogDomain,
+          const ['shared', 'v1', 'catalog', 'books'], _fingerprint),
+      _flat(result, strongEtags, readingStateDomain,
+          const ['shared', 'v1', 'reading-state'], _fingerprint),
+      _flat(result, strongEtags, groupDomain, const ['shared', 'v1', 'groups'],
+          _uuid),
+      _flat(result, strongEtags, tagDomain, const ['shared', 'v1', 'tags'],
+          _uuid),
+      _flat(result, strongEtags, themeDomain, const ['shared', 'v1', 'themes'],
+          _uuid),
+      _nested(result, strongEtags, readingActivityDomain,
           const ['shared', 'v1', 'reading-activity'], _activityId),
-      _nested(result, bookTagDomain, const ['shared', 'v1', 'book-tags'],
-          _bookTagId),
+      _nested(result, strongEtags, bookTagDomain,
+          const ['shared', 'v1', 'book-tags'], _bookTagId),
     ]);
-    return RemoteDocumentIndex(result);
+    return RemoteDocumentIndex(result, strongEtags);
   }
 
   Future<void> _flat(
     Map<String, Set<String>> result,
+    Map<String, Map<String, String>> strongEtags,
     String domain,
     List<String> path,
     String? Function(String fileName) decode,
@@ -52,12 +64,18 @@ class RemoteDocumentDiscovery {
     for (final entry in await list(path)) {
       if (entry.isCollection) continue;
       final id = decode(entry.name);
-      if (id != null) ids.add(id);
+      if (id != null) {
+        ids.add(id);
+        if (entry.strongEtag case final etag?) {
+          strongEtags.putIfAbsent(domain, () => {})[id] = etag;
+        }
+      }
     }
   }
 
   Future<void> _nested(
     Map<String, Set<String>> result,
+    Map<String, Map<String, String>> strongEtags,
     String domain,
     List<String> path,
     String? Function(String parent, String fileName) decode,
@@ -71,7 +89,12 @@ class RemoteDocumentDiscovery {
       for (final entry in await list([...path, parent.name])) {
         if (entry.isCollection) continue;
         final id = decode(parent.name, entry.name);
-        if (id != null) ids.add(id);
+        if (id != null) {
+          ids.add(id);
+          if (entry.strongEtag case final etag?) {
+            strongEtags.putIfAbsent(domain, () => {})[id] = etag;
+          }
+        }
       }
     }));
   }

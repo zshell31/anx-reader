@@ -51,7 +51,7 @@ void main() {
     <D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
   </D:response>
   <D:response><D:href>/base/shared/annotations/abc.json</D:href>
-    <D:propstat><D:prop><D:resourcetype/></D:prop></D:propstat>
+    <D:propstat><D:prop><D:resourcetype/><D:getetag>"abc-v1"</D:getetag></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>
   </D:response>
   <D:response><D:href>/base/shared/annotations/books/</D:href>
     <D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
@@ -67,8 +67,30 @@ void main() {
       expect(fake.calls.single.$2,
           Uri.parse('https://dav.test/base/shared/annotations/'));
       expect(fake.calls.single.$3['Depth'], '1');
+      expect(utf8.decode(fake.calls.single.$4!), contains('<D:getetag/>'));
       expect(entries.map((entry) => (entry.name, entry.isCollection)),
           [('abc.json', false), ('books', true)]);
+      expect(entries.first.strongEtag, '"abc-v1"');
+      expect(entries.last.strongEtag, isNull);
+    });
+
+    test('weak and malformed collection ETags are ignored', () async {
+      const xml = '''<?xml version="1.0"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response><D:href>/base/shared/files/weak.json</D:href>
+    <D:propstat><D:prop><D:resourcetype/><D:getetag>W/"v1"</D:getetag></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>
+  </D:response>
+  <D:response><D:href>/base/shared/files/missing.json</D:href>
+    <D:propstat><D:prop><D:resourcetype/></D:prop></D:propstat>
+  </D:response>
+</D:multistatus>''';
+
+      final entries =
+          await transport(FakeExecutor([response(207, body: xml)])).list(
+        ['files'],
+      );
+
+      expect(entries.map((entry) => entry.strongEtag), [null, null]);
     });
 
     test('missing collection is empty and malformed XML fails safely',

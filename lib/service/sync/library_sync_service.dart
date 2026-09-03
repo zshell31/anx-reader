@@ -52,19 +52,25 @@ class LibrarySyncService {
     ]);
   }
 
-  Future<void> syncCatalog(Iterable<String> fingerprints) async {
+  Future<void> syncCatalog(
+    Iterable<String> fingerprints, {
+    Map<String, String> remoteStrongEtags = const {},
+  }) async {
     final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
     await Future.wait([
       catalog.syncDirtyAnnotations(),
-      catalog.pullBooks(ids),
+      catalog.pullBooks(ids, discoveredStrongEtags: remoteStrongEtags),
     ]);
   }
 
-  Future<void> syncReadingState(Iterable<String> fingerprints) async {
+  Future<void> syncReadingState(
+    Iterable<String> fingerprints, {
+    Map<String, String> remoteStrongEtags = const {},
+  }) async {
     final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
     await Future.wait([
       readingState.syncDirtyAnnotations(),
-      readingState.pullBooks(ids),
+      readingState.pullBooks(ids, discoveredStrongEtags: remoteStrongEtags),
     ]);
   }
 

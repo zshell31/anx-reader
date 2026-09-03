@@ -16,7 +16,8 @@ branch is considered complete.
 
 ## Current stage
 
-Stage 1 is complete. Stage 2 (WebDAV ETag fast-path) is next.
+Stages 1 and 2 are complete. Stage 3 (persistent translation-cache
+checkpoints) is next.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -38,7 +39,25 @@ Implemented:
   simulates the projected 120-second legacy row, and verifies that only the two
   real events remain after repeated startups.
 
+Stage 2 implementation:
+
+- The existing depth-1 `PROPFIND` now requests `getetag` together with
+  `resourcetype`.
+- Discovery retains only syntactically valid strong ETags returned by a
+  successful property status; weak, malformed, and absent ETags are ignored.
+- Discovered ETags are routed to all discovered shared-document domains.
+- A clean local document skips `GET`, decoding, merging, and projection only
+  when its persisted convergence ETag exactly matches discovery.
+- Dirty documents, changed ETags, missing local documents, and servers without
+  usable ETags retain the previous synchronization path.
+- ETag hints are one-shot per coordinator pass so a stale discovery result
+  cannot be reused after an upload.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
   test/service/sync/library_protocol_test.dart` passed (16 tests).
+- Stage 1 analyzer: no issues.
+- Stage 2: the five existing affected suites plus new ETag regression tests
+  passed (103 tests).
+- Stage 2 analyzer: no issues across all 11 changed Dart files.

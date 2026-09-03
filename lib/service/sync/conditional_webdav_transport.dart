@@ -64,7 +64,12 @@ class WebDavLock {
 class WebDavCollectionEntry {
   final String name;
   final bool isCollection;
-  const WebDavCollectionEntry(this.name, {required this.isCollection});
+  final String? strongEtag;
+  const WebDavCollectionEntry(
+    this.name, {
+    required this.isCollection,
+    this.strongEtag,
+  });
 }
 
 abstract interface class AnnotationWebDavTransport {
@@ -215,7 +220,12 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
         final isCollection = item.descendants
             .whereType<XmlElement>()
             .any((element) => element.name.local == 'collection');
-        entries[name] = WebDavCollectionEntry(name, isCollection: isCollection);
+        final strongEtag = isCollection ? null : _responseStrongEtag(item);
+        entries[name] = WebDavCollectionEntry(
+          name,
+          isCollection: isCollection,
+          strongEtag: strongEtag,
+        );
       }
       final result = entries.values.toList()
         ..sort((left, right) => left.name.compareTo(right.name));
@@ -349,6 +359,31 @@ class ConditionalWebDavTransport implements AnnotationWebDavTransport {
     return value;
   }
 
+  String? _optionalStrongEtag(String? value) =>
+      value != null && RegExp(r'^"[^"\r\n]+"$').hasMatch(value) ? value : null;
+
+  String? _responseStrongEtag(XmlElement response) {
+    for (final propstat in response.descendants
+        .whereType<XmlElement>()
+        .where((element) => element.name.local == 'propstat')) {
+      final statuses = propstat.descendants
+          .whereType<XmlElement>()
+          .where((element) => element.name.local == 'status');
+      if (statuses.isEmpty ||
+          !RegExp(r'^HTTP/\S+ 200(?:\s|$)')
+              .hasMatch(statuses.first.innerText.trim())) {
+        continue;
+      }
+      final etags = propstat.descendants
+          .whereType<XmlElement>()
+          .where((element) => element.name.local == 'getetag');
+      if (etags.isNotEmpty) {
+        return _optionalStrongEtag(etags.first.innerText.trim());
+      }
+    }
+    return null;
+  }
+
   String _lockToken(String? value) {
     final token = value?.trim();
     if (token == null || !RegExp(r'^<[^<>\s\r\n]+>$').hasMatch(token)) {
@@ -375,5 +410,5 @@ const _exclusiveWriteLockBody = '''<?xml version="1.0" encoding="utf-8"?>
 
 const _propfindBody = '''<?xml version="1.0" encoding="utf-8"?>
 <D:propfind xmlns:D="DAV:">
-  <D:prop><D:resourcetype/></D:prop>
+  <D:prop><D:resourcetype/><D:getetag/></D:prop>
 </D:propfind>''';

@@ -56,7 +56,8 @@ void main() {
     const uuid = '123e4567-e89b-12d3-a456-426614174000';
     final entries = <String, List<WebDavCollectionEntry>>{
       'annotations': const [
-        WebDavCollectionEntry('$fingerprint.json', isCollection: false),
+        WebDavCollectionEntry('$fingerprint.json',
+            isCollection: false, strongEtag: '"annotation-v1"'),
         WebDavCollectionEntry('not-a-book.json', isCollection: false),
       ],
       'shared/v1/catalog/books': const [
@@ -72,7 +73,8 @@ void main() {
         WebDavCollectionEntry(fingerprint, isCollection: true),
       ],
       'shared/v1/reading-activity/$fingerprint': const [
-        WebDavCollectionEntry('2026-09-01.json', isCollection: false),
+        WebDavCollectionEntry('2026-09-01.json',
+            isCollection: false, strongEtag: '"activity-v1"'),
       ],
       'shared/v1/book-tags': const [
         WebDavCollectionEntry(fingerprint, isCollection: true),
@@ -92,6 +94,10 @@ void main() {
     expect(result.ids(groupDomain), {uuid});
     expect(result.ids(readingActivityDomain), {'$fingerprint@2026-09-01'});
     expect(result.ids(bookTagDomain), {'$fingerprint@$uuid'});
+    expect(result.strongEtags(annotationSyncDomain),
+        {fingerprint: '"annotation-v1"'});
+    expect(result.strongEtags(readingActivityDomain),
+        {'$fingerprint@2026-09-01': '"activity-v1"'});
     expect(result.documentCount, 5);
   });
 }

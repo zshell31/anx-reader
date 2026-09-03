@@ -71,6 +71,7 @@ class SharedDocumentSyncCoordinator {
   final Set<String> _active = {};
   final Map<String, Object> _lastFailures = {};
   final Map<String, int> _networkAttempts = {};
+  final Map<String, String> _discoveredStrongEtags = {};
   final StreamController<void> _statusChanges =
       StreamController<void>.broadcast();
   bool _closing = false;
@@ -181,7 +182,16 @@ class SharedDocumentSyncCoordinator {
     return syncBook(id);
   }
 
-  Future<void> pullBook(String fingerprint) => syncBook(fingerprint);
+  Future<void> pullBook(
+    String fingerprint, {
+    String? discoveredStrongEtag,
+  }) {
+    final id = normalizeDocumentId(fingerprint);
+    if (discoveredStrongEtag != null) {
+      _discoveredStrongEtags[id] = discoveredStrongEtag;
+    }
+    return syncBook(id);
+  }
 
   Future<void> syncDirtyAnnotations() async {
     final pending = (await sharedState.pendingOutbox())
@@ -197,12 +207,19 @@ class SharedDocumentSyncCoordinator {
     }));
   }
 
-  Future<void> pullBooks(Iterable<String> fingerprints) async {
+  Future<void> pullBooks(
+    Iterable<String> fingerprints, {
+    Map<String, String> discoveredStrongEtags = const {},
+  }) async {
     final documents = fingerprints.toList(growable: false);
     syncDebug('domain=$syncDomain known=${documents.length}');
     await Future.wait(documents.map((fingerprint) async {
       try {
-        await pullBook(fingerprint);
+        final id = normalizeDocumentId(fingerprint);
+        await pullBook(
+          id,
+          discoveredStrongEtag: discoveredStrongEtags[id],
+        );
       } catch (_) {
         // Discovery is best effort and independent per book.
       }
@@ -247,10 +264,11 @@ class SharedDocumentSyncCoordinator {
   }
 
   Future<void> _singlePass(String id) async {
+    final discoveredStrongEtag = _discoveredStrongEtags.remove(id);
     final entry = await sharedState.outboxEntry(syncDomain, id);
     if (entry == null) {
       syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=pull');
-      await _pullClean(id);
+      await _pullClean(id, discoveredStrongEtag: discoveredStrongEtag);
       return;
     }
     syncDebug('domain=$syncDomain doc=${shortSyncId(id)} action=push '
@@ -365,7 +383,20 @@ class SharedDocumentSyncCoordinator {
     }
   }
 
-  Future<void> _pullClean(String id) async {
+  Future<void> _pullClean(
+    String id, {
+    String? discoveredStrongEtag,
+  }) async {
+    if (discoveredStrongEtag != null &&
+        await sharedState.isCleanAtStrongEtag(
+          syncDomain,
+          id,
+          discoveredStrongEtag,
+        )) {
+      syncDebug('domain=$syncDomain doc=${shortSyncId(id)} '
+          'action=skip-unchanged etag=matched');
+      return;
+    }
     var failures = 0;
     var lockContentions = 0;
     var conditionalCreateRejected = false;

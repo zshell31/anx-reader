@@ -670,6 +670,25 @@ class SharedStateDatabase {
         status: SharedSyncStatus.values.byName(row['status'] as String));
   }
 
+  /// Returns true only when a local document is clean and was last converged
+  /// with the exact strong ETag reported by collection discovery.
+  Future<bool> isCleanAtStrongEtag(
+      String domain, String documentId, String strongEtag) async {
+    if (!RegExp(r'^"[^"\r\n]+"$').hasMatch(strongEtag)) {
+      throw ArgumentError.value(strongEtag, 'strongEtag', 'must be strong');
+    }
+    final rows = await (await database).rawQuery('''SELECT 1
+      FROM shared_documents d
+      JOIN sync_metadata m
+        ON m.domain = d.domain AND m.document_id = d.document_id
+      WHERE d.domain = ? AND d.document_id = ?
+        AND m.strong_etag = ? AND m.status = 'synced'
+        AND NOT EXISTS (SELECT 1 FROM sync_outbox o
+          WHERE o.domain = d.domain AND o.document_id = d.document_id)
+      LIMIT 1''', [domain, documentId, strongEtag]);
+    return rows.isNotEmpty;
+  }
+
   Future<String?> importedSharedId(String source, String sourceKey) async {
     return (await importReceipt(source, sourceKey))?.sharedId;
   }

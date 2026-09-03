@@ -572,8 +572,7 @@ class AnnotationSyncRuntime {
       };
       syncDebug('phase=content-domains started');
       await Future.wait([
-        coordinator.syncDirtyAnnotations(),
-        coordinator.pullBooks(
+        coordinator.syncKnown(
           remoteDocumentPullTargets(
             localIds: fingerprints,
             remoteIds: remote.ids(annotationSyncDomain),
@@ -581,8 +580,7 @@ class AnnotationSyncRuntime {
           ),
           discoveredStrongEtags: remote.strongEtags(annotationSyncDomain),
         ),
-        _presentationCoordinator!.syncDirtyAnnotations(),
-        _presentationCoordinator!.pullBooks([anxPresentationDocumentId]),
+        _presentationCoordinator!.syncKnown([anxPresentationDocumentId]),
         if (_libraryService != null)
           _libraryService!.syncReadingState(
             remoteDocumentPullTargets(

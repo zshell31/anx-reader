@@ -201,10 +201,33 @@ class SharedDocumentSyncCoordinator {
     await Future.wait(pending.map((entry) async {
       try {
         await syncBook(entry.documentId);
-      } catch (_) {
+      } catch (error) {
         // Each document records and schedules its own durable failure.
+        syncWarning('domain=$syncDomain doc=${shortSyncId(entry.documentId)} '
+            'action=sync-failed error=${safeSyncError(error)}');
       }
     }));
+  }
+
+  /// Pushes the dirty snapshot first, then pulls only documents which were
+  /// clean at the start of this pass. A dirty document already reads and
+  /// merges its remote representation, so scheduling it as a concurrent pull
+  /// merely creates a second generation of the same single-flight operation.
+  Future<void> syncKnown(
+    Iterable<String> documentIds, {
+    Map<String, String> discoveredStrongEtags = const {},
+  }) async {
+    final normalized = documentIds.map(normalizeDocumentId).toSet();
+    final dirty = (await sharedState.pendingOutbox())
+        .where((entry) => entry.domain == syncDomain)
+        .map((entry) => entry.documentId)
+        .toSet();
+    await syncDirtyAnnotations();
+    normalized.removeAll(dirty);
+    await pullBooks(
+      normalized,
+      discoveredStrongEtags: discoveredStrongEtags,
+    );
   }
 
   Future<void> pullBooks(
@@ -214,14 +237,16 @@ class SharedDocumentSyncCoordinator {
     final documents = fingerprints.toList(growable: false);
     syncDebug('domain=$syncDomain known=${documents.length}');
     await Future.wait(documents.map((fingerprint) async {
+      final id = normalizeDocumentId(fingerprint);
       try {
-        final id = normalizeDocumentId(fingerprint);
         await pullBook(
           id,
           discoveredStrongEtag: discoveredStrongEtags[id],
         );
-      } catch (_) {
+      } catch (error) {
         // Discovery is best effort and independent per book.
+        syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
+            'action=sync-failed error=${safeSyncError(error)}');
       }
     }));
   }

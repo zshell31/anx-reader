@@ -354,6 +354,18 @@ void main() {
     expect(await store.pendingOutbox(), isEmpty);
   });
 
+  test('known sync does not schedule a dirty document as a second pull',
+      () async {
+    await putLocal([entity('A')]);
+    remote.seed(document([entity('B')]));
+
+    await coordinator.syncKnown([fingerprint]);
+
+    expect(remote.gets, 1);
+    expect(remote.decoded!['annotations'], hasLength(2));
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
   test('protocol winner resolves the same annotation edit', () async {
     await putLocal([entity('same', updatedAt: '2026-08-27T11:00:00.000Z')]);
     remote.seed(
@@ -1258,11 +1270,17 @@ void main() {
     ));
     remote.getFailure = const WebDavTransportException('offline');
 
-    await expectLater(coordinator.syncDirtyAnnotations(), completes,
-        reason: 'batch sync records individual durable failures');
+    final logs = await captureLogs(() async {
+      await expectLater(coordinator.syncDirtyAnnotations(), completes,
+          reason: 'batch sync records individual durable failures');
+    });
+    final output = logs.map((record) => record.message).join('\n');
     final entry = (await store.pendingOutbox()).single;
     expect(entry.domain, anxPresentationSyncDomain);
     expect(entry.attempts, 1);
     expect(await coordinator.domainStatus, AnnotationSyncStatus.pendingOffline);
+    expect(output, contains('action=sync-failed'));
+    expect(output, contains('error=WebDavTransportException'));
+    expect(output, isNot(contains('offline')));
   });
 }

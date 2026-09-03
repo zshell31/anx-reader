@@ -28,15 +28,11 @@ class ReadingActivitySyncService {
   Future<void> syncKnown(
     Iterable<String> documentIds, {
     Map<String, String> remoteStrongEtags = const {},
-  }) async {
-    await Future.wait([
-      coordinator.syncDirtyAnnotations(),
-      coordinator.pullBooks(
+  }) =>
+      coordinator.syncKnown(
         documentIds,
         discoveredStrongEtags: remoteStrongEtags,
-      ),
-    ]);
-  }
+      );
 
   Future<void> notifyMutation(String documentId) =>
       coordinator.notifyDirty(documentId);

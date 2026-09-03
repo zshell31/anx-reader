@@ -45,10 +45,8 @@ class LibrarySyncService {
   Future<void> syncKnown(Iterable<String> fingerprints) async {
     final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
     await Future.wait([
-      catalog.syncDirtyAnnotations(),
-      readingState.syncDirtyAnnotations(),
-      catalog.pullBooks(ids),
-      readingState.pullBooks(ids),
+      catalog.syncKnown(ids),
+      readingState.syncKnown(ids),
     ]);
   }
 
@@ -57,10 +55,10 @@ class LibrarySyncService {
     Map<String, String> remoteStrongEtags = const {},
   }) async {
     final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
-    await Future.wait([
-      catalog.syncDirtyAnnotations(),
-      catalog.pullBooks(ids, discoveredStrongEtags: remoteStrongEtags),
-    ]);
+    await catalog.syncKnown(
+      ids,
+      discoveredStrongEtags: remoteStrongEtags,
+    );
   }
 
   Future<void> syncReadingState(
@@ -68,10 +66,10 @@ class LibrarySyncService {
     Map<String, String> remoteStrongEtags = const {},
   }) async {
     final ids = fingerprints.map(canonicalMd5Fingerprint).toSet();
-    await Future.wait([
-      readingState.syncDirtyAnnotations(),
-      readingState.pullBooks(ids, discoveredStrongEtags: remoteStrongEtags),
-    ]);
+    await readingState.syncKnown(
+      ids,
+      discoveredStrongEtags: remoteStrongEtags,
+    );
   }
 
   Future<void> notifyCatalogMutation(String fingerprint) =>

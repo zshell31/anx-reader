@@ -15,6 +15,8 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 6. Diagnose cold local asset-verification misses without exposing file paths.
 7. Preserve local asset-verification hits across local/UTC timestamp
    serialization.
+8. Finish all durable bootstrap imports before connectivity can start a sync.
+9. Schedule each dirty shared document only once per synchronization pass.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -22,8 +24,9 @@ branch is considered complete.
 
 ## Current stage
 
-Stages 1-7 and Samsung timing validation are complete. Work is paused pending
-installation and cross-device synchronization validation on a second reader.
+Stages 1-9 are implemented and covered by the full relevant test suite. Stages
+8-9 still require release validation on the second reader to confirm that the
+observed reading-activity failure no longer recurs.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -131,6 +134,30 @@ Stage 7 implementation:
 - Added a regression assertion for equal local/UTC timestamps while retaining
   the existing assertion that a real one-second modification is rejected.
 
+Stage 8 implementation:
+
+- Connectivity-triggered synchronization is now subscribed only after the
+  library, reading-activity, and organization bootstrap imports finish.
+- This prevents a startup sync from racing a late legacy import. On the Onyx
+  trace, that race imported a library row after the content phase had already
+  converged and left new pending work immediately after a nominally completed
+  sync.
+- Added a source-boundary regression assertion that all bootstrap calls remain
+  before the connectivity subscription.
+
+Stage 9 implementation:
+
+- Added a coordinated known-document pass which snapshots dirty IDs, pushes
+  those documents first, and excludes them from the clean pull batch.
+- Library, reading-activity, presentation, and runtime content synchronization
+  now use that pass instead of independently scheduling the same dirty object
+  through both dirty and pull paths.
+- A dirty known document is covered by a regression test which verifies one
+  remote fetch and successful convergence.
+- Per-document failures now emit a safe diagnostic containing only the action
+  and normalized error type/status. Document payloads, remote response bodies,
+  credentials, and raw exception text are not logged.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -155,6 +182,12 @@ Stage 7 implementation:
   implementation and tests reported no issues.
 - After stage 7, the combined `test/service/sync` and
   `test/service/translate` run passed all 348 tests.
+- Stage 8 runtime boundary suite passed all 6 tests; focused analysis reported
+  no issues.
+- Stage 9 affected suites passed all 70 tests, including all 48 coordinator
+  tests; focused analysis reported no issues.
+- After stages 8-9, the combined `test/service/sync` and
+  `test/service/translate` run passed all 349 tests.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -241,6 +274,27 @@ application data. One startup run confirmed the optimized warm path:
 - The run discovered 22 documents and completed with `pending=0`, `failed=0`,
   `trustedRemote=2`, and no logged synchronization errors or warnings.
 
+### Onyx cross-device diagnosis before stages 8-9
+
+Onyx LOMONOSOV3 first downloaded the second book during synchronization. That
+initial run took 15.514 s, completed both asset transfers, and ended with both
+books locally and remotely available. Translation cache, annotations, reading
+state, and catalog data otherwise converged.
+
+- Subsequent warm passes took 1.729 s, 1.105 s, and 1.113 s, but consistently
+  ended with one pending and one failed reading-activity document.
+- After restarting the process, a pass took 2.988 s and ended with three
+  pending documents and one failure. The trace showed a library bootstrap
+  import occurring after the active content synchronization phase.
+- The same dirty reading-activity document was fetched and processed twice in
+  one pass: once through the dirty outbox and once through the known-document
+  pull. The old release swallowed the per-document exception and exposed only
+  the aggregate failure count.
+- Stages 8-9 address both independently observed causes. A new Onyx release
+  run is required to determine whether the remote reading-activity object now
+  converges or whether the new safe diagnostic exposes an additional server
+  error requiring a separate fix.
+
 ## Stage commits
 
 - `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
@@ -250,3 +304,6 @@ application data. One startup run confirmed the optimized warm path:
 - `c6efbb0f perf(sync): trust successful discovery targets`
 - `dc7d8ea2 diagnostics(sync): explain local asset verification misses`
 - `6d873e2b perf(sync): compare asset timestamps by instant`
+- `8fc238ca fix(sync): finish bootstrap before connectivity runs`
+- `6eebcd88 fix(sync): avoid duplicate dirty document scheduling`
+- `e35507bc test(sync): follow coordinated known-document sync`

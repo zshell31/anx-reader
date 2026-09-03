@@ -94,6 +94,75 @@ void main() {
     });
   });
 
+  group('AI provider-route deduplication', () {
+    test('keeps the earliest result and tombstones later provider routes', () {
+      final first = _entry(
+        provider: 'openai',
+        text: 'first translation',
+        updated: DateTime.utc(2026, 9, 3, 5, 35),
+      );
+      final second = _entry(
+        provider: 'claude',
+        text: 'second translation',
+        updated: DateTime.utc(2026, 9, 3, 14, 6),
+      );
+
+      final result = deduplicateReusableAiEntries(
+        <TranslationCacheEntry>[second, first],
+        DateTime.utc(2026, 9, 3, 16),
+      );
+
+      expect(result.tombstonedCount, 1);
+      expect(
+        result.entries
+            .singleWhere((entry) => entry.requestKey == first.requestKey)
+            .deletedAt,
+        isNull,
+      );
+      expect(
+        result.entries
+            .singleWhere((entry) => entry.requestKey == second.requestKey)
+            .deletedAt,
+        DateTime.utc(2026, 9, 3, 16),
+      );
+    });
+
+    test('is idempotent and leaves non-AI provider routes independent', () {
+      final first = _entry(service: 'google', provider: 'first');
+      final second = _entry(service: 'google', provider: 'second');
+      final initial = deduplicateReusableAiEntries(
+        <TranslationCacheEntry>[first, second],
+        DateTime.utc(2026, 9, 3),
+      );
+      final repeated = deduplicateReusableAiEntries(
+        initial.entries,
+        DateTime.utc(2026, 9, 4),
+      );
+
+      expect(initial.tombstonedCount, 0);
+      expect(repeated.tombstonedCount, 0);
+      expect(
+          repeated.entries.every((entry) => entry.deletedAt == null), isTrue);
+    });
+
+    test('uses a tombstone timestamp newer than a future-dated duplicate', () {
+      final first = _entry(provider: 'openai');
+      final future = _entry(
+        provider: 'claude',
+        updated: DateTime.utc(2030),
+      );
+      final result = deduplicateReusableAiEntries(
+        <TranslationCacheEntry>[first, future],
+        DateTime.utc(2026),
+      );
+      final tombstone = result.entries
+          .singleWhere((entry) => entry.requestKey == future.requestKey);
+
+      expect(tombstone.deletedAt,
+          DateTime.utc(2030).add(const Duration(microseconds: 1)));
+    });
+  });
+
   group('remote document serialization', () {
     test('round trips active and deleted entries', () {
       final entries = <TranslationCacheEntry>[
@@ -162,6 +231,8 @@ TranslationCacheEntry _entry({
   String book = '0123456789abcdef0123456789abcdef',
   String source = 'source',
   String text = 'translated',
+  String service = 'ai',
+  String provider = 'provider',
   DateTime? updated,
   DateTime? deleted,
 }) {
@@ -169,8 +240,8 @@ TranslationCacheEntry _entry({
     bookFingerprint: book,
     sourceLanguage: 'en',
     targetLanguage: 'fr',
-    translationService: 'ai',
-    providerFingerprint: 'provider',
+    translationService: service,
+    providerFingerprint: provider,
     promptFingerprint: 'prompt',
     sourceText: source,
     contextText: 'context',

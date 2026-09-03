@@ -79,6 +79,52 @@ ON translation_cache(updated_at)
     }
   }
 
+  /// Finds the canonical cross-device result for a semantic request.
+  ///
+  /// Different devices may use different OpenAI endpoints or models. Those
+  /// details are provenance rather than part of the translated paragraph's
+  /// portable identity. The earliest valid result wins deterministically, so
+  /// a later device reuses the text already uploaded through WebDAV.
+  Future<TranslationCacheEntry?> findReusable(
+    FullTextTranslationRequest request,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'translation_cache',
+      where: '''cache_version = ?
+AND book_fingerprint_algorithm = ?
+AND book_fingerprint = ?
+AND source_language = ?
+AND target_language = ?
+AND translation_service = ?
+AND prompt_fingerprint = ?
+AND source_hash = ?
+AND context_hash = ?
+AND deleted_at IS NULL''',
+      whereArgs: <Object?>[
+        request.cacheVersion,
+        request.bookFingerprintAlgorithm,
+        request.bookFingerprint,
+        request.sourceLanguage,
+        request.targetLanguage,
+        request.translationService,
+        request.promptFingerprint,
+        request.sourceHash,
+        request.contextHash,
+      ],
+      orderBy: 'created_at ASC, request_key ASC',
+    );
+    for (final row in rows) {
+      try {
+        final entry = TranslationCacheEntry.fromDatabaseMap(row);
+        if (entry.matchesReusableRequest(request)) return entry;
+      } catch (_) {
+        // Ignore a malformed candidate without hiding later valid entries.
+      }
+    }
+    return null;
+  }
+
   Future<TranslationCacheEntry?> findIncludingDeleted(String requestKey) async {
     final db = await database;
     final rows = await db.query(

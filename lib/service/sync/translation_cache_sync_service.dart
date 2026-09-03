@@ -16,13 +16,16 @@ class TranslationCacheSyncService {
     required this.client,
     TranslationCacheDatabase? database,
     FullTextTranslationCacheService? cacheService,
+    DateTime Function()? clock,
   })  : cacheService = cacheService ?? fullTextTranslationCacheService,
         database = database ??
-            (cacheService ?? fullTextTranslationCacheService).database;
+            (cacheService ?? fullTextTranslationCacheService).database,
+        _clock = clock ?? DateTime.now;
 
   final SyncClientBase client;
   final TranslationCacheDatabase database;
   final FullTextTranslationCacheService cacheService;
+  final DateTime Function() _clock;
 
   Future<void> sync() async {
     final remoteFiles =
@@ -81,14 +84,22 @@ class TranslationCacheSyncService {
       }
     }
 
-    final result = mergeTranslationCacheEntries(
+    final merged = mergeTranslationCacheEntries(
       localEntries,
       remoteDocument?.entries ?? const <TranslationCacheEntry>[],
     );
-    if (result.hasIdentityConflict) {
+    if (merged.hasIdentityConflict) {
       syncWarning('translation-cache doc=${shortSyncId(fingerprint)} '
           'reason=identity-conflict');
       return;
+    }
+    final result = deduplicateReusableAiEntries(
+      merged.entries,
+      _clock().toUtc(),
+    );
+    if (result.tombstonedCount > 0) {
+      syncInfo('translation-cache doc=${shortSyncId(fingerprint)} '
+          'deduplicated=${result.tombstonedCount}');
     }
     final localState = <String, String>{
       for (final entry in localEntries)
@@ -125,11 +136,20 @@ class TranslationCacheSyncService {
         latest.entries,
       );
       if (retryMerge.hasIdentityConflict) return;
-      await database.upsertAll(retryMerge.entries);
+      final retryResult = deduplicateReusableAiEntries(
+        retryMerge.entries,
+        _clock().toUtc(),
+      );
+      if (retryResult.tombstonedCount > 0) {
+        cacheService.invalidateBookInFlightWrites(fingerprint);
+        syncInfo('translation-cache doc=${shortSyncId(fingerprint)} '
+            'retry-deduplicated=${retryResult.tombstonedCount}');
+      }
+      await database.upsertAll(retryResult.entries);
       await _uploadDocument(TranslationCacheBookDocument(
         bookFingerprintAlgorithm: bookFingerprintAlgorithmMd5,
         bookFingerprint: fingerprint,
-        entries: retryMerge.entries,
+        entries: retryResult.entries,
       ));
     } else {
       await _uploadDocument(mergedDocument);

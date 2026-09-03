@@ -69,6 +69,20 @@ class FullTextTranslationRequest {
         contextText,
       ];
 
+  List<Object?> get reusableIdentity => <Object?>[
+        cacheVersion,
+        bookFingerprintAlgorithm,
+        bookFingerprint,
+        sourceLanguage,
+        targetLanguage,
+        translationService,
+        promptFingerprint,
+        sourceHash,
+        contextHash,
+        sourceText,
+        contextText,
+      ];
+
   @override
   bool operator ==(Object other) =>
       other is FullTextTranslationRequest &&
@@ -157,9 +171,33 @@ class TranslationCacheEntry {
         contextText,
       ];
 
+  List<Object?> get reusableIdentity => <Object?>[
+        cacheVersion,
+        bookFingerprintAlgorithm,
+        bookFingerprint,
+        sourceLanguage,
+        targetLanguage,
+        translationService,
+        promptFingerprint,
+        sourceHash,
+        contextHash,
+        sourceText,
+        contextText,
+      ];
+
   bool matchesRequest(FullTextTranslationRequest request) =>
       requestKey == request.requestKey &&
       _listEquals(exactIdentity, request.exactIdentity) &&
+      sourceHash == sha256Text(sourceText) &&
+      contextHash == sha256Text(contextText);
+
+  /// Whether this entry can be shared with the same semantic translation
+  /// request made through another local provider route.
+  ///
+  /// Provider configuration remains recorded as provenance, but it must not
+  /// split a WebDAV-backed AI translation cache between devices.
+  bool matchesReusableRequest(FullTextTranslationRequest request) =>
+      _listEquals(reusableIdentity, request.reusableIdentity) &&
       sourceHash == sha256Text(sourceText) &&
       contextHash == sha256Text(contextText);
 

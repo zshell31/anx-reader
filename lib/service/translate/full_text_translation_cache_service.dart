@@ -67,9 +67,14 @@ class FullTextTranslationCacheService {
     required int globalGeneration,
   }) async {
     if (persistent) {
-      final cached = await database.find(request.requestKey);
+      final sharesProviderRoutes = request.translationService == 'ai';
+      final cached = sharesProviderRoutes
+          ? await database.findReusable(request)
+          : await database.find(request.requestKey);
       if (cached != null &&
-          cached.matchesRequest(request) &&
+          (sharesProviderRoutes
+              ? cached.matchesReusableRequest(request)
+              : cached.matchesRequest(request)) &&
           isCacheableFullTextTranslation(cached.translatedText)) {
         return cached.translatedText;
       }

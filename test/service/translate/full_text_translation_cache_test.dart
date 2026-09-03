@@ -116,6 +116,56 @@ void main() {
       expect(calls, 1);
     });
 
+    test('reuses the earliest synced AI result across provider routes',
+        () async {
+      final firstRequest = _request(provider: 'samsung-route');
+      final secondRequest = _request(provider: 'onyx-route');
+      await database.upsert(TranslationCacheEntry.fromRequest(
+        firstRequest,
+        'first device translation',
+        DateTime.utc(2026, 9, 3, 5, 35),
+      ));
+      await database.upsert(TranslationCacheEntry.fromRequest(
+        secondRequest,
+        'later device translation',
+        DateTime.utc(2026, 9, 3, 14, 6),
+      ));
+
+      var providerCalls = 0;
+      final result = await cache.translate(secondRequest, () async {
+        providerCalls++;
+        return 'new translation';
+      });
+
+      expect(result, 'first device translation');
+      expect(providerCalls, 0);
+    });
+
+    test('does not share non-AI results across provider routes', () async {
+      final firstRequest = _request(
+        service: 'google',
+        provider: 'first-route',
+      );
+      final secondRequest = _request(
+        service: 'google',
+        provider: 'second-route',
+      );
+      await database.upsert(TranslationCacheEntry.fromRequest(
+        firstRequest,
+        'first route translation',
+        DateTime.utc(2026, 9, 3, 5, 35),
+      ));
+
+      var providerCalls = 0;
+      final result = await cache.translate(secondRequest, () async {
+        providerCalls++;
+        return 'second route translation';
+      });
+
+      expect(result, 'second route translation');
+      expect(providerCalls, 1);
+    });
+
     test('provider failure and dirty output are not persisted', () async {
       expect(
         () => cache.translate(_request(), () => throw Exception('failure')),
@@ -260,6 +310,7 @@ FullTextTranslationRequest _request({
   String source = 'source text',
   String context = 'previous text',
   String target = 'fr',
+  String service = 'ai',
   String provider = 'provider',
   String prompt = 'prompt',
 }) =>
@@ -267,7 +318,7 @@ FullTextTranslationRequest _request({
       bookFingerprint: book,
       sourceLanguage: 'en',
       targetLanguage: target,
-      translationService: 'ai',
+      translationService: service,
       providerFingerprint: provider,
       promptFingerprint: prompt,
       sourceText: source,

@@ -22,8 +22,8 @@ branch is considered complete.
 
 ## Current stage
 
-The original three stages and Samsung timing validation are complete. Follow-up
-optimization of the measured warm-run bottlenecks is in progress.
+Stages 1-7 and Samsung timing validation are complete. Work is paused pending
+installation and cross-device synchronization validation on a second reader.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -223,6 +223,23 @@ reason:
   post-asset status refresh took 44 ms.
 - This isolates the remaining delay to timezone-sensitive `DateTime` equality,
   not WebDAV, missing receipts, changed content, or status propagation.
+
+### Stage 7 device validation
+
+Release commit `0fbe9a14` was installed on Samsung SM-M315F without clearing
+application data. One startup run confirmed the optimized warm path:
+
+- Total sync time fell to 1.291 s from the diagnostic run's 4.025 s.
+- Both book assets restored their persisted verification in 12-21 ms. Both
+  cover assets also hit persisted verification, and no SHA-256 fallback ran.
+- Initial asset status for both books completed in 72 ms; the post-asset
+  refresh completed in 51 ms. Both books were reported as available locally
+  and remotely.
+- Phase timings were approximately 0.084 s bootstrap, 0.849 s discovery,
+  0.023 s organization, 0.011 s catalog, 0.074 s assets, 0.135 s content
+  domains, and 0.032 s translation cache.
+- The run discovered 22 documents and completed with `pending=0`, `failed=0`,
+  `trustedRemote=2`, and no logged synchronization errors or warnings.
 
 ## Stage commits
 

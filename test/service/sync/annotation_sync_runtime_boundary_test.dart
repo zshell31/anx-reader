@@ -14,6 +14,10 @@ void main() {
     expect(main, contains('annotationSyncRuntime.start()'));
     expect(main, contains('annotationSyncRuntime.onResume()'));
     expect(main, contains('annotationSyncRuntime.bestEffortFlush()'));
+    expect(
+      main,
+      isNot(contains('.synchronize(ref, trigger: SyncTrigger.auto)')),
+    );
     expect(runtime, contains('onConnectivityRegained()'));
     expect(runtime, contains('Connectivity().onConnectivityChanged'));
     expect(reader, contains('annotationSyncRuntime.openBook('));

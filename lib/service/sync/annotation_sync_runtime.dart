@@ -56,6 +56,8 @@ class AnnotationSyncRuntime {
       StreamController<void>.broadcast();
   final StreamController<void> _annotationChanges =
       StreamController<void>.broadcast();
+  final StreamController<void> _assetChanges =
+      StreamController<void>.broadcast();
   final List<StreamSubscription<void>> _coordinatorStatusSubscriptions = [];
   final SyncRunGate _runGate = SyncRunGate();
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
@@ -76,6 +78,7 @@ class AnnotationSyncRuntime {
       _presentationCoordinator;
   Stream<void> get statusChanges => _statusChanges.stream;
   Stream<void> get annotationChanges => _annotationChanges.stream;
+  Stream<void> get assetChanges => _assetChanges.stream;
 
   Future<AnnotationSyncStatus> get status async => (await summary).status;
 
@@ -567,6 +570,7 @@ class AnnotationSyncRuntime {
       syncDebug('phase=assets started');
       await _syncSharedLibraryAssets();
       syncDebug('phase=assets completed');
+      _emitAssetChanges();
       await _syncTranslationCacheBestEffort();
     } catch (error) {
       _lastRunFailed = true;
@@ -654,6 +658,17 @@ class AnnotationSyncRuntime {
       },
     );
     _translationCacheSyncService = TranslationCacheSyncService(client: client);
+  }
+
+  Future<LibraryBookAssetAvailability?> bookAssetAvailability(
+      Map<String, dynamic> catalogDocument) async {
+    if (SyncClientFactory.currentClient == null) {
+      SyncClientFactory.initializeCurrentClient();
+    }
+    final client = SyncClientFactory.currentClient;
+    if (client == null) return null;
+    _ensureAuxiliarySyncServices(client);
+    return _assetSyncService!.bookAvailability(catalogDocument);
   }
 
   Future<LibrarySyncRepository> _ensureLibraryRepository() async {
@@ -752,6 +767,10 @@ class AnnotationSyncRuntime {
 
   void _emitStatus() {
     if (!_statusChanges.isClosed) _statusChanges.add(null);
+  }
+
+  void _emitAssetChanges() {
+    if (!_assetChanges.isClosed) _assetChanges.add(null);
   }
 
   List<SharedDocumentSyncCoordinator> get _allCoordinators => [

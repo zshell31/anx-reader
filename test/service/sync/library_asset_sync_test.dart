@@ -149,6 +149,25 @@ void main() {
     expect(transport.downloads, 0);
   });
 
+  test('availability reuses state populated by asset synchronization',
+      () async {
+    final bytes = <int>[25, 26, 27, 28];
+    final document = catalog(bytes);
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
+
+    await service.syncBook(document);
+    final availability = await service.bookAvailability(document);
+
+    expect(availability.localVerified, isTrue);
+    expect(availability.remote, isTrue);
+    expect(availability.released, isFalse);
+    expect(transport.existenceChecks, 1);
+  });
+
   test('remote presence is checked again after the short cache lifetime',
       () async {
     final bytes = <int>[31, 32, 33, 34];

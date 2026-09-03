@@ -85,6 +85,36 @@ class LibraryAssetSyncService {
     return cover.combine(book);
   }
 
+  /// Returns the current book-asset state while reusing the digest and remote
+  /// presence caches populated by [syncBook].
+  Future<LibraryBookAssetAvailability> bookAvailability(
+      Map<String, dynamic> catalogDocument) async {
+    final document = decodeLibraryCatalogDocument(catalogDocument);
+    final membership = document['membership'] as Map<String, dynamic>;
+    if (membership['value'] != true) {
+      return const LibraryBookAssetAvailability();
+    }
+    final fingerprint = document['fingerprint'] as String;
+    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
+        as Map<String, dynamic>;
+    final digest = _canonicalSha256(asset['digest']);
+    final extension = asset['extension'] as String;
+    final boundRelativePath = await projection.localBookAssetPath(fingerprint);
+    final relativePath = boundRelativePath ?? 'file/$digest$extension';
+    final localValid = await _matchesLocalDigest(
+      File(resolveLocalPath(relativePath)),
+      digest,
+    );
+    final remoteExists = await _remoteExists(libraryBookAssetSegments(digest));
+    final released =
+        !localValid && remoteExists && await isReleased(fingerprint, digest);
+    return LibraryBookAssetAvailability(
+      localVerified: localValid,
+      remote: remoteExists,
+      released: released,
+    );
+  }
+
   Future<LibraryAssetSyncResult> _syncBookAsset(
       Map<String, dynamic> document) async {
     final fingerprint = document['fingerprint'] as String;
@@ -319,4 +349,16 @@ class LibraryAssetSyncResult {
         missing: missing || other.missing,
         released: released || other.released,
       );
+}
+
+class LibraryBookAssetAvailability {
+  final bool localVerified;
+  final bool remote;
+  final bool released;
+
+  const LibraryBookAssetAvailability({
+    this.localVerified = false,
+    this.remote = false,
+    this.released = false,
+  });
 }

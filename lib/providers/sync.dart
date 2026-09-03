@@ -21,7 +21,6 @@ import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -91,7 +90,7 @@ class Sync extends _$Sync {
   }
 
   Future<void> synchronize(
-    WidgetRef? ref, {
+    WidgetRef? widgetRef, {
     SyncTrigger trigger = SyncTrigger.auto,
   }) async {
     if (trigger != SyncTrigger.manual && !Prefs().autoSync) {
@@ -116,9 +115,10 @@ class Sync extends _$Sync {
           trigger: trigger == SyncTrigger.startup ? 'startup' : 'mutation',
         );
       }
-      ref?.read(bookListProvider.notifier).refresh();
-      ref?.read(groupDaoProvider.notifier).refresh();
-      ref?.read(syncStatusProvider.notifier).refresh();
+      // Use the notifier's stable Ref after the asynchronous run. A WidgetRef
+      // passed by a page may already be disposed by this point.
+      ref.read(bookListProvider.notifier).refresh();
+      ref.read(groupDaoProvider.notifier).refresh();
       _showSyncToast((l10n) => l10n.webdavSyncComplete);
     } catch (error) {
       AnxLog.severe('Automatic shared-state sync failed: ${error.runtimeType}');
@@ -181,23 +181,16 @@ class Sync extends _$Sync {
       return const BookAssetAvailability(
           localVerified: false, remote: false, released: false);
     }
-    final asset = (document['bookAsset'] as Map<String, dynamic>)['value']
-        as Map<String, dynamic>;
-    final digest = asset['digest'] as String;
-    final local = io.File(getBasePath(book.filePath));
-    final localVerified = await local.exists() &&
-        (await sha256.bind(local.openRead()).first).toString() == digest;
-    final remote = await SyncClientLibraryAssetTransport(client)
-        .exists(libraryBookAssetSegments(digest));
-    final receipt = await annotationSyncRuntime.sharedState
-        .importReceipt(libraryAssetReleaseSource, fingerprint);
+    final availability =
+        await annotationSyncRuntime.bookAssetAvailability(document);
+    if (availability == null) {
+      return const BookAssetAvailability(
+          localVerified: false, remote: false, released: false);
+    }
     return BookAssetAvailability(
-      localVerified: localVerified,
-      remote: remote,
-      released: !localVerified &&
-          remote &&
-          receipt?.status == 'released' &&
-          receipt?.sharedId == digest,
+      localVerified: availability.localVerified,
+      remote: availability.remote,
+      released: availability.released,
     );
   }
 

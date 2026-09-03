@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/models/sync_status.dart';
 import 'package:anx_reader/providers/sync.dart';
+import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'sync_status.g.dart';
@@ -9,9 +12,18 @@ part 'sync_status.g.dart';
 @Riverpod(keepAlive: true)
 class SyncStatus extends _$SyncStatus {
   List<Book> allBooksInBookShelf = [];
+  StreamSubscription<void>? _assetChangesSubscription;
+  bool _refreshing = false;
+  bool _refreshAgain = false;
 
   @override
   Future<SyncStatusModel> build() async {
+    if (_assetChangesSubscription == null) {
+      _assetChangesSubscription = annotationSyncRuntime.assetChanges.listen(
+        (_) => unawaited(refresh()),
+      );
+      ref.onDispose(() => _assetChangesSubscription?.cancel());
+    }
     allBooksInBookShelf = await bookDao.selectNotDeleteBooks();
     final entries = await Future.wait(allBooksInBookShelf.map((book) async => (
           book: book,
@@ -35,7 +47,19 @@ class SyncStatus extends _$SyncStatus {
   }
 
   Future<void> refresh() async {
-    state = AsyncData(await build());
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
+    try {
+      do {
+        _refreshAgain = false;
+        state = AsyncData(await build());
+      } while (_refreshAgain);
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<int?> pathToBookId(String filePath) async {

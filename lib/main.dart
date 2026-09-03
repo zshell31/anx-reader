@@ -5,7 +5,6 @@ import 'package:anx_reader/utils/platform_utils.dart';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/database.dart';
-import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/window_info.dart';
 import 'package:anx_reader/page/home_page.dart';
@@ -23,7 +22,6 @@ import 'package:anx_reader/utils/error/common.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/utils/window_position_validator.dart';
-import 'package:anx_reader/providers/sync.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -189,11 +187,6 @@ class _MyAppState extends ConsumerState<MyApp>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       annotationSyncRuntime.bestEffortFlush();
-      if (Prefs().webdavStatus) {
-        ref
-            .read(syncProvider.notifier)
-            .synchronize(ref, trigger: SyncTrigger.auto);
-      }
     } else if (state == AppLifecycleState.resumed) {
       unawaited(annotationSyncRuntime.onResume());
       if (AnxPlatform.isIOS) {

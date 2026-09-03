@@ -13,9 +13,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 const fingerprint = 'abcdef0123456789abcdef0123456789';
 
 class MemorySyncClient extends SyncClientBase {
-  MemorySyncClient(this.document);
+  MemorySyncClient(this.document, {this.scope = 'server-a'});
 
   String document;
+  final String scope;
   String etag = '"v1"';
   int downloads = 0;
 
@@ -61,7 +62,7 @@ class MemorySyncClient extends SyncClientBase {
   @override
   String get protocolName => 'memory';
   @override
-  Map<String, dynamic> get config => const {};
+  Map<String, dynamic> get config => {'server': scope};
   @override
   bool get isConfigured => true;
   @override
@@ -71,7 +72,115 @@ class MemorySyncClient extends SyncClientBase {
 void main() {
   sqfliteFfiInit();
 
+  test('version 1 database migrates persistent sync checkpoints', () async {
+    final directory = await Directory.systemTemp.createTemp('anx-cache-sync-');
+    final databasePath = '${directory.path}/translation.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 1,
+        singleInstance: false,
+        onCreate: TranslationCacheDatabase.createSchema,
+      ),
+    );
+    await legacy.close();
+    final database = TranslationCacheDatabase(
+      opener: () => databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: translationCacheDatabaseVersion,
+          singleInstance: false,
+          onCreate: TranslationCacheDatabase.createSchema,
+          onUpgrade: TranslationCacheDatabase.upgradeSchema,
+        ),
+      ),
+    );
+    addTearDown(() async {
+      await database.close();
+      await directory.delete(recursive: true);
+    });
+
+    await database.saveSyncCheckpoint(
+      'remote-scope',
+      fingerprint,
+      const TranslationSyncCheckpoint(
+        remoteToken: 'etag:"v1"',
+        localToken: '1:2026-01-01T00:00:00.000Z',
+      ),
+    );
+
+    final checkpoint =
+        await database.syncCheckpoint('remote-scope', fingerprint);
+    expect(checkpoint?.remoteToken, 'etag:"v1"');
+    expect(checkpoint?.localToken, '1:2026-01-01T00:00:00.000Z');
+  });
+
   test('unchanged ETag and local token skip the second document download',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('anx-cache-sync-');
+    final databasePath = '${directory.path}/translation.db';
+    TranslationCacheDatabase openDatabase() => TranslationCacheDatabase(
+          opener: () => databaseFactoryFfi.openDatabase(
+            databasePath,
+            options: OpenDatabaseOptions(
+              version: translationCacheDatabaseVersion,
+              singleInstance: false,
+              onCreate: TranslationCacheDatabase.createSchema,
+              onUpgrade: TranslationCacheDatabase.upgradeSchema,
+            ),
+          ),
+        );
+    var database = openDatabase();
+    addTearDown(() async {
+      await database.close();
+      await directory.delete(recursive: true);
+    });
+    final request = FullTextTranslationRequest(
+      bookFingerprint: fingerprint,
+      sourceLanguage: 'en',
+      targetLanguage: 'ru',
+      translationService: 'ai',
+      providerFingerprint: 'provider',
+      promptFingerprint: 'prompt',
+      sourceText: 'Source',
+      contextText: '',
+    );
+    final entry = TranslationCacheEntry.fromRequest(
+      request,
+      'Translation',
+      DateTime.utc(2026),
+    );
+    final document = TranslationCacheBookDocument(
+      bookFingerprintAlgorithm: bookFingerprintAlgorithmMd5,
+      bookFingerprint: fingerprint,
+      entries: [entry],
+    ).encode();
+    final client = MemorySyncClient(document);
+    var cache = FullTextTranslationCacheService(database: database);
+    var service = TranslationCacheSyncService(
+      client: client,
+      database: database,
+      cacheService: cache,
+      tempDirectory: () async => directory,
+    );
+
+    await service.sync();
+    await database.close();
+    database = openDatabase();
+    cache = FullTextTranslationCacheService(database: database);
+    service = TranslationCacheSyncService(
+      client: client,
+      database: database,
+      cacheService: cache,
+      tempDirectory: () async => directory,
+    );
+    await service.sync();
+
+    expect(client.downloads, 1);
+    expect(await database.activeCountForBook(fingerprint), 1);
+  });
+
+  test('checkpoint from another remote configuration is never reused',
       () async {
     final directory = await Directory.systemTemp.createTemp('anx-cache-sync-');
     final database = TranslationCacheDatabase(
@@ -81,6 +190,7 @@ void main() {
           version: translationCacheDatabaseVersion,
           singleInstance: false,
           onCreate: TranslationCacheDatabase.createSchema,
+          onUpgrade: TranslationCacheDatabase.upgradeSchema,
         ),
       ),
     );
@@ -108,19 +218,24 @@ void main() {
       bookFingerprint: fingerprint,
       entries: [entry],
     ).encode();
-    final client = MemorySyncClient(document);
+    final firstClient = MemorySyncClient(document, scope: 'server-a');
     final cache = FullTextTranslationCacheService(database: database);
-    final service = TranslationCacheSyncService(
-      client: client,
+    await TranslationCacheSyncService(
+      client: firstClient,
       database: database,
       cacheService: cache,
       tempDirectory: () async => directory,
-    );
+    ).sync();
+    final secondClient = MemorySyncClient(document, scope: 'server-b');
+    await TranslationCacheSyncService(
+      client: secondClient,
+      database: database,
+      cacheService: cache,
+      tempDirectory: () async => directory,
+    ).sync();
 
-    await service.sync();
-    await service.sync();
-
-    expect(client.downloads, 1);
+    expect(firstClient.downloads, 1);
+    expect(secondClient.downloads, 1);
     expect(await database.activeCountForBook(fingerprint), 1);
   });
 
@@ -133,6 +248,7 @@ void main() {
           version: translationCacheDatabaseVersion,
           singleInstance: false,
           onCreate: TranslationCacheDatabase.createSchema,
+          onUpgrade: TranslationCacheDatabase.upgradeSchema,
         ),
       ),
     );

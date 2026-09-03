@@ -16,8 +16,8 @@ branch is considered complete.
 
 ## Current stage
 
-Stages 1 and 2 are complete. Stage 3 (persistent translation-cache
-checkpoints) is next.
+All three planned implementation stages and repository verification are
+complete. Remaining work is optional release-device timing validation.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -53,6 +53,23 @@ Stage 2 implementation:
 - ETag hints are one-shot per coordinator pass so a stale discovery result
   cannot be reused after an upload.
 
+Stage 3 implementation:
+
+- Bumped `translation_cache.db` from schema v1 to v2 and added a narrow
+  `translation_sync_checkpoints` table with a tested v1-to-v2 migration.
+- Replaced process-memory checkpoints with database-backed remote/local token
+  pairs, so unchanged translation documents remain skippable after a process
+  restart.
+- Namespaced each checkpoint by a SHA-256 fingerprint of the sync client
+  protocol and configuration. No WebDAV credentials are stored in plaintext,
+  and a checkpoint from a different remote configuration cannot suppress a
+  download.
+- A local cache mutation still invalidates the checkpoint through the existing
+  per-book local token comparison. Missing remote metadata still uses the
+  previous conservative synchronization path.
+- Updated the runtime-order boundary test to match the ETag-enabled multiline
+  calls without weakening its ordering assertion.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -61,3 +78,16 @@ Stage 2 implementation:
 - Stage 2: the five existing affected suites plus new ETag regression tests
   passed (103 tests).
 - Stage 2 analyzer: no issues across all 11 changed Dart files.
+- Stage 3 focused cache/migration suites passed (37 tests); analyzer reported
+  no issues.
+- Final combined `test/service/sync` and `test/service/translate` run passed
+  all 344 tests.
+- Full-project analyzer reported no errors or warnings. It exits non-zero for
+  43 existing info-level notices elsewhere in the project; focused analysis of
+  every changed Dart file is clean.
+
+## Stage commits
+
+- `b7cd6b7f fix(sync): stop repeated reading bootstrap imports`
+- `ded9efeb perf(sync): skip unchanged WebDAV documents by ETag`
+- `perf(sync): persist translation sync checkpoints` (stage 3 commit subject)

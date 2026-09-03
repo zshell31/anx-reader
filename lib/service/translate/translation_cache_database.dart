@@ -4,7 +4,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 const String translationCacheDatabaseName = 'translation_cache.db';
-const int translationCacheDatabaseVersion = 1;
+const int translationCacheDatabaseVersion = 2;
 
 typedef TranslationCacheDatabaseOpener = Future<Database> Function();
 
@@ -24,6 +24,7 @@ class TranslationCacheDatabase {
       join(directory, translationCacheDatabaseName),
       version: translationCacheDatabaseVersion,
       onCreate: createSchema,
+      onUpgrade: upgradeSchema,
     );
   }
 
@@ -60,6 +61,29 @@ ON translation_cache(book_fingerprint_algorithm, book_fingerprint)
     await db.execute('''
 CREATE INDEX idx_translation_cache_updated_at
 ON translation_cache(updated_at)
+''');
+    if (version >= 2) await _createCheckpointSchema(db);
+  }
+
+  static Future<void> upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2 && newVersion >= 2) {
+      await _createCheckpointSchema(db);
+    }
+  }
+
+  static Future<void> _createCheckpointSchema(Database db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS translation_sync_checkpoints (
+  remote_scope TEXT NOT NULL,
+  book_fingerprint TEXT NOT NULL,
+  remote_token TEXT NOT NULL,
+  local_token TEXT NOT NULL,
+  PRIMARY KEY (remote_scope, book_fingerprint)
+)
 ''');
   }
 
@@ -211,6 +235,57 @@ WHERE book_fingerprint_algorithm = ? AND book_fingerprint = ?
     return '${row['entry_count'] ?? 0}:${row['latest_update'] ?? ''}';
   }
 
+  Future<TranslationSyncCheckpoint?> syncCheckpoint(
+    String remoteScope,
+    String bookFingerprint,
+  ) async {
+    final rows = await (await database).query(
+      'translation_sync_checkpoints',
+      where: 'remote_scope = ? AND book_fingerprint = ?',
+      whereArgs: <Object?>[
+        remoteScope,
+        bookFingerprint.toLowerCase(),
+      ],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return TranslationSyncCheckpoint(
+      remoteToken: rows.single['remote_token']! as String,
+      localToken: rows.single['local_token']! as String,
+    );
+  }
+
+  Future<void> saveSyncCheckpoint(
+    String remoteScope,
+    String bookFingerprint,
+    TranslationSyncCheckpoint checkpoint,
+  ) async {
+    await (await database).insert(
+      'translation_sync_checkpoints',
+      <String, Object?>{
+        'remote_scope': remoteScope,
+        'book_fingerprint': bookFingerprint.toLowerCase(),
+        'remote_token': checkpoint.remoteToken,
+        'local_token': checkpoint.localToken,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> removeSyncCheckpoint(
+    String remoteScope,
+    String bookFingerprint,
+  ) async {
+    await (await database).delete(
+      'translation_sync_checkpoints',
+      where: 'remote_scope = ? AND book_fingerprint = ?',
+      whereArgs: <Object?>[
+        remoteScope,
+        bookFingerprint.toLowerCase(),
+      ],
+    );
+  }
+
   Future<int> activeCountForBook(String bookFingerprint) async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -246,6 +321,16 @@ AND deleted_at IS NULL''',
     _database = null;
     if (database != null) await (await database).close();
   }
+}
+
+class TranslationSyncCheckpoint {
+  const TranslationSyncCheckpoint({
+    required this.remoteToken,
+    required this.localToken,
+  });
+
+  final String remoteToken;
+  final String localToken;
 }
 
 final translationCacheDatabase = TranslationCacheDatabase();

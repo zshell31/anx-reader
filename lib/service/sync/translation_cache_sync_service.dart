@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:anx_reader/models/full_text_translation_cache.dart';
@@ -8,6 +9,7 @@ import 'package:anx_reader/service/translate/full_text_translation_cache_service
 import 'package:anx_reader/service/translate/translation_cache_database.dart';
 import 'package:anx_reader/service/translate/translation_cache_merge.dart';
 import 'package:anx_reader/utils/get_path/get_temp_dir.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart';
 
 const String translationCacheRemoteDirectory = 'anx/data/translation-cache/v1';
@@ -22,15 +24,16 @@ class TranslationCacheSyncService {
   })  : cacheService = cacheService ?? fullTextTranslationCacheService,
         database = database ??
             (cacheService ?? fullTextTranslationCacheService).database,
+        _remoteScope = _checkpointScope(client),
         _clock = clock ?? DateTime.now,
         _tempDirectory = tempDirectory ?? getAnxTempDir;
 
   final SyncClientBase client;
   final TranslationCacheDatabase database;
   final FullTextTranslationCacheService cacheService;
+  final String _remoteScope;
   final DateTime Function() _clock;
   final Future<Directory> Function() _tempDirectory;
-  final Map<String, _TranslationSyncCheckpoint> _checkpoints = {};
 
   Future<void> sync() async {
     final remoteFiles =
@@ -57,7 +60,8 @@ class TranslationCacheSyncService {
         final remoteFile = remoteByFingerprint[fingerprint];
         final remoteToken = _remoteToken(remoteFile);
         final localToken = await database.bookSyncToken(fingerprint);
-        final checkpoint = _checkpoints[fingerprint];
+        final checkpoint =
+            await database.syncCheckpoint(_remoteScope, fingerprint);
         if (remoteToken != null &&
             checkpoint?.remoteToken == remoteToken &&
             checkpoint?.localToken == localToken) {
@@ -69,12 +73,16 @@ class TranslationCacheSyncService {
           () => _syncBook(fingerprint, remoteFile != null),
         );
         if (remoteToken != null) {
-          _checkpoints[fingerprint] = _TranslationSyncCheckpoint(
-            remoteToken,
-            await database.bookSyncToken(fingerprint),
+          await database.saveSyncCheckpoint(
+            _remoteScope,
+            fingerprint,
+            TranslationSyncCheckpoint(
+              remoteToken: remoteToken,
+              localToken: await database.bookSyncToken(fingerprint),
+            ),
           );
         } else {
-          _checkpoints.remove(fingerprint);
+          await database.removeSyncCheckpoint(_remoteScope, fingerprint);
         }
         completed++;
       } catch (error) {
@@ -85,6 +93,18 @@ class TranslationCacheSyncService {
     }
     syncDebug('translation-cache completed=$completed unchanged=$unchanged '
         'failed=$failed');
+  }
+
+  static String _checkpointScope(SyncClientBase client) {
+    final config = client.config.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    final identity = jsonEncode(<String, Object?>{
+      'protocol': client.protocolName,
+      'config': <String, String>{
+        for (final entry in config) entry.key: '${entry.value}',
+      },
+    });
+    return sha256.convert(utf8.encode(identity)).toString();
   }
 
   String? _remoteToken(RemoteFile? file) {
@@ -228,11 +248,4 @@ class TranslationCacheSyncService {
       if (await file.exists()) await file.delete();
     }
   }
-}
-
-class _TranslationSyncCheckpoint {
-  const _TranslationSyncCheckpoint(this.remoteToken, this.localToken);
-
-  final String remoteToken;
-  final String localToken;
 }

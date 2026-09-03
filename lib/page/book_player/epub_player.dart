@@ -107,7 +107,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   WritingModeEnum writingMode = WritingModeEnum.horizontalTb;
   String? _lastSelectionAnnotationContext;
   String? _lastSelectionLookupContext;
-  bool _hasObservedInitialRelocation = false;
   bool _hasReadingPositionMutation = false;
   bool _pendingExplicitReadingNavigation = false;
   final SelectionSessionBridgeState _selectionSession =
@@ -645,8 +644,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         callback: (args) {
           Map<String, dynamic> location = args[0];
           if (cfi == location['cfi']) return;
-          final isInitialRelocation = !_hasObservedInitialRelocation;
-          _hasObservedInitialRelocation = true;
           final reason = location['reason']?.toString();
           final isReaderMutation =
               reason == 'snap' || reason == 'page' || reason == 'scroll';
@@ -681,8 +678,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
           // Restoring the saved locator when the reader opens is not a user
           // mutation. Publishing it would manufacture a newer LWW stamp and
           // could overwrite a genuinely newer position from another device.
-          if (!isInitialRelocation &&
-              (isReaderMutation || isExplicitNavigation)) {
+          if (isReaderMutation || isExplicitNavigation) {
             _hasReadingPositionMutation = true;
             saveReadingProgress();
           }

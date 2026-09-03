@@ -1272,7 +1272,15 @@ class Reader {
   }
 
   #onRelocate({ detail }) {
-    const { cfi, fraction, location, tocItem, pageItem, chapterLocation } = detail
+    const {
+      reason,
+      cfi,
+      fraction,
+      location,
+      tocItem,
+      pageItem,
+      chapterLocation,
+    } = detail
     const session = getSelectionCoordinator(this.view).machine.current;
     if (session?.owner === this.#doc) {
       getAutoPageCoordinator(this.view).replacePage(
@@ -1286,6 +1294,7 @@ class Reader {
       : `Loc ${location.current}`
     this.#checkCurrentPageBookmark()
     onRelocated({
+      reason,
       cfi,
       fraction,
       loc,

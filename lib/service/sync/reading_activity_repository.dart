@@ -56,6 +56,7 @@ class SqliteReadingActivityProjection implements ReadingActivityProjection {
 
 class ReadingActivityRepository {
   static const bootstrapSource = 'reading-activity-v1';
+  static const bootstrapReceiptSource = 'reading-activity-v2';
   final SharedStateDatabase sharedState;
   final ReadingActivityProjection projection;
   final String deviceId;
@@ -146,8 +147,17 @@ class ReadingActivityRepository {
         deferred++;
         continue;
       }
+      final daySourceKey = '$fingerprint:$day';
+      if (await sharedState.importReceipt(
+            bootstrapReceiptSource,
+            daySourceKey,
+          ) !=
+          null) {
+        continue;
+      }
       final sourceKey = '$fingerprint:$day:${row.readingTime}';
       if (await sharedState.importReceipt(bootstrapSource, sourceKey) != null) {
+        await _recordBootstrapDayReceipt(daySourceKey);
         continue;
       }
       final eventId =
@@ -171,6 +181,19 @@ class ReadingActivityRepository {
           status: 'complete',
           detail: 'already-present',
         );
+        await _recordBootstrapDayReceipt(daySourceKey);
+        recognized++;
+        continue;
+      }
+      if (current != null && _liveDuration(current) == row.readingTime) {
+        await sharedState.recordImport(
+          source: bootstrapSource,
+          sourceKey: sourceKey,
+          sharedId: documentId,
+          status: 'complete',
+          detail: 'already-projected',
+        );
+        await _recordBootstrapDayReceipt(daySourceKey);
         recognized++;
         continue;
       }
@@ -187,6 +210,7 @@ class ReadingActivityRepository {
         sharedId: eventId,
         status: 'complete',
       );
+      await _recordBootstrapDayReceipt(daySourceKey);
       imported++;
     }
     syncDebug('bootstrap reading-activity imported=$imported '
@@ -197,6 +221,22 @@ class ReadingActivityRepository {
     }
     return imported;
   }
+
+  Future<void> _recordBootstrapDayReceipt(String sourceKey) =>
+      sharedState.recordImport(
+        source: bootstrapReceiptSource,
+        sourceKey: sourceKey,
+        status: 'complete',
+      );
+
+  int _liveDuration(Map<String, dynamic> document) =>
+      (document['events'] as List)
+          .cast<Map<String, dynamic>>()
+          .where((event) => event['deleted'] != true)
+          .fold<int>(
+            0,
+            (sum, event) => sum + event['durationSeconds'] as int,
+          );
 
   Future<void> _recordLegacyAggregate({
     required String fingerprint,
@@ -248,10 +288,7 @@ class ReadingActivityRepository {
       };
 
   Future<void> _project(Map<String, dynamic> document) async {
-    final total = (document['events'] as List)
-        .cast<Map<String, dynamic>>()
-        .where((event) => event['deleted'] != true)
-        .fold<int>(0, (sum, event) => sum + event['durationSeconds'] as int);
+    final total = _liveDuration(document);
     await projection.replaceAggregate(
         document['fingerprint'] as String, document['day'] as String, total);
   }

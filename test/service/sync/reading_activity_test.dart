@@ -141,6 +141,53 @@ void main() {
     expect(projection.aggregates[id], 90);
   });
 
+  test('projected daily total is not reimported as another legacy event',
+      () async {
+    final legacyRow =
+        ReadingTime(id: 9, bookId: 7, date: '2025-05-06', readingTime: 90);
+    projection = MemoryActivityProjection(
+      legacy: [legacyRow],
+      fingerprints: const {7: fingerprint},
+    );
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: projection,
+      deviceId: 'device-a',
+    );
+
+    expect(await repository.bootstrap(), 1);
+    await repository.recordSession(
+      fingerprint: fingerprint,
+      startedAt: DateTime.parse('2025-05-06T10:00:00Z'),
+      durationSeconds: 30,
+      eventId: eventA,
+    );
+    legacyRow.readingTime = 120;
+
+    // Simulate a restart after the canonical projection updated the mutable
+    // aggregate in the legacy database.
+    repository = ReadingActivityRepository(
+      sharedState: store,
+      projection: projection,
+      deviceId: 'device-a',
+    );
+    expect(await repository.bootstrap(), 0);
+    expect(await repository.bootstrap(), 0);
+
+    final id = readingActivityDocumentId(fingerprint, '2025-05-06');
+    final decoded = jsonDecode(utf8
+        .decode((await store.canonicalDocument(readingActivityDomain, id))!));
+    expect(decoded['events'], hasLength(2));
+    expect(projection.aggregates[id], 120);
+    expect(
+      await store.importReceipt(
+        ReadingActivityRepository.bootstrapReceiptSource,
+        '$fingerprint:2025-05-06',
+      ),
+      isNotNull,
+    );
+  });
+
   test('legacy import recognizes an event created by another device', () async {
     final legacy = [
       ReadingTime(id: 9, bookId: 7, date: '2025-05-06', readingTime: 90)

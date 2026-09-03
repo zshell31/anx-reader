@@ -31,6 +31,25 @@ void main() {
     expect(gate.isRunning, isFalse);
   });
 
+  test('passive trigger joins an active run without scheduling a follow-up',
+      () async {
+    final gate = SyncRunGate();
+    final firstPass = Completer<void>();
+    var runs = 0;
+    Future<void> operation() async {
+      runs++;
+      await firstPass.future;
+    }
+
+    final first = gate.run(operation);
+    final passive = gate.run(operation, queueFollowUp: false);
+    firstPass.complete();
+
+    await Future.wait([first, passive]);
+    expect(runs, 1);
+    expect(gate.isRunning, isFalse);
+  });
+
   test('remote discovery maps flat and nested collections to domain IDs',
       () async {
     const fingerprint = '0123456789abcdef0123456789abcdef';

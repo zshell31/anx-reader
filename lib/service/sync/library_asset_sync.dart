@@ -53,18 +53,25 @@ class SyncClientLibraryAssetTransport implements LibraryAssetTransport {
 }
 
 class LibraryAssetSyncService {
+  static const remotePresenceCacheLifetime = Duration(minutes: 1);
+
   final LibraryAssetTransport transport;
   final LibraryProjection projection;
   final String Function(String relativePath) resolveLocalPath;
   final Future<bool> Function(String fingerprint, String digest) isReleased;
+  final DateTime Function() _clock;
+  final Map<String, DateTime> _knownRemoteAssets = {};
+  final Map<String, _VerifiedLocalAsset> _verifiedLocalAssets = {};
 
   LibraryAssetSyncService({
     required this.transport,
     required this.projection,
     String Function(String relativePath)? resolveLocalPath,
     Future<bool> Function(String fingerprint, String digest)? isReleased,
+    DateTime Function()? clock,
   })  : resolveLocalPath = resolveLocalPath ?? getBasePath,
-        isReleased = isReleased ?? ((_, __) async => false);
+        isReleased = isReleased ?? ((_, __) async => false),
+        _clock = clock ?? DateTime.now;
 
   Future<LibraryAssetSyncResult> syncBook(
       Map<String, dynamic> catalogDocument) async {
@@ -90,13 +97,13 @@ class LibraryAssetSyncService {
     final relativePath = boundRelativePath ?? 'file/$digest$extension';
     final localPath = resolveLocalPath(relativePath);
     final local = File(localPath);
-    final localValid =
-        local.existsSync() && await _contentDigest(localPath) == digest;
-    final remoteExists = await transport.exists(remotePath);
+    final localValid = await _matchesLocalDigest(local, digest);
+    final remoteExists = await _remoteExists(remotePath);
 
     if (localValid && !remoteExists) {
       syncDebug('asset type=book digest=${shortSyncId(digest)} action=upload');
       await transport.upload(localPath, remotePath);
+      _rememberRemoteAsset(remotePath);
       return const LibraryAssetSyncResult(uploaded: true);
     }
     final released = !localValid && remoteExists
@@ -122,6 +129,7 @@ class LibraryAssetSyncService {
         }
         if (downloadFile.existsSync()) await downloadFile.delete();
         await partial.rename(downloadPath);
+        await _rememberLocalDigest(downloadFile, digest);
         await projection.bindBookAsset(
             fingerprint, downloadRelativePath, extension);
         return const LibraryAssetSyncResult(downloaded: true, bound: true);
@@ -157,12 +165,12 @@ class LibraryAssetSyncService {
     final relativePath = boundRelativePath ?? 'cover/$digest$extension';
     final localPath = resolveLocalPath(relativePath);
     final local = File(localPath);
-    final localValid =
-        local.existsSync() && await _contentDigest(localPath) == digest;
-    final remoteExists = await transport.exists(remotePath);
+    final localValid = await _matchesLocalDigest(local, digest);
+    final remoteExists = await _remoteExists(remotePath);
     if (localValid && !remoteExists) {
       syncDebug('asset type=cover digest=${shortSyncId(digest)} action=upload');
       await transport.upload(localPath, remotePath);
+      _rememberRemoteAsset(remotePath);
       return const LibraryAssetSyncResult(uploaded: true);
     }
     if (!localValid && remoteExists) {
@@ -184,6 +192,7 @@ class LibraryAssetSyncService {
         }
         if (target.existsSync()) await target.delete();
         await partial.rename(targetPath);
+        await _rememberLocalDigest(target, digest);
         await projection.bindCoverAsset(
             fingerprint, targetRelativePath, extension);
         return const LibraryAssetSyncResult(downloaded: true, bound: true);
@@ -202,6 +211,73 @@ class LibraryAssetSyncService {
 
   Future<String> _contentDigest(String path) async =>
       (await sha256.bind(File(path).openRead()).first).toString();
+
+  Future<bool> _remoteExists(List<String> path) async {
+    final key = path.join('/');
+    final checkedAt = _knownRemoteAssets[key];
+    if (checkedAt != null &&
+        _clock().isBefore(checkedAt.add(remotePresenceCacheLifetime))) {
+      return true;
+    }
+    final exists = await transport.exists(path);
+    if (exists) {
+      _knownRemoteAssets[key] = _clock();
+    } else {
+      _knownRemoteAssets.remove(key);
+    }
+    return exists;
+  }
+
+  void _rememberRemoteAsset(List<String> path) {
+    _knownRemoteAssets[path.join('/')] = _clock();
+  }
+
+  Future<bool> _matchesLocalDigest(File file, String expected) async {
+    if (!file.existsSync()) {
+      _verifiedLocalAssets.remove(file.path);
+      return false;
+    }
+    final stat = await file.stat();
+    final cached = _verifiedLocalAssets[file.path];
+    if (cached != null &&
+        cached.digest == expected &&
+        cached.size == stat.size &&
+        cached.modified == stat.modified) {
+      return true;
+    }
+    final actual = await _contentDigest(file.path);
+    if (actual != expected) {
+      _verifiedLocalAssets.remove(file.path);
+      return false;
+    }
+    _verifiedLocalAssets[file.path] = _VerifiedLocalAsset(
+      digest: actual,
+      size: stat.size,
+      modified: stat.modified,
+    );
+    return true;
+  }
+
+  Future<void> _rememberLocalDigest(File file, String digest) async {
+    final stat = await file.stat();
+    _verifiedLocalAssets[file.path] = _VerifiedLocalAsset(
+      digest: digest,
+      size: stat.size,
+      modified: stat.modified,
+    );
+  }
+}
+
+class _VerifiedLocalAsset {
+  const _VerifiedLocalAsset({
+    required this.digest,
+    required this.size,
+    required this.modified,
+  });
+
+  final String digest;
+  final int size;
+  final DateTime modified;
 }
 
 String _canonicalSha256(Object? value) {

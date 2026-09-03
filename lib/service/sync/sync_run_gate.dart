@@ -9,10 +9,16 @@ class SyncRunGate {
   bool get isRunning => _flight != null;
   Future<void> get idle => _flight ?? Future<void>.value();
 
-  Future<void> run(Future<void> Function() operation) {
-    _requested = true;
+  Future<void> run(
+    Future<void> Function() operation, {
+    bool queueFollowUp = true,
+  }) {
     final current = _flight;
-    if (current != null) return current;
+    if (current != null) {
+      if (queueFollowUp) _requested = true;
+      return current;
+    }
+    _requested = true;
     final completer = Completer<void>();
     _flight = completer.future;
     () async {

@@ -195,6 +195,22 @@ AND deleted_at IS NULL''',
     return rows.map((row) => row['book_fingerprint']! as String).toSet();
   }
 
+  /// Cheap change token used to avoid rebuilding a complete book document
+  /// when neither its local rows nor the remote ETag changed.
+  Future<String> bookSyncToken(String bookFingerprint) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+SELECT COUNT(*) AS entry_count, MAX(updated_at) AS latest_update
+FROM translation_cache
+WHERE book_fingerprint_algorithm = ? AND book_fingerprint = ?
+''', <Object?>[
+      bookFingerprintAlgorithmMd5,
+      bookFingerprint.toLowerCase(),
+    ]);
+    final row = result.single;
+    return '${row['entry_count'] ?? 0}:${row['latest_update'] ?? ''}';
+  }
+
   Future<int> activeCountForBook(String bookFingerprint) async {
     final db = await database;
     final result = await db.rawQuery('''

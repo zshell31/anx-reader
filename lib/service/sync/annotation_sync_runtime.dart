@@ -24,6 +24,7 @@ import 'package:anx_reader/service/sync/sync_run_gate.dart';
 import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/sync/sync_summary.dart';
 import 'package:anx_reader/service/sync/sync_client_factory.dart';
+import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/translation_cache_sync_service.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -60,6 +61,9 @@ class AnnotationSyncRuntime {
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   Future<void>? _reconfiguring;
   ConditionalWebDavTransport? _documentTransport;
+  SyncClientBase? _auxiliarySyncClient;
+  LibraryAssetSyncService? _assetSyncService;
+  TranslationCacheSyncService? _translationCacheSyncService;
   DateTime? _lastCompletedAt;
   int _lastDiscoveredDocumentCount = 0;
   bool _lastRunFailed = false;
@@ -172,6 +176,9 @@ class AnnotationSyncRuntime {
     _readingActivityService = null;
     _organizationService = null;
     _documentTransport = null;
+    _auxiliarySyncClient = null;
+    _assetSyncService = null;
+    _translationCacheSyncService = null;
     await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
     if (oldPresentation != null) await oldPresentation.close();
@@ -461,14 +468,25 @@ class AnnotationSyncRuntime {
       _logSkip('auto-disabled');
       return Future.value();
     }
-    _pendingTrigger = trigger;
+    final passiveTrigger = trigger == 'startup' ||
+        trigger == 'connectivity' ||
+        trigger == 'resume';
+    final queueFollowUp = manual || !passiveTrigger;
+    if (!_runGate.isRunning || queueFollowUp) {
+      _pendingTrigger = trigger;
+    } else {
+      syncDebug('trigger=$trigger coalesced=active-run');
+    }
     final reconfiguring = _reconfiguring;
     return reconfiguring ??
-        _runGate.run(() {
-          final passTrigger = _pendingTrigger;
-          return runWithSyncDiagnostics(
-              passTrigger, (_) => _runDiscoveryPass(passTrigger));
-        });
+        _runGate.run(
+          () {
+            final passTrigger = _pendingTrigger;
+            return runWithSyncDiagnostics(
+                passTrigger, (_) => _runDiscoveryPass(passTrigger));
+          },
+          queueFollowUp: queueFollowUp,
+        );
   }
 
   Future<void> _runDiscoveryPass(String trigger) async {
@@ -585,15 +603,8 @@ class AnnotationSyncRuntime {
     }
     final client = SyncClientFactory.currentClient;
     if (client == null) return;
-    final service = LibraryAssetSyncService(
-      transport: SyncClientLibraryAssetTransport(client),
-      projection: SqliteLibraryProjection(),
-      isReleased: (fingerprint, digest) async {
-        final receipt = await sharedState.importReceipt(
-            libraryAssetReleaseSource, fingerprint);
-        return receipt?.status == 'released' && receipt?.sharedId == digest;
-      },
-    );
+    _ensureAuxiliarySyncServices(client);
+    final service = _assetSyncService!;
     var checked = 0;
     var uploaded = 0;
     var downloaded = 0;
@@ -619,14 +630,30 @@ class AnnotationSyncRuntime {
   Future<void> _syncTranslationCacheBestEffort() async {
     final client = SyncClientFactory.currentClient;
     if (client == null) return;
+    _ensureAuxiliarySyncServices(client);
     syncDebug('phase=translation-cache started');
     try {
-      await TranslationCacheSyncService(client: client).sync();
+      await _translationCacheSyncService!.sync();
       syncDebug('phase=translation-cache completed');
     } catch (error) {
       syncWarning('phase=translation-cache failed '
           'error=${safeSyncError(error)}');
     }
+  }
+
+  void _ensureAuxiliarySyncServices(SyncClientBase client) {
+    if (identical(_auxiliarySyncClient, client)) return;
+    _auxiliarySyncClient = client;
+    _assetSyncService = LibraryAssetSyncService(
+      transport: SyncClientLibraryAssetTransport(client),
+      projection: SqliteLibraryProjection(),
+      isReleased: (fingerprint, digest) async {
+        final receipt = await sharedState.importReceipt(
+            libraryAssetReleaseSource, fingerprint);
+        return receipt?.status == 'released' && receipt?.sharedId == digest;
+      },
+    );
+    _translationCacheSyncService = TranslationCacheSyncService(client: client);
   }
 
   Future<LibrarySyncRepository> _ensureLibraryRepository() async {
@@ -716,6 +743,9 @@ class AnnotationSyncRuntime {
     _readingActivityService = null;
     _organizationService = null;
     _documentTransport = null;
+    _auxiliarySyncClient = null;
+    _assetSyncService = null;
+    _translationCacheSyncService = null;
     await sharedState.close();
     _started = false;
   }

@@ -14,6 +14,7 @@ class MemoryAssets implements LibraryAssetTransport {
   final Map<String, List<int>> objects = {};
   int uploads = 0;
   int downloads = 0;
+  int existenceChecks = 0;
 
   String key(List<String> path) => path.join('/');
 
@@ -24,8 +25,10 @@ class MemoryAssets implements LibraryAssetTransport {
   }
 
   @override
-  Future<bool> exists(List<String> path) async =>
-      objects.containsKey(key(path));
+  Future<bool> exists(List<String> path) async {
+    existenceChecks++;
+    return objects.containsKey(key(path));
+  }
 
   @override
   Future<void> upload(String localPath, List<String> remotePath) async {
@@ -126,6 +129,48 @@ void main() {
     expect((await service.syncBook(document)).uploaded, isTrue);
     expect((await service.syncBook(document)).uploaded, isFalse);
     expect(transport.uploads, 1);
+    expect(transport.existenceChecks, 1);
+  });
+
+  test('reuses verified immutable local and remote asset state', () async {
+    final bytes = <int>[21, 22, 23, 24];
+    final document = catalog(bytes);
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
+
+    expect((await service.syncBook(document)).bound, isTrue);
+    expect((await service.syncBook(document)).bound, isTrue);
+
+    expect(transport.existenceChecks, 1);
+    expect(transport.uploads, 0);
+    expect(transport.downloads, 0);
+  });
+
+  test('remote presence is checked again after the short cache lifetime',
+      () async {
+    final bytes = <int>[31, 32, 33, 34];
+    final document = catalog(bytes);
+    final digest = ((document['bookAsset'] as Map)['value'] as Map)['digest'];
+    final file = File('${directory.path}/book.epub');
+    await file.writeAsBytes(bytes);
+    projection.boundPath = 'book.epub';
+    transport.objects[libraryBookAssetSegments(digest).join('/')] = bytes;
+    var now = DateTime.utc(2026);
+    service = LibraryAssetSyncService(
+      transport: transport,
+      projection: projection,
+      resolveLocalPath: (relative) => '${directory.path}/$relative',
+      clock: () => now,
+    );
+
+    await service.syncBook(document);
+    now = now.add(LibraryAssetSyncService.remotePresenceCacheLifetime);
+    await service.syncBook(document);
+
+    expect(transport.existenceChecks, 2);
   });
 
   test('downloads, verifies, and binds a remote-only asset', () async {

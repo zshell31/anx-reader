@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:anx_reader/models/full_text_translation_cache.dart';
+import 'package:anx_reader/models/remote_file.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
@@ -17,39 +18,64 @@ class TranslationCacheSyncService {
     TranslationCacheDatabase? database,
     FullTextTranslationCacheService? cacheService,
     DateTime Function()? clock,
+    Future<Directory> Function()? tempDirectory,
   })  : cacheService = cacheService ?? fullTextTranslationCacheService,
         database = database ??
             (cacheService ?? fullTextTranslationCacheService).database,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _tempDirectory = tempDirectory ?? getAnxTempDir;
 
   final SyncClientBase client;
   final TranslationCacheDatabase database;
   final FullTextTranslationCacheService cacheService;
   final DateTime Function() _clock;
+  final Future<Directory> Function() _tempDirectory;
+  final Map<String, _TranslationSyncCheckpoint> _checkpoints = {};
 
   Future<void> sync() async {
     final remoteFiles =
         await client.safeReadDir('/$translationCacheRemoteDirectory');
-    final remoteFingerprints = remoteFiles
-        .map((file) => file.name ?? '')
-        .where((name) => RegExp(r'^[0-9a-fA-F]{32}\.json$').hasMatch(name))
-        .map((name) => name.substring(0, name.length - 5).toLowerCase())
-        .toSet();
+    final remoteByFingerprint = <String, RemoteFile>{};
+    for (final file in remoteFiles) {
+      final name = file.name ?? '';
+      if (!RegExp(r'^[0-9a-fA-F]{32}\.json$').hasMatch(name)) continue;
+      remoteByFingerprint[name.substring(0, name.length - 5).toLowerCase()] =
+          file;
+    }
     final fingerprints = <String>{
       ...await database.bookFingerprints(),
-      ...remoteFingerprints,
+      ...remoteByFingerprint.keys,
     }.toList()
       ..sort();
 
     var completed = 0;
     var failed = 0;
+    var unchanged = 0;
     syncDebug('translation-cache documents=${fingerprints.length}');
     for (final fingerprint in fingerprints) {
       try {
+        final remoteFile = remoteByFingerprint[fingerprint];
+        final remoteToken = _remoteToken(remoteFile);
+        final localToken = await database.bookSyncToken(fingerprint);
+        final checkpoint = _checkpoints[fingerprint];
+        if (remoteToken != null &&
+            checkpoint?.remoteToken == remoteToken &&
+            checkpoint?.localToken == localToken) {
+          unchanged++;
+          completed++;
+          continue;
+        }
         await cacheService.synchronizeSemanticMutation(
-          () =>
-              _syncBook(fingerprint, remoteFingerprints.contains(fingerprint)),
+          () => _syncBook(fingerprint, remoteFile != null),
         );
+        if (remoteToken != null) {
+          _checkpoints[fingerprint] = _TranslationSyncCheckpoint(
+            remoteToken,
+            await database.bookSyncToken(fingerprint),
+          );
+        } else {
+          _checkpoints.remove(fingerprint);
+        }
         completed++;
       } catch (error) {
         failed++;
@@ -57,7 +83,17 @@ class TranslationCacheSyncService {
             'failed error=${safeSyncError(error)}');
       }
     }
-    syncDebug('translation-cache completed=$completed failed=$failed');
+    syncDebug('translation-cache completed=$completed unchanged=$unchanged '
+        'failed=$failed');
+  }
+
+  String? _remoteToken(RemoteFile? file) {
+    if (file == null) return null;
+    final etag = file.eTag?.trim();
+    if (etag?.isNotEmpty == true) return 'etag:$etag';
+    final modified = file.mTime?.toUtc().toIso8601String();
+    if (modified == null && file.size == null) return null;
+    return 'metadata:${file.size ?? -1}:${modified ?? ''}';
   }
 
   Future<void> _syncBook(String fingerprint, bool remoteExists) async {
@@ -159,7 +195,7 @@ class TranslationCacheSyncService {
   Future<TranslationCacheBookDocument> _downloadDocument(
     String fingerprint,
   ) async {
-    final tempDir = await getAnxTempDir();
+    final tempDir = await _tempDirectory();
     final file = File(join(
       tempDir.path,
       'translation-cache-download-$fingerprint-${DateTime.now().microsecondsSinceEpoch}.json',
@@ -176,7 +212,7 @@ class TranslationCacheSyncService {
   }
 
   Future<void> _uploadDocument(TranslationCacheBookDocument document) async {
-    final tempDir = await getAnxTempDir();
+    final tempDir = await _tempDirectory();
     final file = File(join(
       tempDir.path,
       'translation-cache-upload-${document.bookFingerprint}-${DateTime.now().microsecondsSinceEpoch}.json',
@@ -192,4 +228,11 @@ class TranslationCacheSyncService {
       if (await file.exists()) await file.delete();
     }
   }
+}
+
+class _TranslationSyncCheckpoint {
+  const _TranslationSyncCheckpoint(this.remoteToken, this.localToken);
+
+  final String remoteToken;
+  final String localToken;
 }

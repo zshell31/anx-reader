@@ -25,9 +25,10 @@ branch is considered complete.
 
 ## Current stage
 
-Stages 1-10 are implemented and covered by the full relevant test suite. Stage
-10 requires release validation on the second reader to confirm that its dirty
-reading-activity document now converges.
+Stages 1-10 and cross-device release validation are complete. Historical
+reading-activity aggregate-cascade cleanup is intentionally left as a separate
+migration stage because it requires different retention rules for legacy-only
+days and days which also contain real session events.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -342,6 +343,26 @@ Three affected documents contain cascades created by the retired reimport bug:
 Their projected totals are inflated. Server-only deletion is unsafe because a
 device would merge its local cascade back; cleanup must be a separate protocol
 migration applied identically to local and remote canonical documents.
+
+### Stage 10 device validation
+
+Release commit `0072d48a` was installed on Onyx LOMONOSOV3 without clearing
+application data. The first attempted run had no network and was correctly
+skipped. The subsequent connected startup pass completed in 1.883 s.
+
+- The formerly failing dirty reading-activity document completed
+  `merge -> replace -> converged` at revision 16.
+- The run discovered 22 documents and ended with `pending=0 failed=0`; no
+  synchronization warning or error was emitted.
+- Discovery took about 1.258 s. Content domains, including the one-time repair
+  upload, took about 0.387 s. Initial two-book asset status took 67 ms, and no
+  asset transfer or SHA-256 fallback occurred.
+- A fresh read-only server check identified the repaired object as the
+  `2026-09-02` document. It contains 32 deterministic legacy events and 6 real
+  events; all 32 legacy events now use the stable canonical representation.
+- The merge deliberately retained legacy events which existed on only one
+  side, so compatibility repair loses no data but does not reduce the inflated
+  aggregate cascade. The independent cleanup migration remains necessary.
 
 ## Stage commits
 

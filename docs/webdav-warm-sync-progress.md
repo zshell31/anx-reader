@@ -10,6 +10,8 @@ Base commit: `bf6c9196 perf(sync): persist local asset verification`
 2. Skip clean document downloads when the WebDAV ETag is unchanged.
 3. Persist translation-cache synchronization checkpoints across restarts.
 4. Reuse recent persisted remote asset-presence checks during warm sync.
+5. Avoid object GETs for locally known documents absent from successful
+   discovery.
 
 Each completed stage is committed separately together with an update to this
 file. The full relevant test suite and static analysis must pass before the
@@ -85,6 +87,21 @@ Stage 4 implementation:
   regression test proving that a fresh persisted presence avoids a cold
   network request without changing local digest verification.
 
+Stage 5 implementation:
+
+- A successful WebDAV collection discovery is now treated as authoritative
+  for pull targets. Locally retained documents which were not listed no longer
+  generate redundant object `GET` requests and expected 404 responses.
+- Durable outbox work remains independent and still uploads local mutations,
+  including documents absent from the remote listing.
+- If discovery fails, pull target selection falls back to the previous union
+  of local and remotely discovered IDs, preserving conservative recovery.
+- Added direct regression coverage for both authoritative and fallback target
+  selection. The configured WebDAV was also probed read-only: recursive
+  `Depth: infinity` returned HTTP 403, and its advertised DAV capabilities do
+  not include `sync-collection`, so a safe one-request incremental discovery
+  is not available on this server.
+
 ## Verification log
 
 - Stage 1: `flutter test test/service/sync/reading_activity_test.dart
@@ -99,6 +116,8 @@ Stage 4 implementation:
   all 344 tests.
 - Stage 4 focused asset/database suites passed all 32 tests; focused analysis
   of the four affected Dart files reported no issues.
+- Stage 5 focused discovery/runtime/organization suites passed all 23 tests;
+  focused analysis of all four affected files reported no issues.
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
@@ -124,7 +143,8 @@ took 3.092 s and overlapped earlier phases; the explicit asset phase then spent
 about 1.454 s waiting for the shared work to finish. Stage 4 removes the
 per-book remote-presence requests from that path while the receipt is fresh;
 device timing validation is still required. Discovery still takes about
-1.323 s and is the next implementation target.
+1.323 s. Stage 5 reduces post-discovery object requests without caching away
+cross-device changes; device timing validation is still required.
 
 ## Stage commits
 
@@ -132,3 +152,4 @@ device timing validation is still required. Discovery still takes about
 - `ded9efeb perf(sync): skip unchanged WebDAV documents by ETag`
 - `perf(sync): persist translation sync checkpoints` (stage 3 commit subject)
 - `b4a96865 perf(sync): reuse recent remote asset presence`
+- `c6efbb0f perf(sync): trust successful discovery targets`

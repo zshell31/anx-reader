@@ -16,8 +16,8 @@ branch is considered complete.
 
 ## Current stage
 
-All three planned implementation stages and repository verification are
-complete. Remaining work is optional release-device timing validation.
+All three planned implementation stages, repository verification, and Samsung
+release-device timing validation are complete.
 
 Observed failure mechanism: the legacy import key contains the mutable daily
 aggregate duration. Canonical projection writes a larger aggregate back to the
@@ -85,6 +85,28 @@ Stage 3 implementation:
 - Full-project analyzer reported no errors or warnings. It exits non-zero for
   43 existing info-level notices elsewhere in the project; focused analysis of
   every changed Dart file is clean.
+
+## Samsung release validation
+
+Release commit `9d06ca4f` was installed on Samsung SM-M315F. Two startup syncs
+were captured after installation:
+
+- First run: 5.033 s total. Translation cache took about 1.204 s and created
+  its persistent checkpoint (`unchanged=0`). Reading bootstrap recognized the
+  three existing book/day aggregates without importing new events.
+- Second run after restart: 3.493 s total. Translation cache took about 29 ms
+  and reused its persisted checkpoint (`unchanged=1`). Reading bootstrap did
+  no work (`imported=0 recognized=0 deferred=0`).
+- All 22 remotely discovered shared documents used `skip-unchanged` where
+  their strong ETags matched. Content-domain time fell from the previous
+  device baseline of about 1.337 s to about 0.137 s.
+- Both runs completed with `pending=0 failed=0` and no sync errors.
+
+The remaining warm-run critical path is the startup book-asset status task. It
+took 3.092 s and overlapped earlier phases; the explicit asset phase then spent
+about 1.454 s waiting for the shared work to finish. Discovery still took
+about 1.323 s. Further work should target asset-status initialization/locking
+first, then discovery round trips.
 
 ## Stage commits
 

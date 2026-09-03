@@ -313,25 +313,40 @@ class LibraryAssetSyncService {
   }
 
   Future<bool> _checkLocalDigest(File file, String expected) async {
+    final stopwatch = Stopwatch()..start();
     if (!file.existsSync()) {
       _verifiedLocalAssets.remove(file.path);
       await saveLocalVerification?.call(file.path, null);
+      syncDebug('asset-local digest=${shortSyncId(expected)} '
+          'verification=miss reason=file-absent '
+          'durationMs=${stopwatch.elapsedMilliseconds}');
       return false;
     }
     final stat = await file.stat();
-    final cached = _verifiedLocalAssets[file.path] ??
-        await loadLocalVerification?.call(file.path);
-    if (cached != null &&
-        cached.digest == expected &&
-        cached.size == stat.size &&
-        cached.modified == stat.modified) {
-      _verifiedLocalAssets[file.path] = cached;
+    final memory = _verifiedLocalAssets[file.path];
+    final cached = memory ?? await loadLocalVerification?.call(file.path);
+    final mismatch = libraryLocalAssetVerificationMismatch(
+      cached,
+      expectedDigest: expected,
+      actualSize: stat.size,
+      actualModified: stat.modified,
+    );
+    if (mismatch == null) {
+      _verifiedLocalAssets[file.path] = cached!;
+      syncDebug('asset-local digest=${shortSyncId(expected)} '
+          'verification=hit source=${memory == null ? 'persisted' : 'memory'} '
+          'durationMs=${stopwatch.elapsedMilliseconds}');
       return true;
     }
+    syncDebug('asset-local digest=${shortSyncId(expected)} '
+        'verification=miss reason=$mismatch action=sha256');
     final actual = await contentDigest(file.path);
     if (actual != expected) {
       _verifiedLocalAssets.remove(file.path);
       await saveLocalVerification?.call(file.path, null);
+      syncWarning('asset-local digest=${shortSyncId(expected)} '
+          'verification=failed reason=sha256-mismatch '
+          'durationMs=${stopwatch.elapsedMilliseconds}');
       return false;
     }
     final verification = LibraryLocalAssetVerification(
@@ -341,6 +356,9 @@ class LibraryAssetSyncService {
     );
     _verifiedLocalAssets[file.path] = verification;
     await saveLocalVerification?.call(file.path, verification);
+    syncDebug('asset-local digest=${shortSyncId(expected)} '
+        'verification=stored result=sha256-match '
+        'durationMs=${stopwatch.elapsedMilliseconds}');
     return true;
   }
 
@@ -369,6 +387,19 @@ class LibraryLocalAssetVerification {
   final String digest;
   final int size;
   final DateTime modified;
+}
+
+String? libraryLocalAssetVerificationMismatch(
+  LibraryLocalAssetVerification? verification, {
+  required String expectedDigest,
+  required int actualSize,
+  required DateTime actualModified,
+}) {
+  if (verification == null) return 'receipt-missing';
+  if (verification.digest != expectedDigest) return 'digest-changed';
+  if (verification.size != actualSize) return 'size-changed';
+  if (verification.modified != actualModified) return 'modified-changed';
+  return null;
 }
 
 String _canonicalSha256(Object? value) {

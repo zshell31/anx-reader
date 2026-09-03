@@ -266,6 +266,44 @@ void main() {
     expect(digestCalculations, 2);
   });
 
+  test('local verification mismatch reports the exact invalidating field', () {
+    final modified = DateTime.utc(2026, 9, 3, 12, 30);
+    final verification = LibraryLocalAssetVerification(
+      digest: 'a' * 64,
+      size: 42,
+      modified: modified,
+    );
+
+    String? mismatch({
+      String? digest,
+      int? size,
+      DateTime? timestamp,
+    }) =>
+        libraryLocalAssetVerificationMismatch(
+          verification,
+          expectedDigest: digest ?? 'a' * 64,
+          actualSize: size ?? 42,
+          actualModified: timestamp ?? modified,
+        );
+
+    expect(mismatch(), isNull);
+    expect(
+      libraryLocalAssetVerificationMismatch(
+        null,
+        expectedDigest: 'a' * 64,
+        actualSize: 42,
+        actualModified: modified,
+      ),
+      'receipt-missing',
+    );
+    expect(mismatch(digest: 'b' * 64), 'digest-changed');
+    expect(mismatch(size: 43), 'size-changed');
+    expect(
+      mismatch(timestamp: modified.add(const Duration(seconds: 1))),
+      'modified-changed',
+    );
+  });
+
   test('remote presence is checked again after the short cache lifetime',
       () async {
     final bytes = <int>[31, 32, 33, 34];

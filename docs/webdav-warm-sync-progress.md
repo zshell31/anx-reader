@@ -391,6 +391,23 @@ events, legacy aggregates, or old daily documents. During first-create
 reconciliation one request briefly received 412; the existing bounded LOCK
 fallback converged revision 1 and did not duplicate data or leave failed work.
 
+### Cross-device reading activity validation
+
+Onyx then created a fresh 13-second UUIDv4 activity event for the second book.
+The server contained exactly two 2026-09-04 documents with one event each,
+totalling 30 and 13 seconds, with no legacy or deleted entries. The second
+first-create also exercised the bounded 412/LOCK fallback and converged with
+`pending=0` and `failed=0`; its full run took 1.860 s.
+
+Samsung started from the post-reset empty local activity state. Its startup run
+discovered both remote documents, stored them as clean revision-zero pulls,
+and projected them locally without any activity push, create, or replace. It
+completed in 2.310 s with `pending=0` and `failed=0`. An immediate manual run
+then skipped both documents by matching ETag and completed in 1.013 s. A final
+read-only WebDAV audit and byte comparison confirmed that both server JSON
+files were unchanged: two documents, two unique events, zero legacy events,
+and the same 43-second total.
+
 ### Stage 10 device validation
 
 Release commit `0072d48a` was installed on Onyx LOMONOSOV3 without clearing

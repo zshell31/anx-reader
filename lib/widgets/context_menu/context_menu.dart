@@ -4,6 +4,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
 import 'package:flutter/material.dart';
@@ -27,9 +28,16 @@ Future<void> showContextMenu(
     String? annotationType,
     String? annotationColor}) async {
   final playerKey = epubPlayerKey.currentState;
-  if (playerKey == null) return;
+  if (playerKey == null) {
+    AnxLog.warning('[SelectionUI] menu rejected: player unavailable');
+    return;
+  }
   if (selectionSessionGeneration != null &&
       !playerKey.isSelectionSessionCurrent(selectionSessionGeneration)) {
+    AnxLog.info(
+      '[SelectionUI] menu rejected: stale generation '
+      'generation=$selectionSessionGeneration',
+    );
     return;
   }
 
@@ -100,13 +108,19 @@ Future<void> showContextMenu(
     return;
   }
 
-  void onClose() {
+  void close(String reason) {
+    AnxLog.info(
+      '[SelectionUI] close requested reason=$reason '
+      'generation=$selectionSessionGeneration',
+    );
     if (selectionSessionGeneration != null) {
       playerKey.hideSelectionActions(selectionSessionGeneration);
     } else {
       playerKey.removeOverlay();
     }
   }
+
+  void onClose() => close('menu-action');
 
   Future<bool> prepareExternalAction() async {
     if (selectionSessionGeneration != null) {
@@ -156,9 +170,12 @@ Future<void> showContextMenu(
       children: [
         Positioned.fill(
           child: PointerInterceptor(
-            child: GestureDetector(
+            child: Listener(
               behavior: HitTestBehavior.opaque,
-              onTap: onClose,
+              // A thumb tap can exceed Flutter's tap slop or be cancelled by
+              // Android. Waiting for GestureDetector.onTap would then leave
+              // this full-screen layer intercepting every later interaction.
+              onPointerDown: (_) => close('outside-pointer-down'),
             ),
           ),
         ),
@@ -192,6 +209,10 @@ Future<void> showContextMenu(
 
   playerKey.contextMenuSelectionSessionGeneration = selectionSessionGeneration;
   Overlay.of(context).insert(playerKey.contextMenuEntry!);
+  AnxLog.info(
+    '[SelectionUI] overlay inserted '
+    'generation=$selectionSessionGeneration footnote=$footnote',
+  );
 }
 
 class _MenuPlacement {

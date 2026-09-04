@@ -128,6 +128,12 @@ const selectionCoordinator = {
 
 const getSelectionCoordinator = () => selectionCoordinator;
 
+const logSelectionLifecycle = (event, details = {}) => {
+  // Keep selection diagnostics free of selected text and CFI data. These
+  // messages are forwarded to the exported application log by Flutter.
+  console.log(`[SelectionLifecycle] ${event} ${JSON.stringify(details)}`);
+};
+
 const getRangeKey = (coordinator, range) => {
   const nodeId = node => {
     let id = coordinator.nodeIds.get(node);
@@ -170,6 +176,11 @@ const publishSelection = (view, doc, index, range) => {
   coordinator.payload = { ...payload, sessionId: transition.session.generation };
   coordinator.activeView = view;
   globalThis.__anxActiveSelectionView = view;
+  logSelectionLifecycle('selected', {
+    generation: transition.session.generation,
+    index,
+    textLength: payload.text.length,
+  });
   callFlutter('onSelectionChanged', coordinator.payload);
   return transition.session;
 };
@@ -186,6 +197,7 @@ const endSelectionSession = (view, doc, generation) => {
     globalThis.__anxActiveSelectionView = null;
   }
   getAutoPageCoordinator(view).end(ended.owner, ended.generation);
+  logSelectionLifecycle('cleared', { generation: ended.generation });
   callFlutter('onSelectionCleared', { sessionId: ended.generation });
   return true;
 };
@@ -197,11 +209,27 @@ const toggleSelectionActions = (view, doc, generation, rangeKey) => {
   if (!session) return false;
 
   if (session.state === SelectionSessionState.actionsVisible) {
+    logSelectionLifecycle('actions-requested', { generation });
     callFlutter('onSelectionActionsRequested', coordinator.payload);
   } else {
+    logSelectionLifecycle('actions-hidden', { generation });
     callFlutter('onSelectionActionsHidden', { sessionId: generation });
   }
   return true;
+};
+
+const verifyVisibleSelection = (view, doc, generation) => {
+  setTimeout(() => {
+    const coordinator = getSelectionCoordinator(view);
+    if (!coordinator.machine.matchesSession(doc, generation)) return;
+    if (getSelectionRange(doc.getSelection())) return;
+
+    // Some Android WebViews collapse the Range after pointerup without a final
+    // selectionchange. Retire the matching menu session so Flutter cannot keep
+    // an invisible full-screen overlay alive.
+    logSelectionLifecycle('integrity-check-missing-range', { generation });
+    endSelectionSession(view, doc, generation);
+  }, 150);
 };
 
 const AUTO_PAGE_SCREEN_BOTTOM_THRESHOLD = 0.9;
@@ -291,6 +319,13 @@ const setSelectionHandler = (view, doc, index) => {
     const insideExact = pointIsInsideRange(range, e.clientX, e.clientY);
     const inside = pointIsInsideRange(
       range, e.clientX, e.clientY, selectionTapHitSlop);
+    logSelectionLifecycle('pointer-down', {
+      generation: session.generation,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      inside,
+      insideExact,
+    });
     coordinator.pendingPointer = {
       doc,
       pointerId: e.pointerId,
@@ -307,6 +342,10 @@ const setSelectionHandler = (view, doc, index) => {
   }, true);
 
   doc.addEventListener('pointercancel', e => {
+    logSelectionLifecycle('pointer-cancel', {
+      generation: coordinator.pendingPointer?.generation ?? null,
+      pointerId: e.pointerId,
+    });
     coordinator.gestureOwnership.cancelPointer(doc, e.pointerId);
     const pending = coordinator.pendingPointer;
     if (pending?.doc !== doc || pending.pointerId !== e.pointerId) return;
@@ -355,6 +394,7 @@ const setSelectionHandler = (view, doc, index) => {
 
     if (pending.inside) {
       toggleSelectionActions(view, doc, pending.generation, rangeKey);
+      verifyVisibleSelection(view, doc, pending.generation);
       return;
     }
 

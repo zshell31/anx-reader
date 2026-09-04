@@ -708,7 +708,20 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       handlerName: 'onSelectionChanged',
       callback: (args) {
         final location = Map<String, dynamic>.from(args[0] as Map);
-        if (!_selectionSession.selectionChanged(location)) return;
+        if (!_selectionSession.selectionChanged(location)) {
+          AnxLog.info(
+            '[SelectionUI] selection changed rejected '
+            'incoming=${location['sessionId']} '
+            'current=${_selectionSession.generation} '
+            'phase=${_selectionSession.phase.name}',
+          );
+          return;
+        }
+
+        AnxLog.info(
+          '[SelectionUI] selection changed accepted '
+          'generation=${_selectionSession.generation}',
+        );
 
         _lastSelectionAnnotationContext =
             _selectionContext(location, 'annotationContext');
@@ -721,9 +734,20 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       handlerName: 'onSelectionActionsRequested',
       callback: (args) {
         final location = Map<String, dynamic>.from(args[0] as Map);
-        if (!_selectionSession.actionsRequested(location)) return;
+        if (!_selectionSession.actionsRequested(location)) {
+          AnxLog.info(
+            '[SelectionUI] actions request rejected '
+            'incoming=${location['sessionId']} '
+            'current=${_selectionSession.generation} '
+            'phase=${_selectionSession.phase.name}',
+          );
+          return;
+        }
 
         final generation = _selectionSession.generation!;
+        AnxLog.info(
+          '[SelectionUI] actions request accepted generation=$generation',
+        );
         _lastSelectionAnnotationContext =
             _selectionContext(location, 'annotationContext');
         _lastSelectionLookupContext =
@@ -751,7 +775,11 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       callback: (args) {
         final payload = Map<String, dynamic>.from(args[0] as Map);
         final generation = (payload['sessionId'] as num).toInt();
-        _selectionSession.actionsHidden(generation);
+        final accepted = _selectionSession.actionsHidden(generation);
+        AnxLog.info(
+          '[SelectionUI] actions hidden generation=$generation '
+          'accepted=$accepted current=${_selectionSession.generation}',
+        );
         removeOverlay(selectionSessionGeneration: generation);
       },
     );
@@ -760,7 +788,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       callback: (args) {
         final payload = Map<String, dynamic>.from(args[0] as Map);
         final generation = (payload['sessionId'] as num).toInt();
-        if (_selectionSession.selectionCleared(generation)) {
+        final accepted = _selectionSession.selectionCleared(generation);
+        AnxLog.info(
+          '[SelectionUI] selection cleared generation=$generation '
+          'accepted=$accepted current=${_selectionSession.generation}',
+        );
+        if (accepted) {
           _lastSelectionAnnotationContext = null;
           _lastSelectionLookupContext = null;
         }
@@ -972,10 +1005,22 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void removeOverlay({int? selectionSessionGeneration}) {
     if (selectionSessionGeneration != null &&
         contextMenuSelectionSessionGeneration != selectionSessionGeneration) {
+      AnxLog.info(
+        '[SelectionUI] overlay removal rejected '
+        'requested=$selectionSessionGeneration '
+        'overlay=$contextMenuSelectionSessionGeneration',
+      );
       return;
     }
-    if (contextMenuEntry?.mounted == true) {
-      contextMenuEntry?.remove();
+    final entry = contextMenuEntry;
+    final overlayGeneration = contextMenuSelectionSessionGeneration;
+    AnxLog.info(
+      '[SelectionUI] overlay removal '
+      'requested=$selectionSessionGeneration overlay=$overlayGeneration '
+      'present=${entry != null} mounted=${entry?.mounted == true}',
+    );
+    if (entry?.mounted == true) {
+      entry?.remove();
     }
     contextMenuEntry = null;
     contextMenuSelectionSessionGeneration = null;
@@ -983,6 +1028,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   void hideSelectionActions(int generation) {
     final wasVisible = _selectionSession.actionsHidden(generation);
+    AnxLog.info(
+      '[SelectionUI] hide requested generation=$generation '
+      'wasVisible=$wasVisible current=${_selectionSession.generation}',
+    );
     removeOverlay(selectionSessionGeneration: generation);
     if (!wasVisible) return;
     webViewController.evaluateJavascript(

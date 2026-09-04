@@ -238,7 +238,26 @@ void main() {
     expect(menuSource, contains('StackFit.expand'));
     expect(menuSource, contains('Positioned.fill('));
     expect(menuSource, contains('behavior: HitTestBehavior.opaque'));
-    expect(menuSource, contains('onTap: onClose'));
+    expect(menuSource,
+        contains("onPointerDown: (_) => close('outside-pointer-down')"));
+    expect(menuSource, isNot(contains('onTap: onClose')));
+    expect(menuSource, contains('[SelectionUI] overlay inserted'));
+  });
+
+  test('selection action lifecycle has privacy-safe diagnostics and watchdog',
+      () {
+    final bookSource = File('assets/foliate-js/src/book.js').readAsStringSync();
+    final playerSource =
+        File('lib/page/book_player/epub_player.dart').readAsStringSync();
+
+    expect(bookSource, contains('[SelectionLifecycle]'));
+    expect(bookSource, contains('integrity-check-missing-range'));
+    expect(bookSource,
+        contains('coordinator.machine.matchesSession(doc, generation)'));
+    expect(bookSource, isNot(contains("details.text")));
+    expect(bookSource, isNot(contains("details.cfi")));
+    expect(playerSource, contains('[SelectionUI] actions request accepted'));
+    expect(playerSource, contains('[SelectionUI] overlay removal'));
   });
 
   test('internal editor handoff clears only its owning DOM selection', () {

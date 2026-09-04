@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -6,17 +7,20 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
+import 'package:anx_reader/page/book_player/pdf_edge_tap.dart';
 import 'package:anx_reader/page/book_player/pdf_outline.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
 import 'package:anx_reader/page/book_player/pdf_selection_action_menu.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
 import 'package:anx_reader/page/book_player/pdf_viewport.dart';
+import 'package:anx_reader/page/book_player/pdf_word_selection.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/book_toc.dart';
 import 'package:anx_reader/providers/current_reading.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/utils/toast/common.dart';
@@ -46,6 +50,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   final PdfViewerController controller = PdfViewerController();
   Timer? _saveDebounce;
   late final int _initialPageNumber;
+  late final double? _initialPageOffsetRatio;
   int _currentPageNumber = 1;
   int _pageCount = 0;
   int _annotationGeneration = 0;
@@ -56,6 +61,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   bool _annotationEditorOpen = false;
   Map<String, PdfDest> _outlineDestinations = const {};
   int _viewportGeneration = 0;
+  int _wordSelectionGeneration = 0;
 
   @override
   void initState() {
@@ -64,6 +70,9 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
           widget.initialPosition ?? widget.book.lastReadPosition,
         ) ??
         1;
+    _initialPageOffsetRatio = decodePdfReadingOffset(
+      widget.initialPosition ?? widget.book.lastReadPosition,
+    );
     _currentPageNumber = _initialPageNumber;
     _textBlockLoader = PdfTextBlockPageLoader(loadPageText: _loadPageText);
     ref.read(bookTocProvider.notifier).setToc(const []);
@@ -102,7 +111,39 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       );
       return;
     }
-    if (controller.isReady) await controller.goToDest(destination);
+    if (controller.isReady) {
+      await controller.goToDest(destination);
+    }
+  }
+
+  Future<void> goToAnnotation(PdfAnnotationTarget target) async {
+    if (_reflowMode) {
+      await _reflowPageController?.animateToPage(
+        target.page - 1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    await _goToPageOffset(target.page, target.pageOffsetRatio);
+  }
+
+  Future<void> _goToPageOffset(int pageNumber, double? offsetRatio) async {
+    if (!controller.isReady || pageNumber < 1 || pageNumber > _pageCount) {
+      return;
+    }
+    if (offsetRatio == null) {
+      await controller.goToPage(pageNumber: pageNumber);
+      return;
+    }
+    final pageRect = controller.layout.pageLayouts[pageNumber - 1];
+    final anchorY = math.min(120.0, controller.viewSize.height / 3);
+    final focusY = pageRect.top +
+        pageRect.height * offsetRatio.clamp(0, 1) +
+        (controller.viewSize.height / 2 - anchorY) / controller.currentZoom;
+    controller.value = controller.calcMatrixFor(
+      Offset(pageRect.center.dx, focusY),
+    );
   }
 
   Future<void> zoomIn() async {
@@ -196,6 +237,15 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _publishReadingState();
     unawaited(refreshAnnotations());
     unawaited(_loadOutline(document));
+    if (_initialPageOffsetRatio != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_goToPageOffset(
+          _initialPageNumber.clamp(1, _pageCount),
+          _initialPageOffsetRatio,
+        ));
+      });
+    }
   }
 
   void _onViewSizeChanged(
@@ -241,7 +291,23 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       dismissContextMenu: params.dismissContextMenu,
       refreshAnnotations: refreshAnnotations,
       loadPageSize: _loadPageSize,
+      resolvePageOffset: _resolvePageOffset,
     );
+  }
+
+  double? _resolvePageOffset(PdfPageTextRange range) {
+    if (!controller.isReady ||
+        range.pageNumber < 1 ||
+        range.pageNumber > controller.layout.pageLayouts.length) {
+      return null;
+    }
+    final pageRect = controller.layout.pageLayouts[range.pageNumber - 1];
+    if (pageRect.height <= 0) return null;
+    final selectionRect = controller.calcRectForRectInsidePage(
+      pageNumber: range.pageNumber,
+      rect: range.bounds,
+    );
+    return ((selectionRect.top - pageRect.top) / pageRect.height).clamp(0, 1);
   }
 
   Future<void> refreshAnnotations() async {
@@ -364,31 +430,96 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     PdfViewerController value,
     PdfViewerGeneralTapHandlerDetails details,
   ) {
-    if (details.type != PdfViewerGeneralTapType.tap) return false;
-    final hit = hitTestPdfAnnotations(
-      position: details.documentPosition,
-      annotations: _renderedAnnotations.values.expand((value) => value),
-      rectsFor: (annotation) sync* {
-        for (final fragment
-            in annotation.range.enumerateFragmentBoundingRects()) {
-          yield controller
-              .calcRectForRectInsidePage(
-                pageNumber: annotation.range.pageNumber,
-                rect: fragment.bounds,
-              )
-              .inflate(2);
-        }
-      },
-    );
-    if (hit.kind == PdfAnnotationHitKind.unique) {
-      unawaited(_openRenderedAnnotationEditor(hit.annotation!));
+    final interactionGeneration = ++_wordSelectionGeneration;
+    if (details.type == PdfViewerGeneralTapType.tap) {
+      final hit = hitTestPdfAnnotations(
+        position: details.documentPosition,
+        annotations: _renderedAnnotations.values.expand((value) => value),
+        rectsFor: (annotation) sync* {
+          for (final fragment
+              in annotation.range.enumerateFragmentBoundingRects()) {
+            yield controller
+                .calcRectForRectInsidePage(
+                  pageNumber: annotation.range.pageNumber,
+                  rect: fragment.bounds,
+                )
+                .inflate(2);
+          }
+        },
+      );
+      if (hit.kind == PdfAnnotationHitKind.unique) {
+        unawaited(_openRenderedAnnotationEditor(hit.annotation!));
+        return true;
+      }
+      if (hit.kind == PdfAnnotationHitKind.ambiguous) return true;
+    }
+    if (details.type == PdfViewerGeneralTapType.longPress &&
+        details.tapOn == PdfViewerPart.nonSelectedText) {
+      unawaited(_selectTouchedPdfWord(
+        details.documentPosition,
+        interactionGeneration,
+      ));
       return true;
     }
-    if (hit.kind == PdfAnnotationHitKind.ambiguous) return true;
-    if (details.tapOn != PdfViewerPart.selectedText) {
-      widget.showOrHideAppBarAndBottomBar(true);
+    if (details.type != PdfViewerGeneralTapType.tap ||
+        details.tapOn == PdfViewerPart.selectedText) {
+      return false;
     }
-    return false;
+    final edgeAction = pdfEdgeTapAction(
+      x: details.localPosition.dx,
+      viewWidth: controller.viewSize.width,
+    );
+    switch (edgeAction) {
+      case PdfEdgeTapAction.previousPage:
+        unawaited(prevPage());
+        return true;
+      case PdfEdgeTapAction.nextPage:
+        unawaited(nextPage());
+        return true;
+      case null:
+        widget.showOrHideAppBarAndBottomBar(true);
+        return false;
+    }
+  }
+
+  Future<void> _selectTouchedPdfWord(
+    Offset documentPosition,
+    int interactionGeneration,
+  ) async {
+    if (!controller.isReady) return;
+    final range =
+        await controller.useDocument<PdfTextSelectionRange?>((pdf) async {
+      final layouts = controller.layout.pageLayouts;
+      for (var index = 0; index < layouts.length; index++) {
+        final pageRect = layouts[index];
+        if (!pageRect.contains(documentPosition)) continue;
+        final page = pdf.pages[index];
+        final pageText = await page.loadStructuredText();
+        final point = documentPosition
+            .translate(-pageRect.left, -pageRect.top)
+            .toPdfPoint(page: page, scaledPageSize: pageRect.size);
+        final characterIndex = findPdfCharacterIndex(pageText, point);
+        if (characterIndex == null) return null;
+        final word = pdfWordRangeAt(pageText.fullText, characterIndex);
+        if (word == null) return null;
+        return PdfTextSelectionRange.fromPoints(
+          PdfTextSelectionPoint(pageText, word.start),
+          PdfTextSelectionPoint(pageText, word.end - 1),
+        );
+      }
+      return null;
+    });
+    if (!mounted ||
+        interactionGeneration != _wordSelectionGeneration ||
+        range == null) {
+      return;
+    }
+
+    // Let pdfrx establish its normal touch handles/menu state, then replace its
+    // paragraph-sized fragment with the actual word range.
+    await controller.textSelectionDelegate.selectWord(documentPosition);
+    if (!mounted || interactionGeneration != _wordSelectionGeneration) return;
+    await controller.textSelectionDelegate.setTextSelectionPointRange(range);
   }
 
   Future<void> _openRenderedAnnotationEditor(

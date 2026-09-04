@@ -20,6 +20,7 @@ class PdfSelectionActionMenu extends StatefulWidget {
     required this.dismissContextMenu,
     required this.refreshAnnotations,
     required this.loadPageSize,
+    required this.resolvePageOffset,
   });
 
   final Book book;
@@ -29,6 +30,7 @@ class PdfSelectionActionMenu extends StatefulWidget {
   final VoidCallback dismissContextMenu;
   final Future<void> Function() refreshAnnotations;
   final PdfPageSizeLoader loadPageSize;
+  final PdfPageOffsetResolver resolvePageOffset;
 
   @override
   State<PdfSelectionActionMenu> createState() => _PdfSelectionActionMenuState();
@@ -39,8 +41,11 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
 
   Future<_PdfSelectionMenuData?> _loadData() async {
     final ranges = await widget.selection.getSelectedTextRanges();
-    final selectionData =
-        await buildPdfSelectionData(ranges, widget.loadPageSize);
+    final selectionData = await buildPdfSelectionData(
+      ranges,
+      widget.loadPageSize,
+      resolvePageOffset: widget.resolvePageOffset,
+    );
     if (selectionData == null) return null;
     final target = selectionData.target;
     final context = selectionData.context;

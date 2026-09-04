@@ -101,6 +101,7 @@ class PdfAnnotationTarget {
     required this.exact,
     required this.prefix,
     required this.suffix,
+    this.pageOffsetRatio,
     this.firstPageTarget,
     this.additionalPageTargets = const [],
   });
@@ -109,6 +110,7 @@ class PdfAnnotationTarget {
   final String exact;
   final String prefix;
   final String suffix;
+  final double? pageOffsetRatio;
   final PdfAnnotationPageTarget? firstPageTarget;
   final List<PdfAnnotationPageTarget> additionalPageTargets;
 
@@ -128,6 +130,7 @@ class PdfAnnotationTarget {
   factory PdfAnnotationTarget.fromPageTargets({
     required List<PdfAnnotationPageTarget> targets,
     required String exact,
+    double? pageOffsetRatio,
   }) {
     if (targets.isEmpty || exact.trim().isEmpty) {
       throw ArgumentError('PDF selection must contain page targets and text');
@@ -138,6 +141,7 @@ class PdfAnnotationTarget {
       exact: exact.trim(),
       prefix: first.prefix,
       suffix: targets.last.suffix,
+      pageOffsetRatio: pageOffsetRatio,
       firstPageTarget: first,
       additionalPageTargets: targets.skip(1).toList(growable: false),
     );
@@ -149,6 +153,7 @@ class PdfAnnotationTarget {
     required int start,
     required int end,
     int contextLength = 64,
+    double? pageOffsetRatio,
   }) {
     if (page < 1 || start < 0 || end > pageText.length || start >= end) {
       throw RangeError('Invalid PDF text selection');
@@ -165,12 +170,14 @@ class PdfAnnotationTarget {
       exact: target.exact,
       prefix: target.prefix,
       suffix: target.suffix,
+      pageOffsetRatio: pageOffsetRatio,
     );
   }
 
   static PdfAnnotationTarget? fromSelectors(Object? value) {
     if (value is! List) return null;
     final pages = <int>{};
+    double? pageOffsetRatio;
     final quotes = <({String exact, String prefix, String suffix})>{};
     List<PdfAnnotationPageTarget>? rangeTargets;
     for (final selector in value) {
@@ -178,6 +185,10 @@ class PdfAnnotationTarget {
       if (selector['type'] == 'pdf-page') {
         final page = selector['page'];
         if (page is int && page > 0) pages.add(page);
+        final rawOffset = selector['pageOffsetRatio'];
+        if (rawOffset is num && rawOffset.isFinite) {
+          pageOffsetRatio = rawOffset.toDouble().clamp(0, 1);
+        }
       } else if (selector['type'] == 'text-quote') {
         final exact = selector['exact'];
         final prefix = selector['prefix'];
@@ -212,6 +223,7 @@ class PdfAnnotationTarget {
       return PdfAnnotationTarget.fromPageTargets(
         targets: rangeTargets,
         exact: quote.exact,
+        pageOffsetRatio: pageOffsetRatio,
       );
     }
     return PdfAnnotationTarget(
@@ -219,11 +231,16 @@ class PdfAnnotationTarget {
       exact: quote.exact,
       prefix: quote.prefix,
       suffix: quote.suffix,
+      pageOffsetRatio: pageOffsetRatio,
     );
   }
 
   List<Map<String, Object?>> toSelectors() => [
-        {'type': 'pdf-page', 'page': page},
+        {
+          'type': 'pdf-page',
+          'page': page,
+          if (pageOffsetRatio != null) 'pageOffsetRatio': pageOffsetRatio,
+        },
         {
           'type': 'text-quote',
           'exact': exact,

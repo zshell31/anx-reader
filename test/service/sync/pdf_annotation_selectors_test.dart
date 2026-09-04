@@ -10,6 +10,7 @@ void main() {
         pageText: pageText,
         start: pageText.indexOf('He looked'),
         end: pageText.indexOf(' After'),
+        pageOffsetRatio: 0.375,
       );
 
       final restored = PdfAnnotationTarget.fromSelectors(target.toSelectors());
@@ -18,6 +19,12 @@ void main() {
       expect(restored?.exact, 'He looked at her.');
       expect(restored?.prefix, 'Before. ');
       expect(restored?.suffix, ' After.');
+      expect(restored?.pageOffsetRatio, 0.375);
+      expect(restored?.toSelectors().first, {
+        'type': 'pdf-page',
+        'page': 42,
+        'pageOffsetRatio': 0.375,
+      });
       expect(restored?.resolve(pageText)?.start, pageText.indexOf('He looked'));
     });
 
@@ -66,6 +73,15 @@ void main() {
         ]),
         isNull,
       );
+    });
+
+    test('clamps a Lingua PDF page offset while parsing', () {
+      final restored = PdfAnnotationTarget.fromSelectors([
+        {'type': 'pdf-page', 'page': 7, 'pageOffsetRatio': 1.25},
+        {'type': 'text-quote', 'exact': 'selected'},
+      ]);
+
+      expect(restored?.pageOffsetRatio, 1);
     });
 
     test('multi-page quote round-trips with page-local render targets', () {

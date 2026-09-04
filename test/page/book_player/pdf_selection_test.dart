@@ -41,4 +41,33 @@ void main() {
       isFalse,
     );
   });
+
+  test('carries the first selected range offset into the PDF selector',
+      () async {
+    const text = 'Before selected after';
+    const pageText = PdfPageText(
+      pageNumber: 3,
+      fullText: text,
+      charRects: [],
+      fragments: [],
+    );
+    final range = PdfPageTextRange(
+      pageText: pageText,
+      start: text.indexOf('selected'),
+      end: text.indexOf(' after'),
+    );
+
+    final data = await buildPdfSelectionData(
+      [range],
+      (_) async => const Size(600, 800),
+      resolvePageOffset: (_) => 0.4,
+    );
+
+    expect(data?.target.pageOffsetRatio, 0.4);
+    expect(data?.target.toSelectors().first, {
+      'type': 'pdf-page',
+      'page': 3,
+      'pageOffsetRatio': 0.4,
+    });
+  });
 }

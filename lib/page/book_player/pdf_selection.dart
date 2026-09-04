@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 typedef PdfPageSizeLoader = Future<Size?> Function(int pageNumber);
+typedef PdfPageOffsetResolver = double? Function(PdfPageTextRange range);
 
 class PdfSelectionData {
   const PdfSelectionData({required this.target, required this.context});
@@ -49,8 +50,9 @@ String joinPdfSelectionParts(Iterable<String> parts) {
 
 Future<PdfSelectionData?> buildPdfSelectionData(
   List<PdfPageTextRange> ranges,
-  PdfPageSizeLoader loadPageSize,
-) async {
+  PdfPageSizeLoader loadPageSize, {
+  PdfPageOffsetResolver? resolvePageOffset,
+}) async {
   final targets = <PdfAnnotationPageTarget>[];
   for (final range in ranges) {
     final pageText = range.pageText;
@@ -92,14 +94,21 @@ Future<PdfSelectionData?> buildPdfSelectionData(
   }
   final exact = joinPdfSelectionParts(targets.map((target) => target.exact));
   if (targets.isEmpty || exact.isEmpty) return null;
+  final pageOffsetRatio =
+      ranges.isEmpty ? null : resolvePageOffset?.call(ranges.first);
   final target = targets.length == 1
       ? PdfAnnotationTarget(
           page: targets.single.page,
           exact: targets.single.exact,
           prefix: targets.single.prefix,
           suffix: targets.single.suffix,
+          pageOffsetRatio: pageOffsetRatio,
         )
-      : PdfAnnotationTarget.fromPageTargets(targets: targets, exact: exact);
+      : PdfAnnotationTarget.fromPageTargets(
+          targets: targets,
+          exact: exact,
+          pageOffsetRatio: pageOffsetRatio,
+        );
   return PdfSelectionData(
     target: target,
     context: '${target.prefix}${target.exact}${target.suffix}',

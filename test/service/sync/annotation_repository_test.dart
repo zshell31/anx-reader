@@ -107,6 +107,7 @@ void main() {
       pageText: pageText,
       start: start,
       end: start + 'repeated phrase'.length,
+      pageOffsetRatio: 0.625,
     );
 
     final ref = await repository.createAnnotation(
@@ -125,6 +126,7 @@ void main() {
       annotation['target']['selectors'],
     );
     expect(restored?.page, 3);
+    expect(restored?.pageOffsetRatio, 0.625);
     expect(restored?.resolve(pageText)?.start, start);
     expect(
       CanonicalAnnotationReadAdapter().read(document).single.pdfTarget?.exact,

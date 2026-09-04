@@ -8,10 +8,20 @@ void main() {
       expect(decodePdfReadingPosition('pdf-page:42'), 42);
     });
 
+    test('round-trips an optional offset used by note navigation', () {
+      final encoded = encodePdfReadingPosition(42, pageOffsetRatio: 0.75345678);
+
+      expect(encoded, 'pdf-page:42@0.753457');
+      expect(decodePdfReadingPosition(encoded), 42);
+      expect(decodePdfReadingOffset(encoded), 0.753457);
+      expect(decodePdfReadingOffset('pdf-page:42'), isNull);
+    });
+
     test('does not interpret EPUB or malformed positions as PDF pages', () {
       expect(decodePdfReadingPosition('epubcfi(/6/2!/4/2:1)'), isNull);
       expect(decodePdfReadingPosition('pdf-page:0'), isNull);
       expect(decodePdfReadingPosition('pdf-page:not-a-number'), isNull);
+      expect(decodePdfReadingPosition('pdf-page:42@invalid'), isNull);
       expect(decodePdfReadingPosition(null), isNull);
     });
 

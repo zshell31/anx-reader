@@ -13,9 +13,11 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 - [x] Re-fit the current PDF page after an orientation/viewport change.
 - [x] Persist text annotations whose selection crosses PDF page boundaries,
   excluding page-number spans from the logical quote.
-- [ ] Select the touched PDF word instead of the extractor's whole paragraph
+- [x] Preserve a PDF note's vertical offset within its first page using the
+  Lingua Reader-compatible `pdf-page.pageOffsetRatio` selector field.
+- [x] Select the touched PDF word instead of the extractor's whole paragraph
   fragment on long press.
-- [ ] Turn PDF pages by tapping the left or right edge.
+- [x] Turn PDF pages by tapping the left or right edge.
 
 ## Progress log
 
@@ -40,6 +42,20 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
   and painted. Centered edge page-number fragments are excluded using the same
   conservative rule as Lingua Reader. Analyzer passes; selection, selector,
   rendering, and canonical protocol tests pass (22/22).
+- 2026-09-04: Fixed native PDF long-press selection for documents whose text
+  extractor groups a whole paragraph into one fragment. ANX now hit-tests the
+  touched character and applies Flutter's Unicode word boundary while retaining
+  pdfrx's standard touch handles and context-menu lifecycle.
+- 2026-09-04: Matched Lingua Reader's precise PDF note anchor from `4c44bc7`.
+  New ANX selections store the first selected range's display-relative vertical
+  page offset, while parsing remains compatible with page-only selectors and
+  clamps offsets from external clients. Note-list navigation uses that offset
+  both inside an open PDF and when opening the reader from the library. English
+  Coach consumes the runtime's projected annotation target rather than raw
+  selectors, so its API contract is unaffected.
+- 2026-09-04: Added bounded left/right edge tap zones for native PDF page
+  turning. Annotation hits and active text selections take precedence, while a
+  center tap retains the existing reader-chrome behavior.
 
 ## Notes and constraints
 

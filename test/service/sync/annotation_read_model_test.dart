@@ -353,7 +353,7 @@ void main() {
           .read(
             document([
               annotation('pdf-selection', selectors: [
-                {'type': 'pdf-page', 'page': 7},
+                {'type': 'pdf-page', 'page': 7, 'pageOffsetRatio': 0.42},
                 {
                   'type': 'text-quote',
                   'exact': 'selected',
@@ -369,6 +369,7 @@ void main() {
       expect(model.epubCfi, isNull);
       expect(model.pdfTarget?.page, 7);
       expect(model.pdfTarget?.exact, 'selected');
+      expect(model.pdfTarget?.pageOffsetRatio, 0.42);
       expect(model.navigationCapability, AnnotationCapability.available);
       expect(model.renderingCapability, AnnotationCapability.available);
     });

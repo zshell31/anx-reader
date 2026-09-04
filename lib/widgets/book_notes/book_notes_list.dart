@@ -3,6 +3,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/hint_key.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
+import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/providers/book_notes.dart';
 import 'package:anx_reader/service/book.dart';
@@ -329,10 +330,11 @@ class BookNotesList extends ConsumerWidget {
     final notifier =
         ref.read(bookNotesControllerProvider(fingerprint).notifier);
     final cfi = bookNote.epubCfi;
+    final pdfTarget = bookNote.pdfTarget;
     final localBook = state.book.localBook;
     final canNavigate =
         bookNote.navigationCapability == AnnotationCapability.available &&
-            cfi != null &&
+            (cfi != null || pdfTarget != null) &&
             localBook != null;
     return BookNoteTile(
       note: bookNote,
@@ -342,9 +344,24 @@ class BookNotesList extends ConsumerWidget {
               ? null
               : () {
                   if (reading) {
-                    epubPlayerKey.currentState?.goToCfi(cfi);
+                    if (pdfTarget != null) {
+                      pdfPlayerKey.currentState?.goToAnnotation(pdfTarget);
+                    } else {
+                      epubPlayerKey.currentState?.goToCfi(cfi!);
+                    }
                   } else {
-                    pushToReadingPage(ref, context, localBook, cfi: cfi);
+                    final position = pdfTarget == null
+                        ? cfi
+                        : encodePdfReadingPosition(
+                            pdfTarget.page,
+                            pageOffsetRatio: pdfTarget.pageOffsetRatio,
+                          );
+                    pushToReadingPage(
+                      ref,
+                      context,
+                      localBook,
+                      cfi: position,
+                    );
                   }
                 },
       onLongPress: () {

@@ -167,6 +167,13 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     return source;
   }
 
+  Future<Size?> _loadPageSize(int pageNumber) async =>
+      await controller.useDocument<Size?>((pdf) {
+        if (pageNumber < 1 || pageNumber > pdf.pages.length) return null;
+        final page = pdf.pages[pageNumber - 1];
+        return Size(page.width, page.height);
+      });
+
   Future<String> _translateBlock(
     PdfTextBlock block,
     String contextText,
@@ -233,6 +240,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       secondaryAnchor: params.anchorB,
       dismissContextMenu: params.dismissContextMenu,
       refreshAnnotations: refreshAnnotations,
+      loadPageSize: _loadPageSize,
     );
   }
 
@@ -265,13 +273,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       );
       for (final resolution in resolutions) {
         final model = resolution.annotation;
-        final target = model.pdfTarget!;
         final range = PdfPageTextRange(
           pageText: resolution.pageText,
           start: resolution.match.start,
           end: resolution.match.end,
         );
-        (resolved[target.page] ??= []).add(
+        (resolved[resolution.target.page] ??= []).add(
           _PdfRenderedAnnotation(model: model, range: range),
         );
       }

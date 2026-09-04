@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
+import 'package:anx_reader/page/book_player/pdf_selection.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
@@ -18,6 +19,7 @@ class PdfSelectionActionMenu extends StatefulWidget {
     required this.secondaryAnchor,
     required this.dismissContextMenu,
     required this.refreshAnnotations,
+    required this.loadPageSize,
   });
 
   final Book book;
@@ -26,6 +28,7 @@ class PdfSelectionActionMenu extends StatefulWidget {
   final Offset? secondaryAnchor;
   final VoidCallback dismissContextMenu;
   final Future<void> Function() refreshAnnotations;
+  final PdfPageSizeLoader loadPageSize;
 
   @override
   State<PdfSelectionActionMenu> createState() => _PdfSelectionActionMenuState();
@@ -36,15 +39,14 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
 
   Future<_PdfSelectionMenuData?> _loadData() async {
     final ranges = await widget.selection.getSelectedTextRanges();
-    if (ranges.length != 1) return null;
-    final range = ranges.single;
-    final target = PdfAnnotationTarget.fromPageText(
-      page: range.pageNumber,
-      pageText: range.pageText.fullText,
-      start: range.start,
-      end: range.end,
-    );
-    final context = '${target.prefix}${target.exact}${target.suffix}';
+    final selectionData =
+        await buildPdfSelectionData(ranges, widget.loadPageSize);
+    if (selectionData == null) return null;
+    final target = selectionData.target;
+    final context = selectionData.context;
+    final chapter = target.page == target.endPage
+        ? 'Page ${target.page}'
+        : 'Pages ${target.page}-${target.endPage}';
     return _PdfSelectionMenuData(
       target: target,
       context: context,
@@ -53,7 +55,7 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
           selectedText: target.exact,
           annotationContext: context,
           lookupContext: context,
-          chapter: 'Page ${target.page}',
+          chapter: chapter,
           selector: encodePdfReadingPosition(target.page),
           pdfTarget: target,
         ),
@@ -105,7 +107,9 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
                   book: widget.book,
                   annoCfi: encodePdfReadingPosition(data.target.page),
                   annoContent: data.target.exact,
-                  chapter: 'Page ${data.target.page}',
+                  chapter: data.target.page == data.target.endPage
+                      ? 'Page ${data.target.page}'
+                      : 'Pages ${data.target.page}-${data.target.endPage}',
                   annotationContext: data.context,
                   lookupContext: data.context,
                   persistenceSession: data.session,

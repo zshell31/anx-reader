@@ -108,4 +108,33 @@ void main() {
 
     expect(resolved, isEmpty);
   });
+
+  test('restores every page-local part of a cross-page annotation', () async {
+    final target = PdfAnnotationTarget.fromPageTargets(
+      targets: const [
+        PdfAnnotationPageTarget(
+          page: 2,
+          exact: 'ending',
+          prefix: '',
+          suffix: '',
+        ),
+        PdfAnnotationPageTarget(
+          page: 3,
+          exact: 'beginning',
+          prefix: '',
+          suffix: '',
+        ),
+      ],
+      exact: 'ending beginning',
+    );
+
+    final resolved = await resolvePdfAnnotationsByPage(
+      annotations: ['cross-page'],
+      targetFor: (_) => target,
+      loadPageText: (page) async => page == 2 ? 'ending' : 'beginning',
+      fullTextFor: (text) => text,
+    );
+
+    expect(resolved.map((item) => item.target.page), [2, 3]);
+  });
 }

@@ -42,11 +42,13 @@ class PdfAnnotationResolution<TAnnotation, TPageText> {
     required this.annotation,
     required this.pageText,
     required this.match,
+    required this.target,
   });
 
   final TAnnotation annotation;
   final TPageText pageText;
   final PdfTextMatch match;
+  final PdfAnnotationPageTarget target;
 }
 
 Future<List<PdfAnnotationResolution<TAnnotation, TPageText>>>
@@ -56,11 +58,13 @@ Future<List<PdfAnnotationResolution<TAnnotation, TPageText>>>
   required Future<TPageText> Function(int pageNumber) loadPageText,
   required String Function(TPageText pageText) fullTextFor,
 }) async {
-  final byPage = <int, List<(TAnnotation, PdfAnnotationTarget)>>{};
+  final byPage = <int, List<(TAnnotation, PdfAnnotationPageTarget)>>{};
   for (final annotation in annotations) {
     final target = targetFor(annotation);
     if (target == null) continue;
-    (byPage[target.page] ??= []).add((annotation, target));
+    for (final pageTarget in target.pageTargets) {
+      (byPage[pageTarget.page] ??= []).add((annotation, pageTarget));
+    }
   }
 
   final resolved = <PdfAnnotationResolution<TAnnotation, TPageText>>[];
@@ -74,6 +78,7 @@ Future<List<PdfAnnotationResolution<TAnnotation, TPageText>>>
         annotation: annotation,
         pageText: pageText,
         match: match,
+        target: target,
       ));
     }
   }

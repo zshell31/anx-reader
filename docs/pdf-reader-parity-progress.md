@@ -11,8 +11,10 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 - [x] Load and expose the embedded PDF outline in the contents drawer.
 - [x] Navigate to a PDF destination when an outline item is tapped.
 - [x] Re-fit the current PDF page after an orientation/viewport change.
-- [ ] Persist text annotations whose selection crosses PDF page boundaries,
+- [x] Persist text annotations whose selection crosses PDF page boundaries,
   excluding page-number spans from the logical quote.
+- [ ] Select the touched PDF word instead of the extractor's whole paragraph
+  fragment on long press.
 - [ ] Turn PDF pages by tapping the left or right edge.
 
 ## Progress log
@@ -32,6 +34,12 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 - 2026-09-04: Re-fit the current native PDF page to the new viewport width after
   rotation or another material width change. Stale post-frame refits are
   generation-guarded. Added a focused viewport decision test.
+- 2026-09-04: Enabled cross-page PDF selections in the shared action menu and
+  persistence layer. The standard start-page/text-quote selectors remain, while
+  `anx-pdf-page-range` stores page-local quotes so every fragment can be restored
+  and painted. Centered edge page-number fragments are excluded using the same
+  conservative rule as Lingua Reader. Analyzer passes; selection, selector,
+  rendering, and canonical protocol tests pass (22/22).
 
 ## Notes and constraints
 

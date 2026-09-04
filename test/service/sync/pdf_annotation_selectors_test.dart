@@ -67,5 +67,39 @@ void main() {
         isNull,
       );
     });
+
+    test('multi-page quote round-trips with page-local render targets', () {
+      final target = PdfAnnotationTarget.fromPageTargets(
+        targets: const [
+          PdfAnnotationPageTarget(
+            page: 4,
+            exact: 'The sentence',
+            prefix: 'Before. ',
+            suffix: '',
+          ),
+          PdfAnnotationPageTarget(
+            page: 5,
+            exact: 'continues here.',
+            prefix: '',
+            suffix: ' After.',
+          ),
+        ],
+        exact: 'The sentence continues here.',
+      );
+
+      final restored = PdfAnnotationTarget.fromSelectors(target.toSelectors());
+
+      expect(restored?.page, 4);
+      expect(restored?.endPage, 5);
+      expect(restored?.exact, 'The sentence continues here.');
+      expect(restored?.pageTargets.map((part) => part.exact), [
+        'The sentence',
+        'continues here.',
+      ]);
+      expect(restored?.pageTargets.first.resolve('Before. The sentence'),
+          isNotNull);
+      expect(restored?.pageTargets.last.resolve('continues here. After.'),
+          isNotNull);
+    });
   });
 }

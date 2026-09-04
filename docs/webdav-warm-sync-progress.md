@@ -360,6 +360,18 @@ from being created by current builds. Stage 10 normalization remains because
 it is the small compatibility fix required to read old deterministic events
 without event-ID collisions.
 
+On 2026-09-04 all 13 remote daily documents were backed up with SHA-256
+checksums before the two book-specific WebDAV activity collections were
+deleted. The root activity collection was deliberately retained so discovery
+continues to return an empty collection rather than 404. A temporary,
+uncommitted maintenance APK cleared `tb_reading_time`, all local shared
+documents for the domain, its outbox/metadata rows, and both activity bootstrap
+receipt generations on Onyx before sync startup. A read-only WebDAV check after
+that launch still reported zero child collections. The clean release from
+commit `a9b9d116`, without the maintenance hook, was then reinstalled. Samsung
+must receive the same maintenance APK before Anx Reader is opened there; only
+after that second local reset is the activity reset complete across replicas.
+
 ### Stage 10 device validation
 
 Release commit `0072d48a` was installed on Onyx LOMONOSOV3 without clearing

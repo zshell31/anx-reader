@@ -3,20 +3,30 @@
 - Goal: add the fourth Annotation Editor provider, OpenAI Audio, with speech, IPA, draft/save semantics, playback, canonical persistence, and automatic cross-client WebDAV asset sync.
 - Completed milestones:
   - Shared protocol: added and validated the `audio` material enrichment in Dart and TypeScript; canonical merge, update, sticky tombstone, and unknown-field preservation are covered.
+  - Provider and settings: added OpenAI speech + direct IPA generation services and configurable Audio model/voice in both clients.
 - Commit hashes:
   - Anx Reader shared protocol: `2a795997`
   - Lingua Reader shared protocol: `1f6653d`
+  - Anx Reader provider/settings: `97ba42e7`
+  - Lingua Reader provider/settings: `1da18bf`
 - Files/components changed:
   - `lib/service/sync/annotation_protocol.dart`
   - `test/service/sync/annotation_protocol_test.dart`
   - Lingua Reader `src/annotations/types.ts`, `src/annotations/merge.ts`, `tests/annotations.test.ts`
+  - Anx preferences, AI settings page, OpenAI Audio service and service tests.
+  - Lingua settings/types, OpenAI Audio request service and service tests.
 - Important design decisions:
   - Audio is a material enrichment with `kind: audio` and uses the existing last-write-wins/sticky-tombstone semantics.
   - Binary data is external. Shared state contains a safe relative `annotation-assets/audio/<asset>` reference plus format, MIME type, byte length, and SHA-256.
   - Required audio fields are `ipa`, `voice`, `model`, and `audio`; unknown fields remain round-trippable.
+  - Speech and IPA requests run together; IPA is generated directly by an OpenAI text model, never by speech-to-text.
+  - Both clients use the existing OpenAI API credential. Speech defaults to `gpt-4o-mini-tts` / `alloy` and MP3.
 - Tests/checks executed and results:
   - Flutter protocol and shared fixture tests: 43 passed.
   - Lingua annotation/protocol tests: 57 passed.
   - Lingua TypeScript build: passed.
-- Current unfinished work: provider/API calls, settings, editor UI/playback, repository persistence, WebDAV binary synchronization, full cross-client tests, deployment.
-- Exact next step: implement OpenAI speech plus IPA provider services and model/voice settings in both clients, keeping generated binary in draft-local state until Save.
+  - Anx OpenAI Audio service tests: 2 passed.
+  - Anx targeted Flutter analyze: passed.
+  - Lingua OpenAI Audio/OpenAI request tests: 7 passed.
+- Current unfinished work: editor UI/playback, repository persistence, WebDAV binary synchronization, full cross-client tests, deployment.
+- Exact next step: connect Audio as the fourth editor provider in both clients, represent its bytes only in draft-local state, and persist canonical IPA/asset metadata on Save.

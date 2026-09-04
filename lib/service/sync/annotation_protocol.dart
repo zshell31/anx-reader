@@ -7,6 +7,7 @@ const _materialKinds = {
   'translation',
   'dictionary',
   'ai-analysis',
+  'audio',
   'personal-note',
 };
 const _messageRoles = {'system', 'user', 'assistant'};
@@ -23,6 +24,7 @@ abstract final class AnnotationProtocolErrorCode {
   static const invalidEnrichmentKind = 'invalid-enrichment-kind';
   static const invalidAiThread = 'invalid-ai-thread';
   static const invalidAiMessage = 'invalid-ai-message';
+  static const invalidAudioEnrichment = 'invalid-audio-enrichment';
   static const bookIdentityCollision = 'identity-collision/book';
   static const annotationIdentityCollision = 'identity-collision/annotation';
   static const materialIdentityCollision =
@@ -403,8 +405,43 @@ Map<String, dynamic> _normalizeEnrichment(Map<String, dynamic> input) {
   } else if (!_materialKinds.contains(kind)) {
     _fail(AnnotationProtocolErrorCode.invalidEnrichmentKind,
         'invalid annotation enrichment kind');
+  } else if (kind == 'audio') {
+    _validateAudioEnrichment(enrichment);
   }
   return enrichment;
+}
+
+void _validateAudioEnrichment(Map<String, dynamic> enrichment) {
+  bool nonEmptyString(Object? value) =>
+      value is String && value.trim().isNotEmpty;
+  if (!nonEmptyString(enrichment['ipa']) ||
+      !nonEmptyString(enrichment['voice']) ||
+      !nonEmptyString(enrichment['model'])) {
+    _fail(AnnotationProtocolErrorCode.invalidAudioEnrichment,
+        'audio IPA, voice, and model must be non-empty strings');
+  }
+  final audio = enrichment['audio'];
+  if (audio is! Map) {
+    _fail(AnnotationProtocolErrorCode.invalidAudioEnrichment,
+        'audio asset metadata must be an object');
+  }
+  final asset = audio.cast<Object?, Object?>();
+  final assetRef = asset['assetRef'];
+  final byteLength = asset['byteLength'];
+  final sha256 = asset['sha256'];
+  if (assetRef is! String ||
+      !RegExp(r'^annotation-assets/audio/[A-Za-z0-9][A-Za-z0-9._-]*$')
+          .hasMatch(assetRef) ||
+      !nonEmptyString(asset['format']) ||
+      !(asset['mimeType'] is String &&
+          (asset['mimeType'] as String).startsWith('audio/')) ||
+      byteLength is! int ||
+      byteLength < 0 ||
+      sha256 is! String ||
+      !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256)) {
+    _fail(AnnotationProtocolErrorCode.invalidAudioEnrichment,
+        'invalid audio asset metadata');
+  }
 }
 
 Map<String, dynamic> _normalizeMessage(Map<String, dynamic> input) {

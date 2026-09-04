@@ -194,4 +194,47 @@ void main() {
     expect(mergedThread['deletedAt'], timestamp);
     expect(mergedThread['messages'][0]['deletedAt'], timestamp);
   });
+
+  test('audio enrichment round-trips, updates, tombstones, and unknown fields',
+      () {
+    Map<String, dynamic> audio(String updatedAt, {bool deleted = false}) => {
+          'id': 'audio-1',
+          'kind': 'audio',
+          'providerId': 'openai-audio',
+          'providerName': 'OpenAI Audio',
+          'ipa': updatedAt == timestamp ? 'wɜːd' : 'wɝːd',
+          'voice': 'alloy',
+          'model': 'gpt-4o-mini-tts',
+          'audio': {
+            'assetRef': 'annotation-assets/audio/asset-1.mp3',
+            'format': 'mp3',
+            'mimeType': 'audio/mpeg',
+            'byteLength': 4,
+            'sha256':
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'futureAssetField': {'kept': true},
+          },
+          'futureEnrichmentField': {'kept': true},
+          'createdAt': timestamp,
+          'updatedAt': updatedAt,
+          if (deleted) 'deletedAt': updatedAt,
+        };
+    final newer = '2026-08-29T10:00:00.000Z';
+    final oldAnnotation = annotation('audio')
+      ..['enrichments'] = [audio(timestamp)];
+    final newAnnotation = annotation('audio')
+      ..['enrichments'] = [audio(newer, deleted: true)];
+
+    final decoded = decodeAnnotationDocument(document([oldAnnotation]));
+    expect(
+        decoded['annotations'][0]['enrichments'][0]['audio']
+            ['futureAssetField'],
+        {'kept': true});
+    final merged = mergeAnnotationDocuments(
+        document([oldAnnotation]), document([newAnnotation]));
+    final result = merged['annotations'][0]['enrichments'][0];
+    expect(result['ipa'], 'wɝːd');
+    expect(result['deletedAt'], newer);
+    expect(result['futureEnrichmentField'], {'kept': true});
+  });
 }

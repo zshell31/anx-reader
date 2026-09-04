@@ -3,18 +3,17 @@ import 'dart:ui' as ui;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
-import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
+import 'package:anx_reader/page/book_player/pdf_selection_action_menu.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/current_reading.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
-import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
 import 'package:anx_reader/service/translate/full_text_translation_cache_service.dart';
 import 'package:anx_reader/utils/toast/common.dart';
@@ -153,82 +152,21 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     unawaited(refreshAnnotations());
   }
 
-  Future<void> _openSelectionEditor(
-    PdfTextSelectionDelegate selection,
-    VoidCallback dismissContextMenu,
-  ) async {
-    final ranges = await selection.getSelectedTextRanges();
-    dismissContextMenu();
-    if (!mounted) return;
-    if (ranges.length != 1) {
-      AnxToast.show('Select text on a single PDF page to annotate it.');
-      return;
-    }
-    final range = ranges.single;
-    final target = PdfAnnotationTarget.fromPageText(
-      page: range.pageNumber,
-      pageText: range.pageText.fullText,
-      start: range.start,
-      end: range.end,
-    );
-    final contextText = '${target.prefix}${target.exact}${target.suffix}';
-    final session = SelectionPersistenceSession(
-      SelectionSnapshot(
-        selectedText: target.exact,
-        annotationContext: contextText,
-        lookupContext: contextText,
-        chapter: 'Page ${target.page}',
-        selector: encodePdfReadingPosition(target.page),
-        pdfTarget: target,
-      ),
-    );
-    final outcome = await showAnnotationEditor(
-      context: context,
-      book: widget.book,
-      session: session,
-    );
-    if (outcome == AnnotationEditorOutcome.saved) {
-      await selection.clearTextSelection();
-      await refreshAnnotations();
-    }
-  }
-
   Widget? _buildContextMenu(
     BuildContext context,
     PdfViewerContextMenuBuilderParams params,
   ) {
-    final items = <ContextMenuButtonItem>[
-      if (params.textSelectionDelegate.isCopyAllowed &&
-          params.textSelectionDelegate.hasSelectedText)
-        ContextMenuButtonItem(
-          onPressed: params.textSelectionDelegate.copyTextSelection,
-          type: ContextMenuButtonType.copy,
-        ),
-      if (params.textSelectionDelegate.hasSelectedText)
-        ContextMenuButtonItem(
-          label: L10n.of(context).annotationEditorNewTitle,
-          onPressed: () => unawaited(_openSelectionEditor(
-            params.textSelectionDelegate,
-            params.dismissContextMenu,
-          )),
-        ),
-      if (params.isTextSelectionEnabled &&
-          !params.textSelectionDelegate.isSelectingAllText)
-        ContextMenuButtonItem(
-          onPressed: params.textSelectionDelegate.selectAllText,
-          type: ContextMenuButtonType.selectAll,
-        ),
-    ];
-    if (items.isEmpty) return null;
-    return Align(
-      alignment: Alignment.topLeft,
-      child: AdaptiveTextSelectionToolbar.buttonItems(
-        anchors: TextSelectionToolbarAnchors(
-          primaryAnchor: params.anchorA,
-          secondaryAnchor: params.anchorB,
-        ),
-        buttonItems: items,
-      ),
+    if (!params.textSelectionDelegate.isCopyAllowed ||
+        !params.textSelectionDelegate.hasSelectedText) {
+      return null;
+    }
+    return PdfSelectionActionMenu(
+      book: widget.book,
+      selection: params.textSelectionDelegate,
+      primaryAnchor: params.anchorA,
+      secondaryAnchor: params.anchorB,
+      dismissContextMenu: params.dismissContextMenu,
+      refreshAnnotations: refreshAnnotations,
     );
   }
 

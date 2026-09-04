@@ -7,7 +7,7 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 
 ## Work items
 
-- [ ] Use the shared reader selection action menu for PDF text.
+- [x] Use the shared reader selection action menu for PDF text.
 - [ ] Load and expose the embedded PDF outline in the contents drawer.
 - [ ] Navigate to a PDF destination when an outline item is tapped.
 - [ ] Re-fit the current PDF page after an orientation/viewport change.
@@ -18,6 +18,10 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 ## Progress log
 
 - 2026-09-04: Created the feature branch and recorded the implementation plan.
+- 2026-09-04: Made `ExcerptMenu` format-neutral and connected PDF selections
+  to the same annotation, AI, dictionary, translation, copy, search, and share
+  actions used by EPUB. PDF TTS stays hidden because it has no continuation
+  implementation yet. Targeted editor/selection/PDF tests and analyzer pass.
 
 ## Notes and constraints
 

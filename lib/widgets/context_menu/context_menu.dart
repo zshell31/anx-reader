@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/main.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
+import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
 import 'package:anx_reader/widgets/context_menu/excerpt_menu.dart';
@@ -522,6 +524,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                               children: [
                                 ExcerptMenu(
                                   key: _excerptMenuKey,
+                                  book: epubPlayerKey.currentState!.book,
                                   annoCfi: widget.annoCfi,
                                   annoContent: widget.annoContent,
                                   chapter: widget.chapter,
@@ -539,6 +542,25 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                                   decoration: widget.decoration,
                                   axis: widget.axis,
                                   reverse: _reverse,
+                                  refreshAnnotations: () => epubPlayerKey
+                                      .currentState!
+                                      .refreshAnnotations(),
+                                  onNewAnnotationSaved: () => epubPlayerKey
+                                      .currentState!
+                                      .endSelectionAfterAnnotationSave(),
+                                  narrateSelection: () async {
+                                    final player = epubPlayerKey.currentState;
+                                    if (player == null) return;
+                                    await audioHandler.stop();
+                                    await TtsHandler().init(
+                                      () => player.initTts(
+                                        fromCfi: widget.annoCfi,
+                                      ),
+                                      player.ttsNext,
+                                      player.ttsPrev,
+                                    );
+                                    await audioHandler.play();
+                                  },
                                 ),
                               ],
                             ),

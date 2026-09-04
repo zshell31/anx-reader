@@ -2,14 +2,13 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/constants/note_annotations.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
-import 'package:anx_reader/page/reading_page.dart';
+import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
-import 'package:anx_reader/service/tts/tts_handler.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/book_share/excerpt_share_service.dart';
 import 'package:anx_reader/widgets/common/axis_flex.dart';
@@ -22,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 enum _SecondarySelectionAction { copy, search, narrate, share }
 
 class ExcerptMenu extends StatefulWidget {
+  final Book book;
   final String annoCfi;
   final String annoContent;
   final String? chapter;
@@ -37,9 +37,13 @@ class ExcerptMenu extends StatefulWidget {
   final Future<bool> Function() prepareInternalAction;
   final Axis axis;
   final bool reverse;
+  final Future<void> Function() refreshAnnotations;
+  final Future<void> Function()? narrateSelection;
+  final Future<void> Function()? onNewAnnotationSaved;
 
   const ExcerptMenu({
     super.key,
+    required this.book,
     required this.annoCfi,
     required this.annoContent,
     this.chapter,
@@ -55,6 +59,9 @@ class ExcerptMenu extends StatefulWidget {
     required this.prepareInternalAction,
     required this.axis,
     required this.reverse,
+    required this.refreshAnnotations,
+    this.narrateSelection,
+    this.onNewAnnotationSaved,
   });
 
   @override
@@ -120,13 +127,21 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   }
 
   CanonicalSelectionCreation _canonicalCreation(SelectionSnapshot snapshot) {
-    final player = epubPlayerKey.currentState!;
+    final pdfTarget = snapshot.pdfTarget;
+    if (pdfTarget != null) {
+      return CanonicalSelectionCreation.pdf(
+        book: widget.book,
+        selectedText: snapshot.selectedText,
+        target: pdfTarget,
+        chapter: snapshot.chapter,
+        context: snapshot.annotationContext,
+      );
+    }
     return CanonicalSelectionCreation(
-      book: player.book,
+      book: widget.book,
       selectedText: snapshot.selectedText,
       epubCfi: snapshot.selector,
-      chapter:
-          snapshot.chapter.isEmpty ? player.chapterTitle : snapshot.chapter,
+      chapter: snapshot.chapter,
       context: snapshot.annotationContext,
     );
   }
@@ -136,27 +151,25 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     bool focusPersonalNote = false,
   }) async {
     final modalContext = navigatorKey.currentContext;
-    final player = epubPlayerKey.currentState;
-    if (modalContext == null || player == null) return;
+    if (modalContext == null) return;
     final wasNew = widget.persistenceSession.annotationRef == null;
     final session = widget.persistenceSession;
-    final book = player.book;
     if (!await widget.prepareInternalAction()) return;
     if (!modalContext.mounted) return;
     try {
       final outcome = await showAnnotationEditor(
         context: modalContext,
-        book: book,
+        book: widget.book,
         session: session,
         initialProvider: initialProvider,
         focusPersonalNote: focusPersonalNote,
       );
       if (outcome == AnnotationEditorOutcome.saved ||
           outcome == AnnotationEditorOutcome.deleted) {
-        await player.refreshAnnotations();
+        await widget.refreshAnnotations();
       }
       if (wasNew && outcome == AnnotationEditorOutcome.saved) {
-        await player.endSelectionAfterAnnotationSave();
+        await widget.onNewAnnotationSaved?.call();
       }
     } catch (error) {
       if (modalContext.mounted) AnxToast.show(error.toString());
@@ -220,7 +233,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
     }
     if (deleteConfirm) {
       await annotationRepository.tombstoneAnnotation(ref);
-      await epubPlayerKey.currentState!.refreshAnnotations();
+      await widget.refreshAnnotations();
       widget.onClose();
     } else {
       setState(() {
@@ -239,7 +252,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoColor = color;
     }
     await _persistNote(color: color);
-    await epubPlayerKey.currentState!.refreshAnnotations();
+    await widget.refreshAnnotations();
     if (close) {
       widget.onClose();
     }
@@ -255,7 +268,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       annoType = type;
     }
     await _persistNote(type: type);
-    await epubPlayerKey.currentState!.refreshAnnotations();
+    await widget.refreshAnnotations();
   }
 
   Widget iconButton({required Icon icon, required Function() onPressed}) {
@@ -309,15 +322,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         );
         return;
       case _SecondarySelectionAction.narrate:
-        final playerState = epubPlayerKey.currentState;
-        if (playerState == null) return;
-        await audioHandler.stop();
-        await TtsHandler().init(
-          () => playerState.initTts(fromCfi: widget.annoCfi),
-          playerState.ttsNext,
-          playerState.ttsPrev,
-        );
-        await audioHandler.play();
+        final narrateSelection = widget.narrateSelection;
+        if (narrateSelection == null) return;
+        await narrateSelection();
         break;
       case _SecondarySelectionAction.share:
         if (!context.mounted) return;
@@ -325,10 +332,10 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         if (!context.mounted) return;
         await ExcerptShareService.showShareExcerpt(
           context: context,
-          bookTitle: epubPlayerKey.currentState!.book.title,
-          author: epubPlayerKey.currentState!.book.author,
+          bookTitle: widget.book.title,
+          author: widget.book.author,
           excerpt: widget.annoContent,
-          chapter: epubPlayerKey.currentState!.chapterTitle,
+          chapter: widget.chapter ?? '',
         );
         return;
     }
@@ -414,10 +421,11 @@ class ExcerptMenuState extends State<ExcerptMenu> {
                 value: _SecondarySelectionAction.search,
                 child: Text(L10n.of(context).contextMenuSearch),
               ),
-              PopupMenuItem(
-                value: _SecondarySelectionAction.narrate,
-                child: Text(L10n.of(context).contextMenuNarrate),
-              ),
+              if (widget.narrateSelection != null)
+                PopupMenuItem(
+                  value: _SecondarySelectionAction.narrate,
+                  child: Text(L10n.of(context).contextMenuNarrate),
+                ),
               PopupMenuItem(
                 value: _SecondarySelectionAction.share,
                 child: Text(L10n.of(context).contextMenuShare),

@@ -5,6 +5,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/enums/sync_protocol.dart';
 import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/service/sync/annotation_audio_asset_sync.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_presentation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_sync_coordinator.dart';
@@ -68,6 +69,7 @@ class AnnotationSyncRuntime {
   ConditionalWebDavTransport? _documentTransport;
   SyncClientBase? _auxiliarySyncClient;
   LibraryAssetSyncService? _assetSyncService;
+  AnnotationAudioAssetSyncService? _annotationAudioAssetSyncService;
   TranslationCacheSyncService? _translationCacheSyncService;
   DateTime? _lastCompletedAt;
   int _lastDiscoveredDocumentCount = 0;
@@ -184,6 +186,7 @@ class AnnotationSyncRuntime {
     _documentTransport = null;
     _auxiliarySyncClient = null;
     _assetSyncService = null;
+    _annotationAudioAssetSyncService = null;
     _translationCacheSyncService = null;
     await _cancelCoordinatorStatusSubscriptions();
     if (old != null) await old.close();
@@ -442,9 +445,11 @@ class AnnotationSyncRuntime {
     if (coordinator == null || !await _networkPolicyAllowsSync()) return;
     try {
       if (localMutation) {
+        await _syncAnnotationAudioAssetsFor(fingerprint);
         await coordinator.notifyDirty(fingerprint);
       } else {
         await coordinator.syncBook(fingerprint);
+        await _syncAnnotationAudioAssetsFor(fingerprint);
       }
     } catch (error) {
       AnxLog.warning('Shared sync target failed domain=$annotationSyncDomain '
@@ -601,6 +606,9 @@ class AnnotationSyncRuntime {
           ),
       ]);
       syncDebug('phase=content-domains completed');
+      syncDebug('phase=annotation-audio-assets started');
+      await _syncSharedAnnotationAudioAssets();
+      syncDebug('phase=annotation-audio-assets completed');
       await _syncTranslationCacheBestEffort();
     } catch (error) {
       _lastRunFailed = true;
@@ -691,6 +699,39 @@ class AnnotationSyncRuntime {
     }
   }
 
+  Future<void> _syncSharedAnnotationAudioAssets() async {
+    var uploaded = 0;
+    var downloaded = 0;
+    var missing = 0;
+    for (final fingerprint
+        in await sharedState.documentIds(annotationSyncDomain)) {
+      final result = await _syncAnnotationAudioAssetsFor(fingerprint);
+      uploaded += result.uploaded;
+      downloaded += result.downloaded;
+      missing += result.missing;
+    }
+    syncInfo('annotationAudioAssets uploaded=$uploaded '
+        'downloaded=$downloaded missing=$missing');
+  }
+
+  Future<AnnotationAudioAssetSyncResult> _syncAnnotationAudioAssetsFor(
+    String fingerprint,
+  ) async {
+    if (SyncClientFactory.currentClient == null) {
+      SyncClientFactory.initializeCurrentClient();
+    }
+    final client = SyncClientFactory.currentClient;
+    if (client == null) return const AnnotationAudioAssetSyncResult();
+    _ensureAuxiliarySyncServices(client);
+    final bytes = await sharedState.canonicalDocument(
+      annotationSyncDomain,
+      canonicalMd5Fingerprint(fingerprint),
+    );
+    if (bytes == null) return const AnnotationAudioAssetSyncResult();
+    final document = decodeAnnotationDocument(jsonDecode(utf8.decode(bytes)));
+    return _annotationAudioAssetSyncService!.syncDocument(document);
+  }
+
   void _ensureAuxiliarySyncServices(SyncClientBase client) {
     if (identical(_auxiliarySyncClient, client)) return;
     _auxiliarySyncClient = client;
@@ -704,6 +745,10 @@ class AnnotationSyncRuntime {
       },
       loadLocalVerification: _loadLocalAssetVerification,
       saveLocalVerification: _saveLocalAssetVerification,
+    );
+    _annotationAudioAssetSyncService = AnnotationAudioAssetSyncService(
+      transport: SyncClientAnnotationAudioAssetTransport(client),
+      remoteRoot: remoteRoot,
     );
     _translationCacheSyncService = TranslationCacheSyncService(client: client);
   }
@@ -912,6 +957,7 @@ class AnnotationSyncRuntime {
     _documentTransport = null;
     _auxiliarySyncClient = null;
     _assetSyncService = null;
+    _annotationAudioAssetSyncService = null;
     _translationCacheSyncService = null;
     await sharedState.close();
     _started = false;

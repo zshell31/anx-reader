@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/service/sync/annotation_audio_asset_sync.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_selectors.dart';
@@ -142,6 +143,7 @@ class AnnotationRepository {
   final DateTime Function() now;
   final void Function(String fingerprint)? onCanonicalMutation;
   final void Function()? onPresentationMutation;
+  final AnnotationAudioAssetStore audioAssetStore;
   Future<void> _serial = Future<void>.value();
 
   AnnotationRepository(
@@ -150,8 +152,10 @@ class AnnotationRepository {
     DateTime Function()? now,
     this.onCanonicalMutation,
     this.onPresentationMutation,
+    AnnotationAudioAssetStore? audioAssetStore,
   })  : uuid = uuid ?? const Uuid(),
-        now = now ?? DateTime.now;
+        now = now ?? DateTime.now,
+        audioAssetStore = audioAssetStore ?? AnnotationAudioAssetStore();
 
   Future<T> _enqueue<T>(Future<T> Function() operation) {
     final next = _serial.then((_) => operation());
@@ -404,6 +408,7 @@ class AnnotationRepository {
     );
     final changed = canonicalJson(binding.annotation) != before;
     if (input.existingRef == null || changed) {
+      await _persistEditorAudio(input.materials);
       binding.annotation['updatedAt'] = timestamp;
       await _commit(binding.fingerprint, binding.document);
     }
@@ -431,6 +436,9 @@ class AnnotationRepository {
         'model': material.model,
         'audio': material.audio,
       });
+      if (material.audioBytes != null && material.kind != 'audio') {
+        throw ArgumentError('Only audio materials may contain binary bytes');
+      }
     }
     for (final message in input.aiMessages) {
       if (!const {'system', 'user', 'assistant'}.contains(message.role) ||
@@ -438,6 +446,20 @@ class AnnotationRepository {
           message.sequence < 0) {
         throw ArgumentError('Invalid editor AI message');
       }
+    }
+  }
+
+  Future<void> _persistEditorAudio(
+    Iterable<AnnotationEditorMaterialInput> materials,
+  ) async {
+    for (final material in materials) {
+      final bytes = material.audioBytes;
+      final metadata = material.audio;
+      if (bytes == null) continue;
+      if (material.kind != 'audio' || metadata == null) {
+        throw ArgumentError('Audio bytes require audio asset metadata');
+      }
+      await audioAssetStore.persist(metadata, bytes);
     }
   }
 

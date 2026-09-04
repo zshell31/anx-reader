@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/service/sync/annotation_audio_asset_sync.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -357,6 +360,57 @@ void main() {
         .singleWhere((item) => item['kind'] == 'ai-thread');
     expect(thread['messages'], hasLength(4));
     expect(thread['contextSnapshot']['context'], 'A sentence.');
+  });
+
+  test('editor Save persists audio bytes before canonical metadata', () async {
+    final bytes = Uint8List.fromList([1, 3, 5, 7]);
+    final assetStore = AnnotationAudioAssetStore(
+      resolveLocalPath: (relative) => p.join(directory.path, relative),
+    );
+    repository = AnnotationRepository(
+      shared,
+      now: () => instant,
+      audioAssetStore: assetStore,
+      onCanonicalMutation: semanticNotifications.add,
+    );
+
+    final ref = await repository.saveAnnotationEditorDraft(
+      AnnotationEditorSaveInput(
+        creation: creation(),
+        materials: [
+          AnnotationEditorMaterialInput(
+            providerId: 'openai-audio',
+            providerName: 'Audio',
+            kind: 'audio',
+            ipa: 'səˈlɛktɪd tɛkst',
+            voice: 'alloy',
+            model: 'gpt-4o-mini-tts',
+            audio: {
+              'assetRef': 'annotation-assets/audio/generated.mp3',
+              'format': 'mp3',
+              'mimeType': 'audio/mpeg',
+              'byteLength': bytes.length,
+              'sha256': sha256.convert(bytes).toString(),
+            },
+            audioBytes: bytes,
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      await File(p.join(
+        directory.path,
+        'annotation-assets/audio/generated.mp3',
+      )).readAsBytes(),
+      bytes,
+    );
+    final saved = annotationOf(
+      (await shared.annotationDocument(fingerprint))!,
+      ref.annotationId,
+    );
+    expect(saved['enrichments'].single['audio']['byteLength'], bytes.length);
+    expect(semanticNotifications, [fingerprint]);
   });
 
   test('editor edit preserves UUID, IDs, createdAt, and unknown fields',

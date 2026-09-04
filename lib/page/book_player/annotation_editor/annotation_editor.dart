@@ -6,6 +6,7 @@ import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_controller.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
+import 'package:anx_reader/service/sync/annotation_audio_asset_sync.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/translate/google_translate_app.dart';
@@ -823,6 +824,22 @@ class _AudioPreview extends StatefulWidget {
 class _AudioPreviewState extends State<_AudioPreview> {
   final AudioPlayer _player = AudioPlayer();
   bool _playing = false;
+  bool _localAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshLocalAvailability();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AudioPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.result.audio != widget.result.audio ||
+        oldWidget.result.audioBytes != widget.result.audioBytes) {
+      _refreshLocalAvailability();
+    }
+  }
 
   @override
   void dispose() {
@@ -832,13 +849,29 @@ class _AudioPreviewState extends State<_AudioPreview> {
 
   Future<void> _play() async {
     final bytes = widget.result.audioBytes;
-    if (bytes == null || bytes.isEmpty) return;
+    final assetRef = widget.result.audio?['assetRef'];
+    if ((bytes == null || bytes.isEmpty) && assetRef is! String) return;
     setState(() => _playing = true);
     try {
-      await _player.play(BytesSource(bytes));
+      if (bytes != null && bytes.isNotEmpty) {
+        await _player.play(BytesSource(bytes));
+      } else {
+        final path = AnnotationAudioAssetStore().pathFor(assetRef! as String);
+        await _player.play(DeviceFileSource(path));
+      }
     } finally {
       if (mounted) setState(() => _playing = false);
     }
+  }
+
+  Future<void> _refreshLocalAvailability() async {
+    final metadata = widget.result.audio;
+    final available = metadata == null
+        ? false
+        : await AnnotationAudioAssetStore().contains(
+            AnnotationAudioAsset.fromMetadata(metadata),
+          );
+    if (mounted) setState(() => _localAvailable = available);
   }
 
   @override
@@ -855,7 +888,10 @@ class _AudioPreviewState extends State<_AudioPreview> {
             TextButton.icon(
               key: const Key('annotation-editor-audio-play'),
               onPressed:
-                  widget.result.audioBytes == null || _playing ? null : _play,
+                  (widget.result.audioBytes == null && !_localAvailable) ||
+                          _playing
+                      ? null
+                      : _play,
               icon: const Icon(Icons.play_arrow),
               label: const Text('Play audio'),
             ),

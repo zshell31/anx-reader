@@ -10,7 +10,7 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
 - [x] Use the shared reader selection action menu for PDF text.
 - [x] Load and expose the embedded PDF outline in the contents drawer.
 - [x] Navigate to a PDF destination when an outline item is tapped.
-- [ ] Re-fit the current PDF page after an orientation/viewport change.
+- [x] Re-fit the current PDF page after an orientation/viewport change.
 - [ ] Persist text annotations whose selection crosses PDF page boundaries,
   excluding page-number spans from the logical quote.
 - [ ] Turn PDF pages by tapping the left or right edge.
@@ -29,6 +29,9 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
   navigation callbacks, and route outline taps through `PdfViewerController`
   `goToDest` (or the matching reflow page). Analyzer passes; outline and reading
   position tests pass (6/6).
+- 2026-09-04: Re-fit the current native PDF page to the new viewport width after
+  rotation or another material width change. Stale post-frame refits are
+  generation-guarded. Added a focused viewport decision test.
 
 ## Notes and constraints
 

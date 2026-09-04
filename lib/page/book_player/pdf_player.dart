@@ -11,6 +11,7 @@ import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
 import 'package:anx_reader/page/book_player/pdf_selection_action_menu.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
+import 'package:anx_reader/page/book_player/pdf_viewport.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
 import 'package:anx_reader/providers/book_toc.dart';
@@ -54,6 +55,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   bool _reflowMode = false;
   bool _annotationEditorOpen = false;
   Map<String, PdfDest> _outlineDestinations = const {};
+  int _viewportGeneration = 0;
 
   @override
   void initState() {
@@ -187,6 +189,25 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _publishReadingState();
     unawaited(refreshAnnotations());
     unawaited(_loadOutline(document));
+  }
+
+  void _onViewSizeChanged(
+    Size viewSize,
+    Size? oldViewSize,
+    PdfViewerController value,
+  ) {
+    if (_pageCount < 1 || !shouldRefitPdfViewport(viewSize, oldViewSize)) {
+      return;
+    }
+    final generation = ++_viewportGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _viewportGeneration || !value.isReady) {
+        return;
+      }
+      final page = _currentPageNumber.clamp(1, _pageCount);
+      final matrix = value.calcMatrixFitWidthForPage(pageNumber: page);
+      if (matrix != null) value.value = matrix;
+    });
   }
 
   Future<void> _loadOutline(PdfDocument document) async {
@@ -469,6 +490,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
               panEnabled: true,
               scaleEnabled: true,
               onViewerReady: _onViewerReady,
+              onViewSizeChanged: _onViewSizeChanged,
               onPageChanged: _onPageChanged,
               onGeneralTap: _onGeneralTap,
               buildContextMenu: _buildContextMenu,

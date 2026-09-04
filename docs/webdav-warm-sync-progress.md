@@ -369,8 +369,12 @@ documents for the domain, its outbox/metadata rows, and both activity bootstrap
 receipt generations on Onyx before sync startup. A read-only WebDAV check after
 that launch still reported zero child collections. The clean release from
 commit `a9b9d116`, without the maintenance hook, was then reinstalled. Samsung
-must receive the same maintenance APK before Anx Reader is opened there; only
-after that second local reset is the activity reset complete across replicas.
+subsequently received the identical maintenance APK before its old application
+was allowed to run. Its controlled launch remained healthy and a second
+read-only WebDAV check still reported zero activity child collections. The
+clean release was then reinstalled on Samsung as well. The one-time reset is
+therefore complete across both known replicas, and neither installed APK
+contains the maintenance hook.
 
 ### Stage 10 device validation
 

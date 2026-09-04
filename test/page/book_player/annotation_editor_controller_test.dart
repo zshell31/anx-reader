@@ -146,6 +146,18 @@ void main() {
     );
     controller.dispose();
   });
+
+  test('audio provider is inert when the selected provider does not support it',
+      () async {
+    final controller = _controller(audioAvailable: () => false);
+
+    await controller.runProvider(AnnotationEditorProvider.audio);
+
+    expect(controller.isProviderAvailable(AnnotationEditorProvider.audio),
+        isFalse);
+    expect(controller.draft.sourceResults, isEmpty);
+    controller.dispose();
+  });
 }
 
 AnnotationEditorController _controller({
@@ -153,6 +165,7 @@ AnnotationEditorController _controller({
   LdoceAnnotationDictionaryService? ldoce,
   AnnotationAiService? ai,
   OpenAiAudioService? audio,
+  bool Function()? audioAvailable,
   SaveAnnotationEditor? saveDraft,
 }) =>
     AnnotationEditorController(
@@ -184,6 +197,7 @@ AnnotationEditorController _controller({
       ldoce: ldoce,
       ai: ai,
       audio: audio ?? _ImmediateAudio(),
+      audioAvailable: audioAvailable ?? (() => true),
       saveDraft: saveDraft ?? (_) async => _ref(),
       deleteAnnotation: (ref) async => ref,
       targetLanguageCode: () => 'uk',

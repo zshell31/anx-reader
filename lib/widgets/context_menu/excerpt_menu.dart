@@ -7,6 +7,7 @@ import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/dictionary/external_dictionary.dart';
+import 'package:anx_reader/service/annotation_enrichment/openai_audio_service.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/service/sync/annotation_catalog.dart';
 import 'package:anx_reader/utils/toast/common.dart';
@@ -117,7 +118,10 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   }
 
   bool _showProviderAction(AnnotationEditorProvider provider) =>
-      _existingAnnotationLoaded && !_completedProviders.contains(provider);
+      _existingAnnotationLoaded &&
+      !_completedProviders.contains(provider) &&
+      (provider != AnnotationEditorProvider.audio ||
+          selectedAiProviderSupportsOpenAiAudio());
 
   Future<SelectionAnnotationHandle> _createOrResolve(
       SelectionSnapshot snapshot) async {

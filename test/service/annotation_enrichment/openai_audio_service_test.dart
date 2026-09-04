@@ -70,9 +70,82 @@ void main() {
     );
     await expectLater(service.generate('text'), throwsA(isA<StateError>()));
   });
+
+  test('uses TTS settings from the selected OpenAI provider', () async {
+    final requests = <Map<String, dynamic>>[];
+    final service = OpenAiAudioService(
+      resolveRoute: () => _route(
+        provider: const AiProvider(
+          id: 'openai',
+          title: 'Selected OpenAI',
+          url: 'https://api.openai.com/v1',
+          protocol: AiProtocol.openai,
+          model: 'ipa-model',
+          ttsModel: 'provider-tts',
+          ttsVoice: 'verse',
+        ),
+      ),
+      post: (url, {required headers, required body}) async {
+        requests.add(jsonDecode(body as String) as Map<String, dynamic>);
+        return url.path.endsWith('/audio/speech')
+            ? http.Response.bytes([1], 200)
+            : http.Response(
+                '{"output":[{"content":[{"type":"output_text","text":"tekst"}]}]}',
+                200);
+      },
+    );
+
+    final result = await service.generate('text');
+
+    expect(requests.first, containsPair('model', 'provider-tts'));
+    expect(requests.first, containsPair('voice', 'verse'));
+    expect(result.model, 'provider-tts');
+    expect(result.voice, 'verse');
+  });
+
+  test('rejects Audio when the selected provider is not OpenAI', () async {
+    final service = OpenAiAudioService(
+      resolveRoute: () => EffectiveAiRoute(
+        config: LangchainAiConfig(
+          identifier: 'claude',
+          model: 'claude-model',
+          apiKey: 'secret',
+        ),
+        protocol: AiProtocol.claude,
+      ),
+    );
+
+    await expectLater(
+      service.generate('text'),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('only for the built-in OpenAI provider'),
+      )),
+    );
+  });
+
+  test('rejects a custom provider that only uses the OpenAI protocol',
+      () async {
+    final service = OpenAiAudioService(
+      resolveRoute: () => _route(
+        provider: const AiProvider(
+          id: 'custom-compatible',
+          title: 'Compatible endpoint',
+          url: 'https://example.test/v1',
+          protocol: AiProtocol.openai,
+          model: 'text-model',
+          ttsModel: 'unknown-tts',
+          ttsVoice: 'unknown-voice',
+        ),
+      ),
+    );
+
+    await expectLater(service.generate('text'), throwsA(isA<StateError>()));
+  });
 }
 
-EffectiveAiRoute _route() => EffectiveAiRoute(
+EffectiveAiRoute _route({AiProvider? provider}) => EffectiveAiRoute(
       config: LangchainAiConfig(
         identifier: 'openai',
         model: 'ipa-model',
@@ -80,4 +153,5 @@ EffectiveAiRoute _route() => EffectiveAiRoute(
         baseUrl: 'https://api.openai.com/v1',
       ),
       protocol: AiProtocol.openai,
+      provider: provider,
     );

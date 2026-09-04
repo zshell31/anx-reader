@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/service/ai/effective_route.dart';
 import 'package:anx_reader/service/ai/langchain_ai_config.dart';
 import 'package:crypto/crypto.dart';
@@ -49,10 +50,9 @@ class OpenAiAudioService {
     String Function()? voice,
     OpenAiAudioPost? post,
     Uuid? uuid,
-  })  : resolveRoute = resolveRoute ??
-            (() => resolveEffectiveAiRouteFromPrefs(identifier: 'openai')),
-        model = model ?? (() => Prefs().openAiAudioModel),
-        voice = voice ?? (() => Prefs().openAiAudioVoice),
+  })  : resolveRoute = resolveRoute ?? resolveEffectiveAiRouteFromPrefs,
+        model = model ?? (() => ''),
+        voice = voice ?? (() => ''),
         post = post ?? _post,
         uuid = uuid ?? const Uuid();
 
@@ -61,10 +61,32 @@ class OpenAiAudioService {
     if (text.isEmpty) throw ArgumentError.value(selectedText, 'selectedText');
     final route = resolveRoute();
     if (route == null || route.config.apiKey.trim().isEmpty) {
-      throw StateError('OpenAI is not configured.');
+      throw StateError('The selected OpenAI provider is not configured.');
     }
-    final audioModel = model().trim();
-    final audioVoice = voice().trim();
+    if (route.protocol != AiProtocol.openai ||
+        (route.provider != null && route.provider?.id != 'openai')) {
+      throw StateError(
+          'Audio is available only for the built-in OpenAI provider.');
+    }
+    final modelOverride = model().trim();
+    final voiceOverride = voice().trim();
+    final legacyOpenAiProvider = route.provider?.id == 'openai';
+    final audioModel = (modelOverride.isNotEmpty
+            ? modelOverride
+            : route.provider?.ttsModel.trim().isNotEmpty == true
+                ? route.provider!.ttsModel.trim()
+                : legacyOpenAiProvider
+                    ? Prefs().openAiAudioModel
+                    : '')
+        .trim();
+    final audioVoice = (voiceOverride.isNotEmpty
+            ? voiceOverride
+            : route.provider?.ttsVoice.trim().isNotEmpty == true
+                ? route.provider!.ttsVoice.trim()
+                : legacyOpenAiProvider
+                    ? Prefs().openAiAudioVoice
+                    : '')
+        .trim();
     if (audioModel.isEmpty || audioVoice.isEmpty) {
       throw StateError('OpenAI Audio model and voice must be configured.');
     }
@@ -125,6 +147,34 @@ class OpenAiAudioService {
       assetRef: 'annotation-assets/audio/$filename',
       sha256: sha256.convert(bytes).toString(),
     );
+  }
+}
+
+bool selectedAiProviderSupportsOpenAiAudio() {
+  final rawProviders = Prefs().getAiProviders();
+  if (rawProviders.isEmpty) {
+    return Prefs().selectedAiService == 'openai';
+  }
+  try {
+    final providers = rawProviders
+        .map((json) => AiProvider.fromJson(json as Map<String, dynamic>))
+        .toList();
+    final selectedId = Prefs().selectedAiService;
+    final selected =
+        providers.where((item) => item.id == selectedId).firstOrNull ??
+            providers.where((item) => item.enabled).firstOrNull;
+    return selected?.enabled == true &&
+        selected?.id == 'openai' &&
+        selected?.protocol == AiProtocol.openai;
+  } catch (_) {
+    return false;
+  }
+}
+
+extension<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
   }
 }
 

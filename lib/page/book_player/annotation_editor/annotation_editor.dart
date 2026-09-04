@@ -122,7 +122,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
     }
     if (widget.initialProvider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && draft.sourceResults[widget.initialProvider!] == null) {
+        if (mounted &&
+            controller.isProviderAvailable(widget.initialProvider!) &&
+            draft.sourceResults[widget.initialProvider!] == null) {
           controller.runProvider(widget.initialProvider!);
         }
       });
@@ -310,7 +312,10 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                             _ProviderButton(
                               provider: provider,
                               state: draft.stateFor(provider),
-                              onPressed: () => controller.runProvider(provider),
+                              onPressed:
+                                  controller.isProviderAvailable(provider)
+                                      ? () => controller.runProvider(provider)
+                                      : null,
                             ),
                       ],
                     ),
@@ -334,7 +339,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                           state: draft.stateFor(provider),
                           initiallyExpanded:
                               !_initialSourceProviders.contains(provider),
-                          onRefresh: () => controller.runProvider(provider),
+                          onRefresh: controller.isProviderAvailable(provider)
+                              ? () => controller.runProvider(provider)
+                              : null,
                           onRemove: () => controller.removeProvider(provider),
                         ),
                       ],
@@ -504,7 +511,7 @@ class _ContextSectionState extends State<_ContextSection> {
 class _ProviderButton extends StatelessWidget {
   final AnnotationEditorProvider provider;
   final AnnotationEditorProviderState state;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _ProviderButton({
     required this.provider,
@@ -533,7 +540,7 @@ class _SourceCard extends StatefulWidget {
   final String selectedText;
   final AnnotationEditorProviderState state;
   final bool initiallyExpanded;
-  final VoidCallback onRefresh;
+  final VoidCallback? onRefresh;
   final VoidCallback onRemove;
 
   const _SourceCard({

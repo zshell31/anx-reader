@@ -19,9 +19,29 @@ class AiProviders extends _$AiProviders {
 
     // Convert from JSON
     try {
-      return rawProviders
+      final providers = rawProviders
           .map((json) => AiProvider.fromJson(json as Map<String, dynamic>))
           .toList();
+      final needsAudioMigration = providers.any((provider) =>
+          provider.id == 'openai' &&
+          provider.protocol == AiProtocol.openai &&
+          (provider.ttsModel.isEmpty || provider.ttsVoice.isEmpty));
+      final migrated = providers
+          .map((provider) => provider.id == 'openai' &&
+                  provider.protocol == AiProtocol.openai &&
+                  (provider.ttsModel.isEmpty || provider.ttsVoice.isEmpty)
+              ? provider.copyWith(
+                  ttsModel: provider.ttsModel.isEmpty
+                      ? Prefs().openAiAudioModel
+                      : provider.ttsModel,
+                  ttsVoice: provider.ttsVoice.isEmpty
+                      ? Prefs().openAiAudioVoice
+                      : provider.ttsVoice,
+                )
+              : provider)
+          .toList();
+      if (needsAudioMigration) Prefs().saveAiProviders(migrated);
+      return migrated;
     } catch (e) {
       // If parsing fails, reinitialize
       return _initializeDefaultProviders();
@@ -72,6 +92,8 @@ class AiProviders extends _$AiProviders {
               ]
             : [],
         model: model,
+        ttsModel: option.identifier == 'openai' ? Prefs().openAiAudioModel : '',
+        ttsVoice: option.identifier == 'openai' ? Prefs().openAiAudioVoice : '',
         keyIndex: 0,
         createdAt: now,
         updatedAt: now,

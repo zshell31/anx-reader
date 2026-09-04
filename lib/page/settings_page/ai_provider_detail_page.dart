@@ -31,6 +31,8 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
   late TextEditingController _nameController;
   late TextEditingController _urlController;
   late TextEditingController _modelController;
+  late TextEditingController _ttsModelController;
+  late TextEditingController _ttsVoiceController;
 
   AiProtocol _selectedProtocol = AiProtocol.openai;
   AiReasoningEffort _reasoningEffort = AiReasoningEffort.auto;
@@ -52,6 +54,15 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
     _nameController = TextEditingController(text: provider?.title ?? '');
     _urlController = TextEditingController(text: provider?.url ?? '');
     _modelController = TextEditingController(text: provider?.model ?? '');
+    _ttsModelController = TextEditingController(
+      text: provider?.ttsModel.isNotEmpty == true
+          ? provider!.ttsModel
+          : 'gpt-4o-mini-tts',
+    );
+    _ttsVoiceController = TextEditingController(
+      text:
+          provider?.ttsVoice.isNotEmpty == true ? provider!.ttsVoice : 'alloy',
+    );
     _selectedProtocol = provider?.protocol ?? AiProtocol.openai;
     _reasoningEffort = provider?.reasoningEffort ?? AiReasoningEffort.auto;
     _apiKeys = provider?.apiKeys.toList() ?? [];
@@ -59,6 +70,8 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
     _nameController.addListener(() => setState(() => _isModified = true));
     _urlController.addListener(() => setState(() => _isModified = true));
     _modelController.addListener(() => setState(() => _isModified = true));
+    _ttsModelController.addListener(() => setState(() => _isModified = true));
+    _ttsVoiceController.addListener(() => setState(() => _isModified = true));
   }
 
   @override
@@ -66,6 +79,8 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
     _nameController.dispose();
     _urlController.dispose();
     _modelController.dispose();
+    _ttsModelController.dispose();
+    _ttsVoiceController.dispose();
     super.dispose();
   }
 
@@ -172,6 +187,35 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
               ],
             ),
             const SizedBox(height: 24),
+
+            if (widget.providerId == 'openai' &&
+                _selectedProtocol == AiProtocol.openai) ...[
+              Text(
+                'OpenAI Audio',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('ai-provider-tts-model'),
+                controller: _ttsModelController,
+                decoration: const InputDecoration(
+                  labelText: 'TTS model',
+                  hintText: 'gpt-4o-mini-tts',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('ai-provider-tts-voice'),
+                controller: _ttsVoiceController,
+                decoration: const InputDecoration(
+                  labelText: 'TTS voice',
+                  hintText: 'alloy',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
 
             _buildAdvancedSettingsCard(context),
             const SizedBox(height: 16),
@@ -622,6 +666,10 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
           : false,
       apiKeys: _apiKeys,
       model: _modelController.text,
+      ttsModel:
+          widget.providerId == 'openai' ? _ttsModelController.text.trim() : '',
+      ttsVoice:
+          widget.providerId == 'openai' ? _ttsVoiceController.text.trim() : '',
       reasoningEffort: _reasoningEffort,
       keyIndex: 0,
       createdAt: widget.providerId != null
@@ -668,6 +716,12 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
             : false,
         apiKeys: _apiKeys,
         model: _modelController.text,
+        ttsModel: widget.providerId == 'openai'
+            ? _ttsModelController.text.trim()
+            : '',
+        ttsVoice: widget.providerId == 'openai'
+            ? _ttsVoiceController.text.trim()
+            : '',
         reasoningEffort: _reasoningEffort,
         keyIndex: 0,
         createdAt: widget.providerId != null

@@ -36,6 +36,8 @@ abstract class AiProvider with _$AiProvider {
     bool isBuiltin, // Whether this is a built-in provider (cannot be deleted)
     @Default([]) List<AiApiKey> apiKeys, // List of API keys
     @Default('') String model, // Current selected model
+    @Default('') String ttsModel, // Provider-specific text-to-speech model
+    @Default('') String ttsVoice, // Provider-specific text-to-speech voice
     @Default(AiReasoningEffort.auto)
     AiReasoningEffort reasoningEffort, // OpenAI reasoning effort
     @Default(0) int keyIndex, // Current round-robin key index

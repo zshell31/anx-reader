@@ -28,6 +28,7 @@ class AnnotationEditorController extends ChangeNotifier {
   final DeleteAnnotationEditor deleteAnnotation;
   final String Function() targetLanguageCode;
   final String Function() targetLanguageName;
+  final bool Function() audioAvailable;
 
   bool saving = false;
   String? saveError;
@@ -47,6 +48,7 @@ class AnnotationEditorController extends ChangeNotifier {
     DeleteAnnotationEditor? deleteAnnotation,
     String Function()? targetLanguageCode,
     String Function()? targetLanguageName,
+    bool Function()? audioAvailable,
   })  : google = google ?? GoogleAnnotationTranslateService(),
         ldoce = ldoce ?? LdoceAnnotationDictionaryService(),
         ai = ai ?? AnnotationAiService(),
@@ -57,9 +59,15 @@ class AnnotationEditorController extends ChangeNotifier {
         targetLanguageCode =
             targetLanguageCode ?? (() => Prefs().translateTo.code),
         targetLanguageName =
-            targetLanguageName ?? (() => Prefs().translateTo.nativeName);
+            targetLanguageName ?? (() => Prefs().translateTo.nativeName),
+        audioAvailable =
+            audioAvailable ?? selectedAiProviderSupportsOpenAiAudio;
+
+  bool isProviderAvailable(AnnotationEditorProvider provider) =>
+      provider != AnnotationEditorProvider.audio || audioAvailable();
 
   Future<void> runProvider(AnnotationEditorProvider provider) async {
+    if (!isProviderAvailable(provider)) return;
     final request = draft.startProvider(provider);
     AnxLog.info('Annotation enrichment started: ${provider.name}');
     notifyListeners();

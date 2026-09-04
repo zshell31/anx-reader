@@ -141,6 +141,19 @@ void main() {
     expect(play.onPressed, isNotNull);
   });
 
+  testWidgets('Audio source action is disabled for a non-OpenAI provider',
+      (tester) async {
+    final controller = _controller(audioAvailable: () => false);
+    addTearDown(controller.dispose);
+
+    await _openDialog(tester, controller);
+
+    final chip = tester.widget<ActionChip>(
+      find.ancestor(of: find.text('Audio'), matching: find.byType(ActionChip)),
+    );
+    expect(chip.onPressed, isNull);
+  });
+
   testWidgets('existing annotation opens at full width and scroll offset zero',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
@@ -501,6 +514,7 @@ AnnotationEditorController _controller({
   LdoceAnnotationDictionaryService? ldoce,
   AnnotationAiService? ai,
   SaveAnnotationEditor? saveDraft,
+  bool Function()? audioAvailable,
 }) =>
     AnnotationEditorController(
       draft: draft ?? _newDraft(),
@@ -508,6 +522,7 @@ AnnotationEditorController _controller({
       google: google,
       ldoce: ldoce,
       ai: ai,
+      audioAvailable: audioAvailable ?? (() => true),
       saveDraft: saveDraft ?? (_) async => _ref(),
       deleteAnnotation: (ref) async => ref,
       targetLanguageCode: () => 'uk',

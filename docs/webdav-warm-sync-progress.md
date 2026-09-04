@@ -376,6 +376,21 @@ clean release was then reinstalled on Samsung as well. The one-time reset is
 therefore complete across both known replicas, and neither installed APK
 contains the maintenance hook.
 
+### Post-reset reading activity validation
+
+Onyx opened `Mystic Game Master Emulator` after the two-device reset, read for
+30 seconds, closed the reader, and synchronized. The exported 2026-09-04 log
+showed a new revision-1 activity document and a complete automatic run with
+`pending=0`, `failed=0`, and `durationMs=1015`.
+
+The subsequent read-only WebDAV audit found exactly one activity collection,
+one daily document, and one live event. Its duration was 30 seconds, matching
+the interval from `08:24:34Z` to `08:25:04Z`; its event ID was a random UUIDv4,
+not a deterministic legacy UUIDv5. There were no deleted entries, duplicate
+events, legacy aggregates, or old daily documents. During first-create
+reconciliation one request briefly received 412; the existing bounded LOCK
+fallback converged revision 1 and did not duplicate data or leave failed work.
+
 ### Stage 10 device validation
 
 Release commit `0072d48a` was installed on Onyx LOMONOSOV3 without clearing

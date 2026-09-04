@@ -418,9 +418,9 @@ and device IDs. The first book remained byte-for-byte unchanged at 30 seconds.
 Across both documents there were three unique events, two devices, zero legacy
 events, zero tombstones, and a correct total of 69 seconds.
 
-The Samsung log also contained an unrelated foliate WebView
-`createTreeWalker` type error while paging. It did not interrupt reading-state
-or reading-activity convergence and is outside the activity reset validation.
+The Samsung log also contained an unrelated foliate WebView error while
+paging. It did not interrupt sync and is tracked separately as `BUG-001` in
+[`known-bugs.md`](known-bugs.md).
 
 ### Stage 10 device validation
 

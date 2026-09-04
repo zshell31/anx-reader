@@ -934,26 +934,25 @@ class ReadingPageState extends ConsumerState<ReadingPage>
             child: Scaffold(
               key: _scaffoldKey,
               resizeToAvoidBottomInset: false,
-              drawer: _isPdf
-                  ? null
-                  : PointerInterceptor(
-                      child: Drawer(
-                        width: math.min(
-                          MediaQuery.of(context).size.width * 0.8,
-                          420,
-                        ),
-                        child: SafeArea(
-                          child: TocWidget(
-                            epubPlayerKey: epubPlayerKey,
-                            hideAppBarAndBottomBar:
-                                showOrHideAppBarAndBottomBar,
-                            closeDrawer: () {
-                              _scaffoldKey.currentState?.closeDrawer();
-                            },
-                          ),
-                        ),
-                      ),
+              drawer: PointerInterceptor(
+                child: Drawer(
+                  width: math.min(
+                    MediaQuery.of(context).size.width * 0.8,
+                    420,
+                  ),
+                  child: SafeArea(
+                    child: TocWidget(
+                      epubPlayerKey: epubPlayerKey,
+                      pdfPlayerKey: _isPdf ? pdfPlayerKey : null,
+                      isPdf: _isPdf,
+                      hideAppBarAndBottomBar: showOrHideAppBarAndBottomBar,
+                      closeDrawer: () {
+                        _scaffoldKey.currentState?.closeDrawer();
+                      },
                     ),
+                  ),
+                ),
+              ),
               body: Stack(
                 children: [
                   AxisFlex(

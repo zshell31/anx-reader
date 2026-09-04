@@ -12,12 +12,18 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 class BookToc extends ConsumerStatefulWidget {
   const BookToc({
     super.key,
-    required this.epubPlayerKey,
+    this.epubPlayerKey,
+    this.currentHref,
+    this.currentProgress,
+    this.onNavigate,
     required this.hideAppBarAndBottomBar,
     required this.closeDrawer,
   });
 
-  final GlobalKey<EpubPlayerState> epubPlayerKey;
+  final GlobalKey<EpubPlayerState>? epubPlayerKey;
+  final String Function()? currentHref;
+  final String Function()? currentProgress;
+  final ValueChanged<TocItem>? onNavigate;
   final Function hideAppBarAndBottomBar;
   final VoidCallback closeDrawer;
 
@@ -38,6 +44,20 @@ class _BookTocState extends ConsumerState<BookToc> {
   String? _pendingScrollKey;
   bool _pendingScrollAnimated = false;
   bool _hasRestoredScrollPosition = false;
+
+  String get _currentHref =>
+      widget.currentHref?.call() ??
+      widget.epubPlayerKey?.currentState?.chapterHref ??
+      '';
+
+  String get _currentProgress {
+    final provided = widget.currentProgress?.call();
+    if (provided != null) return provided;
+    final currentState = widget.epubPlayerKey?.currentState;
+    return currentState == null
+        ? ''
+        : '${currentState.chapterCurrentPage} / ${currentState.chapterTotalPages}';
+  }
 
   @override
   void initState() {
@@ -136,7 +156,7 @@ class _BookTocState extends ConsumerState<BookToc> {
   }
 
   void _scrollToCurrent({bool animated = false}) {
-    final currentHref = widget.epubPlayerKey.currentState?.chapterHref ?? '';
+    final currentHref = _currentHref;
     if (currentHref.isEmpty) {
       return;
     }
@@ -252,7 +272,8 @@ class _BookTocState extends ConsumerState<BookToc> {
         selection: TextSelection.collapsed(offset: currentQuery.length),
       );
     }
-    final isSearchActive = tocSearchState.isActive;
+    final isSearchActive =
+        widget.epubPlayerKey != null && tocSearchState.isActive;
     final searchResults = tocSearchState.results;
     final showSearchProgress = tocSearchState.isSearching;
     final progressValue = tocSearchState.progress <= 0.0
@@ -281,7 +302,7 @@ class _BookTocState extends ConsumerState<BookToc> {
       _hasRestoredScrollPosition = false;
     }
 
-    final currentHref = widget.epubPlayerKey.currentState?.chapterHref ?? '';
+    final currentHref = _currentHref;
     final currentPath = currentHref.isEmpty
         ? <TocItem>[]
         : (_findPath(tocItems, currentHref) ?? <TocItem>[]);
@@ -301,10 +322,7 @@ class _BookTocState extends ConsumerState<BookToc> {
     }
 
     final selectedKeys = currentPath.map(_keyForItem).toSet();
-    final currentState = widget.epubPlayerKey.currentState;
-    final currentProgress = currentState == null
-        ? ''
-        : '${currentState.chapterCurrentPage} / ${currentState.chapterTotalPages}';
+    final currentProgress = _currentProgress;
 
     var locatingButton = IconButton(
       icon: const Icon(Icons.my_location),
@@ -327,7 +345,7 @@ class _BookTocState extends ConsumerState<BookToc> {
                   icon: const Icon(Icons.close),
                   onPressed: () {
                     searchBarController.clear();
-                    widget.epubPlayerKey.currentState?.clearSearch();
+                    widget.epubPlayerKey?.currentState?.clearSearch();
                   },
                 )
               : const SizedBox(),
@@ -336,9 +354,9 @@ class _BookTocState extends ConsumerState<BookToc> {
           final trimmed = value.trim();
           if (trimmed.isEmpty) {
             searchBarController.clear();
-            widget.epubPlayerKey.currentState?.clearSearch();
+            widget.epubPlayerKey?.currentState?.clearSearch();
           } else {
-            widget.epubPlayerKey.currentState?.search(trimmed);
+            widget.epubPlayerKey?.currentState?.search(trimmed);
           }
         },
       ),
@@ -361,7 +379,7 @@ class _BookTocState extends ConsumerState<BookToc> {
                     return searchResultWidget(
                       searchResult: searchResults[index],
                       hideAppBarAndBottomBar: widget.hideAppBarAndBottomBar,
-                      epubPlayerKey: widget.epubPlayerKey,
+                      epubPlayerKey: widget.epubPlayerKey!,
                       closeDrawer: widget.closeDrawer,
                     );
                   },
@@ -372,7 +390,7 @@ class _BookTocState extends ConsumerState<BookToc> {
     final columnChildren = <Widget>[
       Row(
         children: [
-          Expanded(child: searchBox),
+          if (widget.epubPlayerKey != null) Expanded(child: searchBox),
           if (!isSearchActive) locatingButton,
         ],
       ),
@@ -406,7 +424,13 @@ class _BookTocState extends ConsumerState<BookToc> {
                         : () => _toggleExpanded(tocItem),
                     onTap: () {
                       widget.hideAppBarAndBottomBar(false);
-                      widget.epubPlayerKey.currentState!.goToHref(tocItem.href);
+                      final onNavigate = widget.onNavigate;
+                      if (onNavigate != null) {
+                        onNavigate(tocItem);
+                      } else {
+                        widget.epubPlayerKey?.currentState
+                            ?.goToHref(tocItem.href);
+                      }
                       widget.closeDrawer();
                     },
                   );

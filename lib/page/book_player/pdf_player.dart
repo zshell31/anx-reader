@@ -73,6 +73,36 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
 
   PdfDest? outlineDestination(String href) => _outlineDestinations[href];
 
+  int get currentPageNumber => _currentPageNumber;
+  int get pageCount => _pageCount;
+
+  String get currentOutlineHref {
+    String current = '';
+    var currentPage = 0;
+    for (final entry in _outlineDestinations.entries) {
+      final page = entry.value.pageNumber;
+      if (page <= _currentPageNumber && page >= currentPage) {
+        current = entry.key;
+        currentPage = page;
+      }
+    }
+    return current;
+  }
+
+  Future<void> goToOutline(String href) async {
+    final destination = _outlineDestinations[href];
+    if (destination == null) return;
+    if (_reflowMode) {
+      await _reflowPageController?.animateToPage(
+        destination.pageNumber - 1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    if (controller.isReady) await controller.goToDest(destination);
+  }
+
   Future<void> zoomIn() async {
     if (!controller.isReady) return;
     await controller.zoomUp();

@@ -1,5 +1,6 @@
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/page/book_player/epub_player.dart';
+import 'package:anx_reader/page/book_player/pdf_player.dart';
 import 'package:anx_reader/widgets/reading_page/widgets/book_toc.dart';
 import 'package:anx_reader/widgets/reading_page/widgets/bookmark.dart';
 import 'package:flutter/material.dart';
@@ -8,11 +9,15 @@ class TocWidget extends StatefulWidget {
   const TocWidget({
     super.key,
     required this.epubPlayerKey,
+    this.pdfPlayerKey,
+    this.isPdf = false,
     required this.hideAppBarAndBottomBar,
     required this.closeDrawer,
   });
 
   final GlobalKey<EpubPlayerState> epubPlayerKey;
+  final GlobalKey<PdfPlayerState>? pdfPlayerKey;
+  final bool isPdf;
   final Function hideAppBarAndBottomBar;
   final VoidCallback closeDrawer;
 
@@ -27,7 +32,7 @@ class _TocWidgetState extends State<TocWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: widget.isPdf ? 1 : 2, vsync: this);
   }
 
   @override
@@ -44,7 +49,7 @@ class _TocWidgetState extends State<TocWidget>
           controller: _tabController,
           tabs: [
             Tab(text: L10n.of(context).readingContents),
-            Tab(text: L10n.of(context).readingBookmark),
+            if (!widget.isPdf) Tab(text: L10n.of(context).readingBookmark),
           ],
         ),
         Expanded(
@@ -54,7 +59,7 @@ class _TocWidgetState extends State<TocWidget>
               controller: _tabController,
               children: [
                 buildBookToc(),
-                buildBookmarkList(),
+                if (!widget.isPdf) buildBookmarkList(),
               ],
             ),
           ),
@@ -74,6 +79,22 @@ class _TocWidgetState extends State<TocWidget>
   }
 
   BookToc buildBookToc() {
+    if (widget.isPdf) {
+      return BookToc(
+        currentHref: () =>
+            widget.pdfPlayerKey?.currentState?.currentOutlineHref ?? '',
+        currentProgress: () {
+          final state = widget.pdfPlayerKey?.currentState;
+          return state == null
+              ? ''
+              : '${state.currentPageNumber} / ${state.pageCount}';
+        },
+        onNavigate: (item) =>
+            widget.pdfPlayerKey?.currentState?.goToOutline(item.href),
+        hideAppBarAndBottomBar: widget.hideAppBarAndBottomBar,
+        closeDrawer: widget.closeDrawer,
+      );
+    }
     return BookToc(
       epubPlayerKey: widget.epubPlayerKey,
       hideAppBarAndBottomBar: widget.hideAppBarAndBottomBar,

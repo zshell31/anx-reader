@@ -22,6 +22,9 @@ PDF-native coordinates, text permissions, and annotation selectors intact.
   to the same annotation, AI, dictionary, translation, copy, search, and share
   actions used by EPUB. PDF TTS stays hidden because it has no continuation
   implementation yet. Targeted editor/selection/PDF tests and analyzer pass.
+- 2026-09-04: Added the tested PDF outline-to-TOC adapter and load the embedded
+  outline when `pdfrx` opens a document. Drawer wiring/navigation is the next
+  commit; the outline foundation is intentionally committed separately.
 
 ## Notes and constraints
 

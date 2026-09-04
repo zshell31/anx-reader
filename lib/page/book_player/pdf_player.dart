@@ -6,12 +6,14 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
+import 'package:anx_reader/page/book_player/pdf_outline.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
 import 'package:anx_reader/page/book_player/pdf_selection_action_menu.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/providers/book_list.dart';
+import 'package:anx_reader/providers/book_toc.dart';
 import 'package:anx_reader/providers/current_reading.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_sync_runtime.dart';
@@ -51,6 +53,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   PageController? _reflowPageController;
   bool _reflowMode = false;
   bool _annotationEditorOpen = false;
+  Map<String, PdfDest> _outlineDestinations = const {};
 
   @override
   void initState() {
@@ -61,11 +64,14 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         1;
     _currentPageNumber = _initialPageNumber;
     _textBlockLoader = PdfTextBlockPageLoader(loadPageText: _loadPageText);
+    ref.read(bookTocProvider.notifier).setToc(const []);
   }
 
   Future<void> nextPage() => _goToRelativePage(1);
 
   Future<void> prevPage() => _goToRelativePage(-1);
+
+  PdfDest? outlineDestination(String href) => _outlineDestinations[href];
 
   Future<void> zoomIn() async {
     if (!controller.isReady) return;
@@ -150,6 +156,15 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         _initialPageNumber.clamp(1, _pageCount < 1 ? 1 : _pageCount);
     _publishReadingState();
     unawaited(refreshAnnotations());
+    unawaited(_loadOutline(document));
+  }
+
+  Future<void> _loadOutline(PdfDocument document) async {
+    final outline = await document.loadOutline();
+    if (!mounted) return;
+    final toc = buildPdfOutlineToc(outline, document.pages.length);
+    _outlineDestinations = toc.destinations;
+    ref.read(bookTocProvider.notifier).setToc(toc.items);
   }
 
   Widget? _buildContextMenu(

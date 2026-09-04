@@ -39,7 +39,6 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
   final events = doc['events'];
   if (events is! List) throw const FormatException('events must be a list');
   final byId = <String, Map<String, dynamic>>{};
-  final legacyObservations = <_LegacyAggregateObservation>[];
   for (final raw in events) {
     if (raw is! Map) throw const FormatException('event must be an object');
     final event = Map<String, dynamic>.from(raw);
@@ -65,18 +64,6 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
           day,
           duration,
         );
-    final stamp = event['stamp'] == null
-        ? DomainStamp(
-            modifiedAt: DateTime.parse(startedAt).toUtc(),
-            deviceId: deviceId,
-          )
-        : DomainStamp.fromJson(event['stamp']);
-    if (isLegacyAggregate && !deleted) {
-      legacyObservations.add(_LegacyAggregateObservation(
-        durationSeconds: duration,
-        importedAt: stamp.modifiedAt,
-      ));
-    }
     event['startedAt'] = isLegacyAggregate
         ? DateTime.parse('${day}T00:00:00Z').toIso8601String()
         : DateTime.parse(startedAt).toUtc().toIso8601String();
@@ -87,7 +74,12 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
             modifiedAt: DateTime.parse('${day}T00:00:00Z'),
             deviceId: readingActivityLegacySource,
           ).toJson()
-        : stamp.toJson();
+        : event['stamp'] == null
+            ? DomainStamp(
+                    modifiedAt: DateTime.parse(startedAt).toUtc(),
+                    deviceId: deviceId)
+                .toJson()
+            : DomainStamp.fromJson(event['stamp']).toJson();
     final previous = byId[id];
     if (previous != null) {
       for (final field in const [
@@ -110,108 +102,10 @@ Map<String, dynamic> decodeReadingActivityDocument(Object? input) {
     }
     byId[id] = event;
   }
-  _collapseLegacyAggregateCascade(
-    doc['fingerprint'] as String,
-    day,
-    byId,
-    legacyObservations,
-  );
   doc['events'] = byId.values.toList()
     ..sort(
         (a, b) => (a['eventId'] as String).compareTo(b['eventId'] as String));
   return doc;
-}
-
-void _collapseLegacyAggregateCascade(
-  String fingerprint,
-  String day,
-  Map<String, Map<String, dynamic>> byId,
-  List<_LegacyAggregateObservation> observations,
-) {
-  bool isLegacy(Map<String, dynamic> event) =>
-      event['eventId'] ==
-      legacyReadingActivityEventId(
-        fingerprint,
-        day,
-        event['durationSeconds'] as int,
-      );
-
-  final legacy = byId.values
-      .where((event) => event['deleted'] != true && isLegacy(event))
-      .toList(growable: false);
-  if (legacy.length < 2) return;
-  final real = byId.values
-      .where((event) => event['deleted'] != true && !isLegacy(event))
-      .toList(growable: false)
-    ..sort((left, right) => DomainStamp.fromJson(left['stamp'])
-        .compareTo(DomainStamp.fromJson(right['stamp'])));
-
-  // Legacy entries are aggregate snapshots, not independent reading deltas.
-  // Reimporting a projected aggregate therefore produced an additive feedback
-  // cascade. The smallest snapshot is the conservative pre-session baseline.
-  var baseline = legacy
-      .map((event) => event['durationSeconds'] as int)
-      .reduce((left, right) => left < right ? left : right);
-  for (final observation in observations) {
-    // Historical wire variants retain the import time. Subtract sessions
-    // which were already included when that aggregate snapshot was captured.
-    final alreadyRepresented = real
-        .where((event) =>
-            DomainStamp.fromJson(event['stamp']).modifiedAt.compareTo(
-                  observation.importedAt,
-                ) <=
-            0)
-        .fold<int>(
-          0,
-          (sum, event) => sum + event['durationSeconds'] as int,
-        );
-    final candidate = observation.durationSeconds > alreadyRepresented
-        ? observation.durationSeconds - alreadyRepresented
-        : 0;
-    if (candidate < baseline) baseline = candidate;
-  }
-  // Stable variants no longer retain import time. A prefix match still proves
-  // that the smallest snapshot is entirely represented by real sessions.
-  if (_isRealSessionPrefixTotal(real, baseline)) baseline = 0;
-
-  byId.removeWhere((_, event) => event['deleted'] != true && isLegacy(event));
-  if (baseline == 0) return;
-  final survivorId = legacyReadingActivityEventId(fingerprint, day, baseline);
-  if (byId[survivorId]?['deleted'] == true) return;
-  final startedAt = DateTime.parse('${day}T00:00:00Z');
-  byId[survivorId] = {
-    'eventId': survivorId,
-    'startedAt': startedAt.toIso8601String(),
-    'durationSeconds': baseline,
-    'deviceId': readingActivityLegacySource,
-    'deleted': false,
-    'stamp': DomainStamp(
-      modifiedAt: startedAt,
-      deviceId: readingActivityLegacySource,
-    ).toJson(),
-  };
-}
-
-bool _isRealSessionPrefixTotal(
-    List<Map<String, dynamic>> sortedEvents, int target) {
-  if (target == 0) return true;
-  var total = 0;
-  for (final event in sortedEvents) {
-    total += event['durationSeconds'] as int;
-    if (total == target) return true;
-    if (total > target) return false;
-  }
-  return false;
-}
-
-class _LegacyAggregateObservation {
-  final int durationSeconds;
-  final DateTime importedAt;
-
-  const _LegacyAggregateObservation({
-    required this.durationSeconds,
-    required this.importedAt,
-  });
 }
 
 /// Produces a content-free diagnostic label for a rejected remote document.

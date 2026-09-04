@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_controller.dart';
@@ -7,6 +8,7 @@ import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.dart';
 import 'package:anx_reader/service/annotation_enrichment/google_annotation_translate.dart';
 import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
+import 'package:anx_reader/service/annotation_enrichment/openai_audio_service.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,10 +31,11 @@ void main() {
     await controller.runProvider(AnnotationEditorProvider.googleTranslate);
     await controller.runProvider(AnnotationEditorProvider.ldoce);
     await controller.runProvider(AnnotationEditorProvider.ai);
+    await controller.runProvider(AnnotationEditorProvider.audio);
     await controller.ask('Why?');
 
     expect(saves, 0);
-    expect(controller.draft.sourceResults, hasLength(3));
+    expect(controller.draft.sourceResults, hasLength(4));
     expect(controller.draft.aiMessages, hasLength(2));
     controller.dispose();
   });
@@ -54,6 +57,7 @@ void main() {
     await controller.runProvider(AnnotationEditorProvider.googleTranslate);
     await controller.runProvider(AnnotationEditorProvider.ldoce);
     await controller.runProvider(AnnotationEditorProvider.ai);
+    await controller.runProvider(AnnotationEditorProvider.audio);
     await controller.ask('Why?');
     controller.setPersonalNote('remember');
 
@@ -61,7 +65,11 @@ void main() {
     expect(saves, 1);
     expect(captured?.creation?.selectedText, 'phrase');
     expect(captured?.existingRef, isNull);
-    expect(captured?.materials, hasLength(3));
+    expect(captured?.materials, hasLength(4));
+    expect(
+      captured?.materials.singleWhere((item) => item.kind == 'audio').ipa,
+      'freɪz',
+    );
     expect(captured?.personalNote, 'remember');
     expect(captured?.aiMessages, hasLength(2));
     controller.dispose();
@@ -144,6 +152,7 @@ AnnotationEditorController _controller({
   GoogleAnnotationTranslateService? google,
   LdoceAnnotationDictionaryService? ldoce,
   AnnotationAiService? ai,
+  OpenAiAudioService? audio,
   SaveAnnotationEditor? saveDraft,
 }) =>
     AnnotationEditorController(
@@ -174,6 +183,7 @@ AnnotationEditorController _controller({
       google: google,
       ldoce: ldoce,
       ai: ai,
+      audio: audio ?? _ImmediateAudio(),
       saveDraft: saveDraft ?? (_) async => _ref(),
       deleteAnnotation: (ref) async => ref,
       targetLanguageCode: () => 'uk',
@@ -263,4 +273,20 @@ class _ControlledAi extends _ImmediateAi {
     required String targetLanguageName,
   }) =>
       followUpRequest.future;
+}
+
+class _ImmediateAudio extends OpenAiAudioService {
+  @override
+  Future<OpenAiAudioResult> generate(String selectedText) async =>
+      OpenAiAudioResult(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        ipa: 'freɪz',
+        voice: 'alloy',
+        model: 'gpt-4o-mini-tts',
+        format: 'mp3',
+        mimeType: 'audio/mpeg',
+        assetRef: 'annotation-assets/audio/test.mp3',
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
 }

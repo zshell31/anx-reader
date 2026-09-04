@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
@@ -49,6 +51,11 @@ class AnnotationEditorMaterialInput {
   final String? markdown;
   final Map<String, Object?> commentary;
   final Map<String, String> metadata;
+  final String? ipa;
+  final String? voice;
+  final String? model;
+  final Map<String, Object?>? audio;
+  final Uint8List? audioBytes;
 
   const AnnotationEditorMaterialInput({
     this.enrichmentId,
@@ -59,6 +66,11 @@ class AnnotationEditorMaterialInput {
     this.markdown,
     this.commentary = const {},
     this.metadata = const {},
+    this.ipa,
+    this.voice,
+    this.model,
+    this.audio,
+    this.audioBytes,
   });
 }
 
@@ -401,7 +413,7 @@ class AnnotationRepository {
   void _validateEditorInput(AnnotationEditorSaveInput input) {
     final slots = <String>{};
     for (final material in input.materials) {
-      if (!const {'translation', 'dictionary', 'ai-analysis'}
+      if (!const {'translation', 'dictionary', 'ai-analysis', 'audio'}
           .contains(material.kind)) {
         throw ArgumentError.value(material.kind, 'kind');
       }
@@ -414,6 +426,10 @@ class AnnotationRepository {
         'translation': material.translation,
         'markdown': material.markdown,
         'commentary': material.commentary,
+        'ipa': material.ipa,
+        'voice': material.voice,
+        'model': material.model,
+        'audio': material.audio,
       });
     }
     for (final message in input.aiMessages) {
@@ -439,6 +455,7 @@ class AnnotationRepository {
       'translation:google-translate',
       'dictionary:ldoce',
       'ai-analysis',
+      'audio:openai-audio',
     }) {
       final candidates = enrichments
           .where((item) => _editorMaterialSlotForEntity(item) == slot)
@@ -503,6 +520,10 @@ class AnnotationRepository {
     _setOptional(target, 'markdown', material.markdown?.trim());
     _setOptionalMap(target, 'commentary', material.commentary);
     _setOptionalMap(target, 'metadata', material.metadata);
+    _setOptional(target, 'ipa', material.ipa?.trim());
+    _setOptional(target, 'voice', material.voice?.trim());
+    _setOptional(target, 'model', material.model?.trim());
+    _setOptionalMap(target, 'audio', material.audio ?? const {});
     target.remove('deletedAt');
     if (canonicalJson(target) != before) target['updatedAt'] = timestamp;
   }
@@ -627,7 +648,7 @@ class AnnotationRepository {
       'enrichmentIds': enrichments
           .where((item) =>
               !isProtocolEntityTombstoned(item) &&
-              const {'translation', 'dictionary', 'ai-analysis'}
+              const {'translation', 'dictionary', 'ai-analysis', 'audio'}
                   .contains(item['kind']))
           .map((item) => item['id'] as String)
           .toList()
@@ -653,6 +674,9 @@ class AnnotationRepository {
 
   String? _editorMaterialSlotForEntity(Map<String, dynamic> entity) {
     if (entity['kind'] == 'ai-analysis') return 'ai-analysis';
+    if (entity['kind'] == 'audio' && entity['providerId'] == 'openai-audio') {
+      return 'audio:openai-audio';
+    }
     if (entity['kind'] == 'translation' &&
         entity['providerId'] == 'google-translate') {
       return 'translation:google-translate';
@@ -763,13 +787,15 @@ class AnnotationRepository {
 
   void _validateMaterial(Map<String, dynamic> enrichment) {
     final kind = enrichment['kind'];
-    if (!const {'translation', 'dictionary', 'ai-analysis'}.contains(kind)) {
+    if (!const {'translation', 'dictionary', 'ai-analysis', 'audio'}
+        .contains(kind)) {
       throw ArgumentError.value(kind, 'kind', 'unsupported material kind');
     }
     final hasPayload = <Object?>[
       enrichment['content'],
       enrichment['translation'],
       enrichment['markdown'],
+      enrichment['ipa'],
       ...(enrichment['commentary'] is Map
           ? (enrichment['commentary'] as Map).values
           : const <Object?>[]),

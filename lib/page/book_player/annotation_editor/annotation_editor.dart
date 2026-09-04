@@ -11,6 +11,7 @@ import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/translate/google_translate_app.dart';
 import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/markdown/styled_markdown.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -631,6 +632,8 @@ class _SourceCardState extends State<_SourceCard> {
           if (widget.provider == AnnotationEditorProvider.ai &&
               widget.result.commentary != null)
             _AiAnalysis(commentary: widget.result.commentary!)
+          else if (widget.provider == AnnotationEditorProvider.audio)
+            _AudioPreview(result: widget.result)
           else if (widget.result.markdown?.isNotEmpty == true)
             StyledMarkdown(data: widget.result.markdown!)
           else if (widget.result.translation?.isNotEmpty == true)
@@ -805,4 +808,58 @@ IconData _providerIcon(AnnotationEditorProvider provider) => switch (provider) {
       AnnotationEditorProvider.googleTranslate => Icons.g_translate,
       AnnotationEditorProvider.ldoce => Icons.menu_book,
       AnnotationEditorProvider.ai => Icons.auto_awesome,
+      AnnotationEditorProvider.audio => Icons.volume_up_outlined,
     };
+
+class _AudioPreview extends StatefulWidget {
+  const _AudioPreview({required this.result});
+
+  final AnnotationEditorSourceResult result;
+
+  @override
+  State<_AudioPreview> createState() => _AudioPreviewState();
+}
+
+class _AudioPreviewState extends State<_AudioPreview> {
+  final AudioPlayer _player = AudioPlayer();
+  bool _playing = false;
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _play() async {
+    final bytes = widget.result.audioBytes;
+    if (bytes == null || bytes.isEmpty) return;
+    setState(() => _playing = true);
+    try {
+      await _player.play(BytesSource(bytes));
+    } finally {
+      if (mounted) setState(() => _playing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectableText(
+              'IPA: ${widget.result.ipa ?? ''}',
+              key: const Key('annotation-editor-audio-ipa'),
+            ),
+            Text('${widget.result.model ?? ''} · ${widget.result.voice ?? ''}'),
+            TextButton.icon(
+              key: const Key('annotation-editor-audio-play'),
+              onPressed:
+                  widget.result.audioBytes == null || _playing ? null : _play,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Play audio'),
+            ),
+          ],
+        ),
+      );
+}

@@ -4,6 +4,7 @@ import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_
 import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.dart';
 import 'package:anx_reader/service/annotation_enrichment/google_annotation_translate.dart';
 import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
+import 'package:anx_reader/service/annotation_enrichment/openai_audio_service.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/utils/log/common.dart';
@@ -22,6 +23,7 @@ class AnnotationEditorController extends ChangeNotifier {
   final GoogleAnnotationTranslateService google;
   final LdoceAnnotationDictionaryService ldoce;
   final AnnotationAiService ai;
+  final OpenAiAudioService audio;
   final SaveAnnotationEditor saveDraft;
   final DeleteAnnotationEditor deleteAnnotation;
   final String Function() targetLanguageCode;
@@ -40,6 +42,7 @@ class AnnotationEditorController extends ChangeNotifier {
     GoogleAnnotationTranslateService? google,
     LdoceAnnotationDictionaryService? ldoce,
     AnnotationAiService? ai,
+    OpenAiAudioService? audio,
     SaveAnnotationEditor? saveDraft,
     DeleteAnnotationEditor? deleteAnnotation,
     String Function()? targetLanguageCode,
@@ -47,6 +50,7 @@ class AnnotationEditorController extends ChangeNotifier {
   })  : google = google ?? GoogleAnnotationTranslateService(),
         ldoce = ldoce ?? LdoceAnnotationDictionaryService(),
         ai = ai ?? AnnotationAiService(),
+        audio = audio ?? OpenAiAudioService(),
         saveDraft = saveDraft ?? annotationRepository.saveAnnotationEditorDraft,
         deleteAnnotation =
             deleteAnnotation ?? annotationRepository.tombstoneAnnotation,
@@ -97,6 +101,25 @@ class AnnotationEditorController extends ChangeNotifier {
             chapter: draft.selection.chapter,
             targetLanguageCode: targetLanguageCode(),
             targetLanguageName: targetLanguageName(),
+          );
+          break;
+        case AnnotationEditorProvider.audio:
+          final generated = await audio.generate(draft.selection.selectedText);
+          result = AnnotationEditorSourceResult(
+            providerId: provider.providerId,
+            providerName: provider.providerName,
+            kind: provider.kind,
+            ipa: generated.ipa,
+            voice: generated.voice,
+            model: generated.model,
+            audio: {
+              'assetRef': generated.assetRef,
+              'format': generated.format,
+              'mimeType': generated.mimeType,
+              'byteLength': generated.bytes.length,
+              'sha256': generated.sha256,
+            },
+            audioBytes: generated.bytes,
           );
           break;
       }
@@ -204,6 +227,11 @@ class AnnotationEditorController extends ChangeNotifier {
                 markdown: result.markdown,
                 commentary: result.commentary?.toMap() ?? const {},
                 metadata: result.metadata,
+                ipa: result.ipa,
+                voice: result.voice,
+                model: result.model,
+                audio: result.audio,
+                audioBytes: result.audioBytes,
               ),
         ],
         personalNote: draft.personalNote,

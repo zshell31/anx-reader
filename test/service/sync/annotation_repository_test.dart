@@ -272,6 +272,22 @@ void main() {
               'usage': 'usage',
             },
           ),
+          AnnotationEditorMaterialInput(
+            providerId: 'openai-audio',
+            providerName: 'Audio',
+            kind: 'audio',
+            ipa: 'səˈlɛktɪd tɛkst',
+            voice: 'alloy',
+            model: 'gpt-4o-mini-tts',
+            audio: {
+              'assetRef': 'annotation-assets/audio/test.mp3',
+              'format': 'mp3',
+              'mimeType': 'audio/mpeg',
+              'byteLength': 3,
+              'sha256':
+                  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            },
+          ),
         ],
         personalNote: 'remember',
         aiMessages: const [
@@ -312,6 +328,7 @@ void main() {
         'translation',
         'dictionary',
         'ai-analysis',
+        'audio',
         'personal-note',
         'ai-thread',
       ]),
@@ -330,6 +347,11 @@ void main() {
         .singleWhere((item) => item['kind'] == 'ai-analysis');
     expect(analysis['providerId'], 'configured-route');
     expect(analysis['commentary']['grammar'], 'grammar');
+    final audio = (annotation['enrichments'] as List)
+        .cast<Map>()
+        .singleWhere((item) => item['kind'] == 'audio');
+    expect(audio['ipa'], 'səˈlɛktɪd tɛkst');
+    expect(audio['audio']['assetRef'], 'annotation-assets/audio/test.mp3');
     final thread = (annotation['enrichments'] as List)
         .cast<Map>()
         .singleWhere((item) => item['kind'] == 'ai-thread');

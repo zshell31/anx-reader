@@ -400,6 +400,15 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(Icons.g_translate),
               text: L10n.of(context).contextMenuGoogleTranslate,
             ),
+          if (_showProviderAction(AnnotationEditorProvider.audio))
+            IconAndText(
+              compact: true,
+              onTap: () => _openEditor(
+                initialProvider: AnnotationEditorProvider.audio,
+              ),
+              icon: const Icon(Icons.volume_up_outlined),
+              text: 'Озвучить / Audio',
+            ),
           if (!widget.persistenceSession.hasPersistedAnnotation &&
               !widget.footnote)
             IconAndText(

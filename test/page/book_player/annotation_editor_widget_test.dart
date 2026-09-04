@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
@@ -96,6 +97,48 @@ void main() {
       find.textContaining("have one's suspicions", findRichText: true),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Audio is fourth provider and renders playable draft with IPA',
+      (tester) async {
+    final draft = AnnotationEditorDraft.forSelection(
+      selection: _selection(),
+      bookTitle: 'Book',
+    );
+    final request = draft.startProvider(AnnotationEditorProvider.audio);
+    draft.completeProvider(
+      request,
+      AnnotationEditorSourceResult(
+        providerId: 'openai-audio',
+        providerName: 'Audio',
+        kind: 'audio',
+        ipa: 'wɜːd',
+        voice: 'alloy',
+        model: 'gpt-4o-mini-tts',
+        audio: const {
+          'assetRef': 'annotation-assets/audio/test.mp3',
+          'format': 'mp3',
+          'mimeType': 'audio/mpeg',
+          'byteLength': 3,
+          'sha256':
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        audioBytes: Uint8List.fromList([1, 2, 3]),
+      ),
+    );
+    final controller = _controller(draft: draft);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    expect(
+        AnnotationEditorProvider.values.last, AnnotationEditorProvider.audio);
+    await tester.tap(find.text('Audio'));
+    await tester.pumpAndSettle();
+    expect(find.text('IPA: wɜːd'), findsOneWidget);
+    final play = tester.widget<TextButton>(
+      find.byKey(const Key('annotation-editor-audio-play')),
+    );
+    expect(play.onPressed, isNotNull);
   });
 
   testWidgets('existing annotation opens at full width and scroll offset zero',

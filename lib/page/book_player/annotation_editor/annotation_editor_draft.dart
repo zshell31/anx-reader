@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:anx_reader/page/book_player/selection_persistence_session.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 
-enum AnnotationEditorProvider { googleTranslate, ldoce, ai }
+enum AnnotationEditorProvider { googleTranslate, ldoce, ai, audio }
 
 const _aiChunkTypes = {
   'collocation',
@@ -60,18 +61,21 @@ extension AnnotationEditorProviderIdentity on AnnotationEditorProvider {
         AnnotationEditorProvider.googleTranslate => 'google-translate',
         AnnotationEditorProvider.ldoce => 'ldoce',
         AnnotationEditorProvider.ai => 'openai',
+        AnnotationEditorProvider.audio => 'openai-audio',
       };
 
   String get providerName => switch (this) {
         AnnotationEditorProvider.googleTranslate => 'Google Translate',
         AnnotationEditorProvider.ldoce => 'LDOCE',
         AnnotationEditorProvider.ai => 'OpenAI',
+        AnnotationEditorProvider.audio => 'Audio',
       };
 
   String get kind => switch (this) {
         AnnotationEditorProvider.googleTranslate => 'translation',
         AnnotationEditorProvider.ldoce => 'dictionary',
         AnnotationEditorProvider.ai => 'ai-analysis',
+        AnnotationEditorProvider.audio => 'audio',
       };
 }
 
@@ -143,6 +147,11 @@ class AnnotationEditorSourceResult {
   final String? markdown;
   final AnnotationEditorCommentary? commentary;
   final Map<String, String> metadata;
+  final String? ipa;
+  final String? voice;
+  final String? model;
+  final Map<String, Object?>? audio;
+  final Uint8List? audioBytes;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -155,6 +164,11 @@ class AnnotationEditorSourceResult {
     this.markdown,
     this.commentary,
     this.metadata = const {},
+    this.ipa,
+    this.voice,
+    this.model,
+    this.audio,
+    this.audioBytes,
     this.createdAt,
     this.updatedAt,
   });
@@ -181,6 +195,13 @@ class AnnotationEditorSourceResult {
                   entry.key as String: entry.value as String,
             })
           : const {},
+      ipa: _optionalText(enrichment.data['ipa']),
+      voice: _optionalText(enrichment.data['voice']),
+      model: _optionalText(enrichment.data['model']),
+      audio: enrichment.data['audio'] is Map
+          ? Map.unmodifiable(
+              (enrichment.data['audio'] as Map).cast<String, Object?>())
+          : null,
       createdAt: enrichment.createdAt,
       updatedAt: enrichment.updatedAt,
     );
@@ -195,6 +216,10 @@ class AnnotationEditorSourceResult {
         'markdown': markdown,
         'commentary': commentary?.toMap(),
         'metadata': metadata,
+        'ipa': ipa,
+        'voice': voice,
+        'model': model,
+        'audio': audio,
         'createdAt': createdAt?.toUtc().toIso8601String(),
       };
 }
@@ -390,6 +415,11 @@ class AnnotationEditorDraft {
       markdown: result.markdown,
       commentary: result.commentary,
       metadata: Map.unmodifiable(result.metadata),
+      ipa: result.ipa,
+      voice: result.voice,
+      model: result.model,
+      audio: result.audio == null ? null : Map.unmodifiable(result.audio!),
+      audioBytes: result.audioBytes,
       createdAt: previous?.createdAt ?? result.createdAt,
       updatedAt: result.updatedAt,
     );
@@ -498,6 +528,9 @@ AnnotationEditorProvider? _providerFor(AnnotationEnrichmentView enrichment) {
     return AnnotationEditorProvider.ldoce;
   }
   if (enrichment.kind == 'ai-analysis') return AnnotationEditorProvider.ai;
+  if (enrichment.providerId == 'openai-audio' && enrichment.kind == 'audio') {
+    return AnnotationEditorProvider.audio;
+  }
   return null;
 }
 

@@ -408,6 +408,20 @@ read-only WebDAV audit and byte comparison confirmed that both server JSON
 files were unchanged: two documents, two unique events, zero legacy events,
 and the same 43-second total.
 
+Samsung then opened the second book and recorded an independent 26-second
+session. Because that daily document already existed, synchronization followed
+the expected `merge -> replace -> converged` path without a create conflict.
+The full automatic run completed in 1.340 s with `pending=0` and `failed=0`.
+The final WebDAV audit found two UUIDv4 events for that book: the existing
+13-second Onyx event and the new 26-second Samsung event, with distinct event
+and device IDs. The first book remained byte-for-byte unchanged at 30 seconds.
+Across both documents there were three unique events, two devices, zero legacy
+events, zero tombstones, and a correct total of 69 seconds.
+
+The Samsung log also contained an unrelated foliate WebView
+`createTreeWalker` type error while paging. It did not interrupt reading-state
+or reading-activity convergence and is outside the activity reset validation.
+
 ### Stage 10 device validation
 
 Release commit `0072d48a` was installed on Onyx LOMONOSOV3 without clearing

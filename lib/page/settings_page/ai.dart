@@ -227,6 +227,38 @@ class _AISettingsState extends ConsumerState<AISettings> {
             },
           ),
           CustomSettingsTile(
+            child: ListTile(
+              title: const Text('OpenAI Audio model'),
+              trailing: SizedBox(
+                width: 190,
+                child: TextFormField(
+                  initialValue: Prefs().openAiAudioModel,
+                  decoration: const InputDecoration(
+                    hintText: 'gpt-4o-mini-tts',
+                    isDense: true,
+                  ),
+                  onChanged: (value) => Prefs().openAiAudioModel = value,
+                ),
+              ),
+            ),
+          ),
+          CustomSettingsTile(
+            child: ListTile(
+              title: const Text('OpenAI Audio voice'),
+              trailing: SizedBox(
+                width: 190,
+                child: TextFormField(
+                  initialValue: Prefs().openAiAudioVoice,
+                  decoration: const InputDecoration(
+                    hintText: 'alloy',
+                    isDense: true,
+                  ),
+                  onChanged: (value) => Prefs().openAiAudioVoice = value,
+                ),
+              ),
+            ),
+          ),
+          CustomSettingsTile(
               child: _AiRpmTile(setState: () => setState(() {}))),
           // SettingsTile.navigation(
           //   leading: const Icon(Icons.chat),

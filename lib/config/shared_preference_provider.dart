@@ -861,6 +861,21 @@ class Prefs extends ChangeNotifier {
     return prefs.getString('selectedAiService') ?? 'openai';
   }
 
+  String get openAiAudioModel =>
+      prefs.getString('openAiAudioModel') ?? 'gpt-4o-mini-tts';
+
+  set openAiAudioModel(String value) {
+    prefs.setString('openAiAudioModel', value.trim());
+    notifyListeners();
+  }
+
+  String get openAiAudioVoice => prefs.getString('openAiAudioVoice') ?? 'alloy';
+
+  set openAiAudioVoice(String value) {
+    prefs.setString('openAiAudioVoice', value.trim());
+    notifyListeners();
+  }
+
   void deleteAiConfig(String identifier) {
     prefs.remove('aiConfig_$identifier');
     notifyListeners();

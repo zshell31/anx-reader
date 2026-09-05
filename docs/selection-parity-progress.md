@@ -14,3 +14,6 @@ Branch: `fix/unified-selection-interactions`
 - 2026-09-05: Created branch from clean `develop`. Confirmed PDF's default
   single-tap handler clears selected text, while saved annotation taps bypass
   the shared action menu. No shared annotation protocol changes are planned.
+- 2026-09-05: Added continuous PDF line geometry for native selection painting,
+  annotation painting and annotation hit testing. Covers differing glyph heights,
+  line breaks, column gaps and RTL order. Geometry/selection tests: 6 passed.

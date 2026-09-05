@@ -366,8 +366,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
           int.tryParse(presentation.color, radix: 16) ?? 0x66ccff;
       final color = Color(0xff000000 | colorValue);
       for (final fragment
-          in annotation.range.enumerateFragmentBoundingRects()) {
-        final rect = fragment.bounds.toRectInDocument(
+          in annotation.range.enumerateLineBoundingRects()) {
+        final rect = fragment.toRectInDocument(
           page: page,
           pageRect: pageRect,
         );
@@ -446,11 +446,11 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         annotations: _renderedAnnotations.values.expand((value) => value),
         rectsFor: (annotation) sync* {
           for (final fragment
-              in annotation.range.enumerateFragmentBoundingRects()) {
+              in annotation.range.enumerateLineBoundingRects()) {
             yield controller
                 .calcRectForRectInsidePage(
                   pageNumber: annotation.range.pageNumber,
-                  rect: fragment.bounds,
+                  rect: fragment,
                 )
                 .inflate(2);
           }

@@ -25,3 +25,9 @@ Branch: `fix/unified-selection-interactions`
   only its engine was local. Reader/editor/PDF tests: 104 passed; all three EPUB
   selection JavaScript regression suites passed. Analyzer reports only three
   pre-existing null-aware-elements suggestions in the vendored viewer.
+- 2026-09-05: Added a viewer widget regression test using a fake PDF document:
+  initial selection has no menu; first and repeated taps preserve selection;
+  outside tap clears both; restoring a saved range reopens actions. Passed.
+  During layout review, fixed the menu's viewport constraints: its own anchor
+  positioning must bypass pdfrx's unbounded floating-widget wrapper. App and
+  test analyzer checks are clean. Device verification has not been performed.

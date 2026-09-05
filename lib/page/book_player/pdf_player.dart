@@ -289,17 +289,21 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
             range?.end == _annotationSelectionRange?.end
         ? _annotationSelectionSession
         : null;
-    return PdfSelectionActionMenu(
-      key: ValueKey((range?.start, range?.end, existing)),
-      book: widget.book,
-      selection: params.textSelectionDelegate,
-      primaryAnchor: params.anchorA,
-      secondaryAnchor: params.anchorB,
-      dismissContextMenu: params.dismissContextMenu,
-      refreshAnnotations: refreshAnnotations,
-      loadPageSize: _loadPageSize,
-      resolvePageOffset: _resolvePageOffset,
-      existingSession: existing,
+    // This menu positions itself using viewer-local anchors. Give it the
+    // viewport bounds instead of pdfrx's unbounded floating-widget wrapper.
+    return Positioned.fill(
+      child: PdfSelectionActionMenu(
+        key: ValueKey((range?.start, range?.end, existing)),
+        book: widget.book,
+        selection: params.textSelectionDelegate,
+        primaryAnchor: params.anchorA,
+        secondaryAnchor: params.anchorB,
+        dismissContextMenu: params.dismissContextMenu,
+        refreshAnnotations: refreshAnnotations,
+        loadPageSize: _loadPageSize,
+        resolvePageOffset: _resolvePageOffset,
+        existingSession: existing,
+      ),
     );
   }
 

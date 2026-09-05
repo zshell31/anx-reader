@@ -7,6 +7,7 @@ import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
 import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
 import 'package:anx_reader/page/book_player/pdf_edge_tap.dart';
+import 'package:anx_reader/page/book_player/pdf_link_navigation.dart';
 import 'package:anx_reader/page/book_player/pdf_outline.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
@@ -674,6 +675,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
               onViewSizeChanged: _onViewSizeChanged,
               onPageChanged: _onPageChanged,
               onGeneralTap: _onGeneralTap,
+              linkHandlerParams: pdfInternalLinkHandler(controller),
               buildContextMenu: _buildContextMenu,
               textSelectionParams: const PdfTextSelectionParams(
                 showContextMenuAutomatically: false,

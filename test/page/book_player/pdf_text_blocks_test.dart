@@ -5,6 +5,59 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('PDF text block extraction', () {
+    test('keeps a sentence continuing in the next column together', () {
+      const text = 'A sentence that\ncontinues in the next column.';
+      final blocks = extractPdfTextBlocks(PdfPageTextSource(
+        pageNumber: 1,
+        fullText: text,
+        lines: [
+          const PdfTextLine(
+              start: 0, left: 20, right: 200, top: 50, bottom: 40),
+          PdfTextLine(
+              start: text.indexOf('continues'),
+              left: 240,
+              right: 420,
+              top: 700,
+              bottom: 690),
+        ],
+      ));
+      expect(
+          blocks.single.text, 'A sentence that continues in the next column.');
+    });
+
+    test('uses PDF line spacing and indents without splitting wrapped lines',
+        () {
+      const text =
+          'First line\nwrapped.\nIndented paragraph\ncontinued.\nAfter gap.';
+      final blocks = extractPdfTextBlocks(PdfPageTextSource(
+        pageNumber: 1,
+        fullText: text,
+        lines: [
+          for (final row in [
+            ('First', 20.0, 100.0),
+            ('wrapped', 20.0, 86.0),
+            ('Indented', 32.0, 72.0),
+            ('continued', 20.0, 58.0),
+            ('After', 20.0, 34.0),
+          ])
+            PdfTextLine(
+              start: text.indexOf(row.$1),
+              left: row.$2,
+              right: 200,
+              top: row.$3,
+              bottom: row.$3 - 10,
+            ),
+        ],
+      ));
+      expect(blocks.map((block) => block.text), [
+        'First line wrapped.',
+        'Indented paragraph continued.',
+        'After gap.',
+      ]);
+      expect(text.substring(blocks[1].sourceStart, blocks[1].sourceEnd),
+          'Indented paragraph\ncontinued.');
+    });
+
     test('keeps paragraph order and portable source offsets', () {
       const fullText = '  First line\nwraps here.\n\nSecond paragraph.  ';
 

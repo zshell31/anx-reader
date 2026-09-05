@@ -38,6 +38,7 @@ class PdfReflowView extends StatelessWidget {
           pageNumber: index + 1,
           blockLoader: blockLoader,
           translateBlock: translateBlock,
+          onTap: onTap,
         ),
       ),
     );
@@ -50,11 +51,13 @@ class _PdfReflowPage extends StatefulWidget {
     required this.pageNumber,
     required this.blockLoader,
     required this.translateBlock,
+    required this.onTap,
   });
 
   final int pageNumber;
   final PdfTextBlockPageLoader blockLoader;
   final PdfTextBlockTranslator translateBlock;
+  final VoidCallback onTap;
 
   @override
   State<_PdfReflowPage> createState() => _PdfReflowPageState();
@@ -103,27 +106,38 @@ class _PdfReflowPageState extends State<_PdfReflowPage> {
         }
         final contextText = blocks.map((block) => block.text).join('\n\n');
         return SelectionArea(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 48),
-            itemCount: blocks.length + 1,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    'Page ${widget.pageNumber}',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                );
-              }
-              final block = blocks[index - 1];
-              return _BilingualBlock(
-                key: ValueKey('${block.pageNumber}:${block.blockIndex}'),
-                block: block,
-                contextText: contextText,
-                translateBlock: widget.translateBlock,
+          // Handle ordinary taps inside SelectionArea so its selection gesture
+          // does not swallow the reader menu action. Long presses still select.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: widget.onTap,
+            child: LayoutBuilder(builder: (context, constraints) {
+              final margin = constraints.maxWidth > 800
+                  ? (constraints.maxWidth - 752) / 2
+                  : 24.0;
+              return ListView.builder(
+                padding: EdgeInsets.fromLTRB(margin, 32, margin, 64),
+                itemCount: blocks.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        'Page ${widget.pageNumber}',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    );
+                  }
+                  final block = blocks[index - 1];
+                  return _BilingualBlock(
+                    key: ValueKey('${block.pageNumber}:${block.blockIndex}'),
+                    block: block,
+                    contextText: contextText,
+                    translateBlock: widget.translateBlock,
+                  );
+                },
               );
-            },
+            }),
           ),
         );
       },
@@ -166,23 +180,25 @@ class _BilingualBlockState extends State<_BilingualBlock> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 36),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: colors.outlineVariant)),
         ),
         child: Padding(
-          padding: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.only(left: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 widget.block.text,
+                textAlign: TextAlign.justify,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      height: 1.55,
+                      fontSize: 22,
+                      height: 1.65,
                     ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               FutureBuilder<String>(
                 future: _translation,
                 builder: (context, snapshot) {
@@ -214,9 +230,11 @@ class _BilingualBlockState extends State<_BilingualBlock> {
                   }
                   return Text(
                     snapshot.data!,
+                    textAlign: TextAlign.justify,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: colors.primary,
-                          height: 1.55,
+                          color: colors.onSurfaceVariant,
+                          fontSize: 22,
+                          height: 1.65,
                         ),
                   );
                 },

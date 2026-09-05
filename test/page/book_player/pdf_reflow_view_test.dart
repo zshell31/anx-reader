@@ -9,6 +9,7 @@ void main() {
     final loadedPages = <int>[];
     final translatedBlocks = <String>[];
     final pageChanges = <int>[];
+    var taps = 0;
     final loader = PdfTextBlockPageLoader(loadPageText: (page) async {
       loadedPages.add(page);
       return PdfPageTextSource(
@@ -34,12 +35,29 @@ void main() {
             return 'Translation: ${block.text}';
           },
           onPageChanged: pageChanges.add,
-          onTap: () {},
+          onTap: () => taps++,
         ),
       ),
     ));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Page 2'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(taps, 1);
+    await tester.tap(find.text('Page 2 paragraph 0.'));
+    await tester.pumpAndSettle();
+    expect(taps, 2);
+    await tester.longPress(find.text('Page 2 paragraph 0.'));
+    await tester.pumpAndSettle();
+    expect(taps, 2, reason: 'selecting text must not toggle the menu');
+    final selection =
+        tester.state<SelectableRegionState>(find.byType(SelectableRegion));
+    expect(
+        selection.contextMenuButtonItems,
+        contains(isA<ContextMenuButtonItem>()
+            .having((item) => item.type, 'type', ContextMenuButtonType.copy)));
+    selection.clearSelection();
     expect(loadedPages, [2]);
     expect(find.text('Page 2'), findsOneWidget);
     expect(find.text('Translation: Page 2 paragraph 0.'), findsOneWidget);

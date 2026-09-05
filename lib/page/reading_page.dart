@@ -32,6 +32,7 @@ import 'package:anx_reader/widgets/ai/ai_stream.dart';
 import 'package:anx_reader/widgets/reading_page/notes_widget.dart';
 import 'package:anx_reader/models/reading_time.dart';
 import 'package:anx_reader/widgets/reading_page/progress_widget.dart';
+import 'package:anx_reader/widgets/reading_page/pdf_progress_widget.dart';
 import 'package:anx_reader/widgets/reading_page/tts_fab.dart';
 import 'package:anx_reader/widgets/reading_page/tts_widget.dart';
 import 'package:anx_reader/widgets/reading_page/style_widget.dart';
@@ -435,10 +436,16 @@ class ReadingPageState extends ConsumerState<ReadingPage>
 
   void progressHandler() {
     setState(() {
-      _currentPage = ProgressWidget(
-        epubPlayerKey: epubPlayerKey,
-        showOrHideAppBarAndBottomBar: showOrHideAppBarAndBottomBar,
-      );
+      _currentPage = _isPdf
+          ? PdfProgressWidget(
+              onGoToPage: (page) async {
+                await pdfPlayerKey.currentState?.goToPage(page);
+              },
+            )
+          : ProgressWidget(
+              epubPlayerKey: epubPlayerKey,
+              showOrHideAppBarAndBottomBar: showOrHideAppBarAndBottomBar,
+            );
     });
   }
 
@@ -781,17 +788,6 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                   ),
                   actions: [
                     if (EnvVar.enableAIFeature) aiButton,
-                    if (_isPdf)
-                      IconButton(
-                        icon: Icon(_pdfReflowMode
-                            ? Icons.picture_as_pdf_outlined
-                            : Icons.chrome_reader_mode_outlined),
-                        tooltip: _pdfReflowMode
-                            ? 'Show original PDF'
-                            : 'Show bilingual reflow',
-                        onPressed: () =>
-                            pdfPlayerKey.currentState?.toggleReadingMode(),
-                      ),
                     if (_isPdf && !_pdfReflowMode)
                       IconButton(
                         icon: const Icon(Icons.zoom_out),
@@ -858,62 +854,77 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                   ],
                 ),
                 const Spacer(),
-                if (!_isPdf)
-                  BottomSheet(
-                    onClosing: () {},
-                    enableDrag: false,
-                    builder: (context) => SafeArea(
-                      top: false,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 600),
-                        child: StatefulBuilder(
-                          builder:
-                              (BuildContext context, StateSetter setState) {
-                            final hasContent = !identical(_currentPage, empty);
-                            return IntrinsicHeight(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (hasContent)
-                                    Expanded(
-                                      child: _currentPage,
+                BottomSheet(
+                  onClosing: () {},
+                  enableDrag: false,
+                  builder: (context) => SafeArea(
+                    top: false,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: StatefulBuilder(
+                        builder: (BuildContext context, StateSetter setState) {
+                          final hasContent = !identical(_currentPage, empty);
+                          return IntrinsicHeight(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasContent)
+                                  Expanded(
+                                    child: _currentPage,
+                                  ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.toc),
+                                      onPressed: tocHandler,
                                     ),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.toc),
-                                        onPressed: tocHandler,
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(EvaIcons.edit),
-                                        onPressed: noteHandler,
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.data_usage),
-                                        onPressed: progressHandler,
-                                      ),
+                                    IconButton(
+                                      icon: const Icon(EvaIcons.edit),
+                                      onPressed: noteHandler,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.data_usage),
+                                      onPressed: progressHandler,
+                                    ),
+                                    if (!_isPdf)
                                       IconButton(
                                         icon: const Icon(Icons.color_lens),
                                         onPressed: () {
                                           styleHandler(setState);
                                         },
                                       ),
+                                    if (!_isPdf)
                                       IconButton(
                                         icon: const Icon(EvaIcons.headphones),
                                         onPressed: ttsHandler,
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                                    if (_isPdf)
+                                      IconButton(
+                                        icon: Icon(_pdfReflowMode
+                                            ? Icons.picture_as_pdf_outlined
+                                            : Icons.chrome_reader_mode_outlined),
+                                        tooltip: _pdfReflowMode
+                                            ? L10n.of(context)
+                                                .readingPageOriginal
+                                            : L10n.of(context).bilingual,
+                                        onPressed: () {
+                                          pdfPlayerKey.currentState
+                                              ?.toggleReadingMode();
+                                          hideBottomBar();
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
+                ),
               ],
             ),
           ],

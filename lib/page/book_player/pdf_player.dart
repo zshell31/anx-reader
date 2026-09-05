@@ -160,7 +160,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
 
   Future<void> _goToRelativePage(int delta) async {
     if (_pageCount < 1) return;
-    final next = (_currentPageNumber + delta).clamp(1, _pageCount);
+    await goToPage(_currentPageNumber + delta);
+  }
+
+  Future<void> goToPage(int pageNumber) async {
+    if (_pageCount < 1) return;
+    final next = pageNumber.clamp(1, _pageCount);
     if (next == _currentPageNumber) return;
     if (_reflowMode) {
       await _reflowPageController?.animateToPage(
@@ -202,12 +207,32 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       return PdfPageTextSource(
         pageNumber: pageNumber,
         fullText: pageText.fullText,
+        lines: [
+          for (final match in RegExp(r'[^\r\n]+').allMatches(pageText.fullText))
+            if (match.group(0)!.trim().isNotEmpty &&
+                match.end <= pageText.charRects.length)
+              _textLineGeometry(pageText, match.start, match.end),
+        ],
       );
     });
     if (source == null) {
       throw StateError('The PDF document is not ready');
     }
     return source;
+  }
+
+  PdfTextLine _textLineGeometry(PdfPageText text, int start, int end) {
+    final rects = [
+      for (var i = start; i < end; i++)
+        if (text.fullText[i].trim().isNotEmpty) text.charRects[i],
+    ];
+    return PdfTextLine(
+      start: start,
+      left: rects.map((r) => r.left).reduce((a, b) => a < b ? a : b),
+      right: rects.map((r) => r.right).reduce((a, b) => a > b ? a : b),
+      top: rects.map((r) => r.top).reduce((a, b) => a > b ? a : b),
+      bottom: rects.map((r) => r.bottom).reduce((a, b) => a < b ? a : b),
+    );
   }
 
   Future<Size?> _loadPageSize(int pageNumber) async =>
@@ -658,6 +683,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   @override
   Widget build(BuildContext context) {
     return Stack(
+      // The reflow overlay must retain the viewport when the PDF is offstage.
+      fit: StackFit.expand,
       children: [
         Offstage(
           offstage: _reflowMode,

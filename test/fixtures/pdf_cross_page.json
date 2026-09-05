@@ -1,0 +1,49 @@
+{
+  "fragments": [
+    {
+      "page": 4,
+      "exact": "carrying subtle notes of pine from the sprawling forests of Douglas Firs that",
+      "prefix": "breathed, ",
+      "suffix": ""
+    },
+    {
+      "page": 5,
+      "exact": "hug the area",
+      "prefix": "",
+      "suffix": ". Most evenings"
+    }
+  ],
+  "exact": "carrying subtle notes of pine from the sprawling forests of Douglas Firs that hug the area",
+  "pages": {
+    "4": "4\r\nYou have ever breathed, carrying subtle notes of pine from the sprawling forests of Douglas Firs that \r\n",
+    "5": "5\r\nhug the area. Most evenings"
+  },
+  "selectors": [
+    {
+      "type": "pdf-page",
+      "page": 4,
+      "pageOffsetRatio": 0.92
+    },
+    {
+      "type": "text-quote",
+      "exact": "carrying subtle notes of pine from the sprawling forests of Douglas Firs that hug the area",
+      "prefix": "breathed, ",
+      "suffix": ". Most evenings"
+    },
+    {
+      "type": "anx-pdf-page-range",
+      "fragments": [
+        {
+          "page": 4,
+          "exact": "carrying subtle notes of pine from the sprawling forests of Douglas Firs that",
+          "prefix": "breathed, "
+        },
+        {
+          "page": 5,
+          "exact": "hug the area",
+          "suffix": ". Most evenings"
+        }
+      ]
+    }
+  ]
+}

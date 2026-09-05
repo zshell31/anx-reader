@@ -49,18 +49,26 @@ class PdfAnnotationPageTarget {
   }
 
   PdfTextMatch? resolve(String pageText) {
+    final normalized = _NormalizedPdfText(pageText);
+    final quote = _NormalizedPdfText(exact).text;
+    final before = _NormalizedPdfText(prefix).text;
+    final after = _NormalizedPdfText(suffix).text;
+    if (quote.trim().isEmpty) return null;
     final candidates = <PdfTextMatch>[];
-    var start = pageText.indexOf(exact);
+    var start = normalized.text.indexOf(quote);
     while (start >= 0) {
-      final end = start + exact.length;
-      final prefixMatches =
-          prefix.isEmpty || pageText.substring(0, start).endsWith(prefix);
+      final end = start + quote.length;
+      final prefixMatches = before.isEmpty ||
+          normalized.text.substring(0, start).endsWith(before);
       final suffixMatches =
-          suffix.isEmpty || pageText.substring(end).startsWith(suffix);
+          after.isEmpty || normalized.text.substring(end).startsWith(after);
       if (prefixMatches && suffixMatches) {
-        candidates.add(PdfTextMatch(start: start, end: end));
+        candidates.add(PdfTextMatch(
+          start: normalized.starts[start],
+          end: normalized.ends[end - 1],
+        ));
       }
-      start = pageText.indexOf(exact, start + 1);
+      start = normalized.text.indexOf(quote, start + 1);
     }
     return candidates.length == 1 ? candidates.single : null;
   }
@@ -93,6 +101,24 @@ class PdfAnnotationPageTarget {
       suffix: suffix as String? ?? '',
     );
   }
+}
+
+/// PDF.js and PDFium emit different whitespace for the same visual lines.
+/// Keep UTF-16 source offsets so matches still address PDFium's glyph ranges.
+class _NormalizedPdfText {
+  _NormalizedPdfText(String source) {
+    final buffer = StringBuffer();
+    for (final match in RegExp(r'\s+|\S').allMatches(source)) {
+      buffer.write(match.group(0)!.trim().isEmpty ? ' ' : match.group(0));
+      starts.add(match.start);
+      ends.add(match.end);
+    }
+    text = buffer.toString();
+  }
+
+  late final String text;
+  final starts = <int>[];
+  final ends = <int>[];
 }
 
 class PdfAnnotationTarget {
@@ -174,12 +200,25 @@ class PdfAnnotationTarget {
     );
   }
 
-  static PdfAnnotationTarget? fromSelectors(Object? value) {
+  static PdfAnnotationTarget? fromSelectors(Object? value,
+      {String? legacySelectedText}) {
     if (value is! List) return null;
+    // Old Lingua annotations have only a page selector. Derive a local
+    // render target without rewriting their shared annotation document.
+    if (legacySelectedText != null &&
+        legacySelectedText.trim().isNotEmpty &&
+        value.isNotEmpty &&
+        value.every((item) => item is Map && item['type'] == 'pdf-page')) {
+      value = [
+        ...value,
+        {'type': 'text-quote', 'exact': legacySelectedText.trim()},
+      ];
+    }
     final pages = <int>{};
     double? pageOffsetRatio;
     final quotes = <({String exact, String prefix, String suffix})>{};
     List<PdfAnnotationPageTarget>? rangeTargets;
+    var rangeSelectorCount = 0;
     for (final selector in value) {
       if (selector is! Map) continue;
       if (selector['type'] == 'pdf-page') {
@@ -204,6 +243,7 @@ class PdfAnnotationTarget {
           ));
         }
       } else if (selector['type'] == 'anx-pdf-page-range') {
+        rangeSelectorCount++;
         final fragments = selector['fragments'];
         if (fragments is List) {
           final parsed = fragments
@@ -217,9 +257,18 @@ class PdfAnnotationTarget {
       }
     }
     if (pages.length != 1 || quotes.length != 1) return null;
+    if (rangeSelectorCount > 1 ||
+        (rangeSelectorCount == 1 && rangeTargets == null)) {
+      return null;
+    }
     final quote = quotes.single;
     if (rangeTargets != null) {
       if (rangeTargets.first.page != pages.single) return null;
+      for (var index = 1; index < rangeTargets.length; index++) {
+        if (rangeTargets[index].page < rangeTargets[index - 1].page) {
+          return null;
+        }
+      }
       return PdfAnnotationTarget.fromPageTargets(
         targets: rangeTargets,
         exact: quote.exact,

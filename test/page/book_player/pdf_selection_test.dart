@@ -4,6 +4,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 void main() {
+  test(
+      'saves both page-local quotes for a selection crossing the page boundary',
+      () async {
+    const first = PdfPageText(
+        pageNumber: 4,
+        fullText: 'Before carrying subtle notes',
+        charRects: [],
+        fragments: []);
+    const second = PdfPageText(
+        pageNumber: 5,
+        fullText: 'hug the area. After',
+        charRects: [],
+        fragments: []);
+    final data = await buildPdfSelectionData([
+      PdfPageTextRange(pageText: first, start: 7, end: first.fullText.length),
+      PdfPageTextRange(pageText: second, start: 0, end: 12),
+    ], (_) async => const Size(600, 800));
+    expect(data!.target.exact, 'carrying subtle notes hug the area');
+    expect(data.target.pageTargets.map((part) => part.page), [4, 5]);
+    expect(data.target.pageTargets.first.prefix, 'Before ');
+    expect(data.target.pageTargets.last.suffix, '. After');
+    expect(data.target.toSelectors().last['type'], 'anx-pdf-page-range');
+  });
   test('joins cross-page fragments without separating punctuation', () {
     expect(
       joinPdfSelectionParts(['The sentence', 'continues', '.']),

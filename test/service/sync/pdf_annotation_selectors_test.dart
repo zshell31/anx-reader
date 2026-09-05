@@ -1,8 +1,93 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('restores Lingua cross-page selectors and preserves the shared anchors',
+      () {
+    final fixture = jsonDecode(
+        File('test/fixtures/pdf_cross_page.json').readAsStringSync());
+    final target = PdfAnnotationTarget.fromSelectors(fixture['selectors'])!;
+    expect(target.pageTargets.map((part) => part.page), [4, 5]);
+    expect(target.toSelectors(), fixture['selectors']);
+    for (final part in target.pageTargets) {
+      final text = fixture['pages']['${part.page}'] as String;
+      final match = part.resolve(text)!;
+      expect(text.substring(match.start, match.end), part.exact);
+    }
+  });
+
+  test('rejects malformed or backwards page fragments', () {
+    final fixture = jsonDecode(
+        File('test/fixtures/pdf_cross_page.json').readAsStringSync());
+    final selectors = fixture['selectors'] as List;
+    selectors.last['fragments'] = [];
+    expect(PdfAnnotationTarget.fromSelectors(selectors), isNull);
+    selectors.last['fragments'] = [
+      {'page': 4, 'exact': 'first'},
+      {'page': 3, 'exact': 'second'},
+    ];
+    expect(PdfAnnotationTarget.fromSelectors(selectors), isNull);
+  });
+  for (final fixture in jsonDecode(
+          File('test/fixtures/pdf_quote_matching.json').readAsStringSync())
+      as List) {
+    test('shared PDF quote: ${fixture['name']}', () {
+      final quote = fixture['quote'];
+      final source = fixture['text'] as String;
+      final target = PdfAnnotationPageTarget(
+          page: 1,
+          exact: quote['exact'],
+          prefix: quote['prefix'] ?? '',
+          suffix: quote['suffix'] ?? '');
+      final match = target.resolve(source);
+      expect(match == null ? null : source.substring(match.start, match.end),
+          fixture['expected']);
+    });
+  }
   group('PDF annotation selectors', () {
+    test('matches Lingua line breaks to PDFium text with source offsets', () {
+      const quote =
+          'Most evenings, delicate mists roll down from the mountains,\n'
+          'creeping into the town’s streets.';
+      const source = '5\r\nhug the area. '
+          'Most evenings, delicate mists roll down from the mountains, \r\n'
+          'creeping into the town’s streets. \r\nTo visitors';
+      const target = PdfAnnotationPageTarget(
+          page: 5, exact: quote, prefix: '', suffix: ' \nTo visitors');
+      final match = target.resolve(source)!;
+      expect(match.start, source.indexOf('Most evenings'));
+      expect(match.end, source.indexOf('streets.') + 'streets.'.length);
+    });
+
+    test('normalization does not hide an ambiguous second occurrence', () {
+      const target = PdfAnnotationPageTarget(
+          page: 1, exact: 'same phrase', prefix: '', suffix: '');
+      expect(target.resolve('same phrase and same\r\nphrase'), isNull);
+      expect(target.resolve('samephrase'), isNull);
+    });
+
+    test(
+        'legacy selected text supplies a missing quote only for page selectors',
+        () {
+      final selectors = [
+        {'type': 'pdf-page', 'page': 4}
+      ];
+      final target = PdfAnnotationTarget.fromSelectors(selectors,
+          legacySelectedText: 'play out');
+      expect(target?.resolve('Your adventures play out through')?.start, 16);
+      expect(selectors, [
+        {'type': 'pdf-page', 'page': 4}
+      ]);
+      expect(
+          PdfAnnotationTarget.fromSelectors([
+            ...selectors,
+            {'type': 'text-quote', 'exact': ''},
+          ], legacySelectedText: 'play out'),
+          isNull);
+    });
+
     test('serialize and restore pdf-page plus contextual text-quote', () {
       const pageText = 'Before. He looked at her. After.';
       final target = PdfAnnotationTarget.fromPageText(

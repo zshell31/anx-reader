@@ -5,11 +5,15 @@ class PdfPageTextSource {
     required this.pageNumber,
     required this.fullText,
     this.lines = const [],
+    this.pageHeight,
+    this.pageWidth,
   });
 
   final int pageNumber;
   final String fullText;
   final List<PdfTextLine> lines;
+  final double? pageHeight;
+  final double? pageWidth;
 }
 
 /// Line geometry in PDF coordinates (the vertical axis points upwards).
@@ -87,14 +91,36 @@ List<PdfTextBlock> extractPdfTextBlocks(PdfPageTextSource source) {
   if (source.pageNumber < 1) {
     throw RangeError.range(source.pageNumber, 1, null, 'pageNumber');
   }
-  final text = source.fullText;
+  var text = source.fullText;
+  final excluded = <PdfTextLine>{};
+  final pageHeight = source.pageHeight;
+  final pageWidth = source.pageWidth;
+  if (pageHeight != null &&
+      pageHeight > 0 &&
+      pageWidth != null &&
+      pageWidth > 0) {
+    for (final line in source.lines) {
+      final end = text.indexOf(RegExp(r'[\r\n]'), line.start);
+      final stop = end < 0 ? text.length : end;
+      final value = text.substring(line.start, stop).trim();
+      final inMargin =
+          line.top < pageHeight * 0.07 || line.bottom > pageHeight * 0.93;
+      final centered = ((line.left + line.right) / 2 - pageWidth / 2).abs() <
+          pageWidth * 0.12;
+      if (inMargin && centered && RegExp(r'^\d+$').hasMatch(value)) {
+        // Preserve source offsets used by selection and navigation.
+        text = text.replaceRange(line.start, stop, ' ' * (stop - line.start));
+        excluded.add(line);
+      }
+    }
+  }
   final blocks = <PdfTextBlock>[];
   final boundaries = <int>{
     ...RegExp(r'(?:\r?\n)[\t ]*(?:\r?\n)+')
         .allMatches(text)
         .map((match) => match.end),
   };
-  final lines = source.lines;
+  final lines = source.lines.where((line) => !excluded.contains(line)).toList();
   for (var i = 1; i < lines.length; i++) {
     final previous = lines[i - 1];
     final current = lines[i];

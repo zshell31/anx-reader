@@ -81,3 +81,21 @@ repositories. Its 33 cases declare either exact canonical JSON/value output or
 one stable semantic error code. Both runners can emit a canonical result report;
 the reports must compare byte-for-byte, in addition to each suite checking the
 declared fixture expectation.
+
+## PDF selections across pages
+
+Both clients use `pdf-page` for the first page, `text-quote` for the full
+selection, and the existing `anx-pdf-page-range` extension for page-local
+anchors. The extension name is retained for compatibility. Its `fragments`
+array contains `{page, exact, prefix?, suffix?}` entries in nondecreasing
+page order, beginning on the `pdf-page` page. Empty context fields may be
+omitted. Printed page-number text is excluded from the selection.
+
+Render each fragment against its own page, preserving source offsets while
+normalizing whitespace for quote and context matching. An ambiguous quote
+remains unresolved. Malformed ranges must not fall back to rendering the
+full quote on the first page. Preserve the selectors when editing annotation
+materials; the public annotation API remains version 1.
+
+Legacy selections with only a starting page cannot reliably encode the page
+boundaries. Reselecting after the client update creates the page fragments.

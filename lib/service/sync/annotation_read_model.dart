@@ -372,7 +372,12 @@ AnnotationCapabilities determineAnnotationCapabilities(
     );
   }
   final cfi = supportedEpubCfi(target);
-  final pdfTarget = PdfAnnotationTarget.fromSelectors(target['selectors']);
+  final pdfTarget = PdfAnnotationTarget.fromSelectors(
+    target['selectors'],
+    legacySelectedText: target['selectedText'] is String
+        ? target['selectedText'] as String
+        : null,
+  );
   final navigationSupported = cfi != null || pdfTarget != null;
   final renderingSupported =
       navigationSupported && target['selectedText'] is String;

@@ -207,6 +207,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       return PdfPageTextSource(
         pageNumber: pageNumber,
         fullText: pageText.fullText,
+        pageHeight: pdf.pages[pageNumber - 1].height,
+        pageWidth: pdf.pages[pageNumber - 1].width,
         lines: [
           for (final match in RegExp(r'[^\r\n]+').allMatches(pageText.fullText))
             if (match.group(0)!.trim().isNotEmpty &&
@@ -366,7 +368,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         final target = model.pdfTarget;
         return target != null &&
             model.renderingCapability == AnnotationCapability.available &&
-            target.page <= pdf.pages.length;
+            target.pageTargets.every((part) => part.page <= pdf.pages.length);
       });
       final resolutions = await resolvePdfAnnotationsByPage(
         annotations: renderable,

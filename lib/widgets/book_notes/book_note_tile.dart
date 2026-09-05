@@ -74,7 +74,7 @@ class BookNoteTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    note.selectedText,
+                    note.selectedText.replaceAll(RegExp(r'\s+'), ' ').trim(),
                     style: const TextStyle(
                       fontSize: 16,
                     ),

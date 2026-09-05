@@ -5,6 +5,37 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('PDF text block extraction', () {
+    test('excludes a centered footer read before the body, preserving offsets',
+        () {
+      const text = '5\r\nhug the area. Most evenings.';
+      final blocks = extractPdfTextBlocks(const PdfPageTextSource(
+        pageNumber: 5,
+        fullText: text,
+        pageWidth: 600,
+        pageHeight: 800,
+        lines: [
+          PdfTextLine(start: 0, left: 295, right: 305, top: 25, bottom: 15),
+          PdfTextLine(start: 3, left: 70, right: 530, top: 720, bottom: 706),
+        ],
+      ));
+      expect(blocks.single.text, 'hug the area. Most evenings.');
+      expect(blocks.single.sourceStart, 3);
+      expect(blocks.single.sourceEnd, text.length);
+    });
+
+    test('retains a standalone number in the body', () {
+      final blocks = extractPdfTextBlocks(const PdfPageTextSource(
+        pageNumber: 5,
+        fullText: '5',
+        pageWidth: 600,
+        pageHeight: 800,
+        lines: [
+          PdfTextLine(start: 0, left: 295, right: 305, top: 400, bottom: 385)
+        ],
+      ));
+      expect(blocks.single.text, '5');
+    });
+
     test('keeps a sentence continuing in the next column together', () {
       const text = 'A sentence that\ncontinues in the next column.';
       final blocks = extractPdfTextBlocks(PdfPageTextSource(

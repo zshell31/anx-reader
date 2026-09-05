@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -21,6 +22,7 @@ class PdfSelectionActionMenu extends StatefulWidget {
     required this.refreshAnnotations,
     required this.loadPageSize,
     required this.resolvePageOffset,
+    this.existingSession,
   });
 
   final Book book;
@@ -31,15 +33,25 @@ class PdfSelectionActionMenu extends StatefulWidget {
   final Future<void> Function() refreshAnnotations;
   final PdfPageSizeLoader loadPageSize;
   final PdfPageOffsetResolver resolvePageOffset;
+  final SelectionPersistenceSession? existingSession;
 
   @override
   State<PdfSelectionActionMenu> createState() => _PdfSelectionActionMenuState();
 }
 
 class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
+  late final _range = widget.selection.textSelectionPointRange;
   late final Future<_PdfSelectionMenuData?> _data = _loadData();
 
   Future<_PdfSelectionMenuData?> _loadData() async {
+    final existing = widget.existingSession;
+    if (existing != null) {
+      return _PdfSelectionMenuData(
+        target: existing.snapshot.pdfTarget!,
+        context: existing.snapshot.annotationContext ?? '',
+        session: existing,
+      );
+    }
     final ranges = await widget.selection.getSelectedTextRanges();
     final selectionData = await buildPdfSelectionData(
       ranges,
@@ -68,7 +80,26 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
     );
   }
 
-  void _close() => widget.dismissContextMenu();
+  void _close() {
+    widget.dismissContextMenu();
+    unawaited(_clearPersistedSelection());
+  }
+
+  Future<void> _clearPersistedSelection() async {
+    final data = await _data;
+    final current = widget.selection.textSelectionPointRange;
+    if (data?.session.hasPersistedAnnotation == true &&
+        current?.start == _range?.start &&
+        current?.end == _range?.end) {
+      await widget.selection.clearTextSelection();
+    }
+  }
+
+  Future<void> _refreshAnnotations() async {
+    await widget.refreshAnnotations();
+    // An editor may finish after its originating menu has been removed.
+    if (!mounted) await _clearPersistedSelection();
+  }
 
   Future<bool> _prepareAction() async {
     widget.dismissContextMenu();
@@ -125,11 +156,8 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
                   prepareInternalAction: _prepareAction,
                   axis: Axis.horizontal,
                   reverse: false,
-                  refreshAnnotations: widget.refreshAnnotations,
-                  onNewAnnotationSaved: () async {
-                    await widget.selection.clearTextSelection();
-                    widget.dismissContextMenu();
-                  },
+                  refreshAnnotations: _refreshAnnotations,
+                  onNewAnnotationSaved: _clearPersistedSelection,
                 ),
               ],
             ),

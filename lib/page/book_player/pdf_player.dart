@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
 import 'package:anx_reader/models/book.dart';
-import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_annotation_interaction.dart';
 import 'package:anx_reader/page/book_player/pdf_edge_tap.dart';
 import 'package:anx_reader/page/book_player/pdf_outline.dart';
@@ -59,7 +58,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   late final PdfTextBlockPageLoader _textBlockLoader;
   PageController? _reflowPageController;
   bool _reflowMode = false;
-  bool _annotationEditorOpen = false;
+  SelectionPersistenceSession? _annotationSelectionSession;
+  PdfTextSelectionRange? _annotationSelectionRange;
   Map<String, PdfDest> _outlineDestinations = const {};
   int _viewportGeneration = 0;
   int _wordSelectionGeneration = 0;
@@ -284,7 +284,13 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         !params.textSelectionDelegate.hasSelectedText) {
       return null;
     }
+    final range = params.textSelectionDelegate.textSelectionPointRange;
+    final existing = range?.start == _annotationSelectionRange?.start &&
+            range?.end == _annotationSelectionRange?.end
+        ? _annotationSelectionSession
+        : null;
     return PdfSelectionActionMenu(
+      key: ValueKey((range?.start, range?.end, existing)),
       book: widget.book,
       selection: params.textSelectionDelegate,
       primaryAnchor: params.anchorA,
@@ -293,6 +299,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       refreshAnnotations: refreshAnnotations,
       loadPageSize: _loadPageSize,
       resolvePageOffset: _resolvePageOffset,
+      existingSession: existing,
     );
   }
 
@@ -365,8 +372,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       final colorValue =
           int.tryParse(presentation.color, radix: 16) ?? 0x66ccff;
       final color = Color(0xff000000 | colorValue);
-      for (final fragment
-          in annotation.range.enumerateLineBoundingRects()) {
+      for (final fragment in annotation.range.enumerateLineBoundingRects()) {
         final rect = fragment.toRectInDocument(
           page: page,
           pageRect: pageRect,
@@ -438,6 +444,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       // Match EPUB: the first outside tap belongs to the active selection. It
       // only dismisses that selection and must not turn a page or show chrome.
       unawaited(value.textSelectionDelegate.clearTextSelection());
+      _annotationSelectionSession = null;
+      return true;
+    }
+    if (details.type == PdfViewerGeneralTapType.tap &&
+        details.tapOn == PdfViewerPart.selectedText) {
+      value.showSelectionMenu(details.documentPosition);
       return true;
     }
     if (details.type == PdfViewerGeneralTapType.tap) {
@@ -457,7 +469,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         },
       );
       if (hit.kind == PdfAnnotationHitKind.unique) {
-        unawaited(_openRenderedAnnotationEditor(hit.annotation!));
+        unawaited(_openRenderedAnnotationMenu(
+            hit.annotation!, details.documentPosition, interactionGeneration));
         return true;
       }
       if (hit.kind == PdfAnnotationHitKind.ambiguous) return true;
@@ -496,6 +509,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     int interactionGeneration,
   ) async {
     if (!controller.isReady) return;
+    _annotationSelectionSession = null;
     final range =
         await controller.useDocument<PdfTextSelectionRange?>((pdf) async {
       final layouts = controller.layout.pageLayouts;
@@ -531,11 +545,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     await controller.textSelectionDelegate.setTextSelectionPointRange(range);
   }
 
-  Future<void> _openRenderedAnnotationEditor(
+  Future<void> _openRenderedAnnotationMenu(
     _PdfRenderedAnnotation annotation,
+    Offset position,
+    int generation,
   ) async {
-    if (_annotationEditorOpen || !mounted) return;
-    _annotationEditorOpen = true;
+    if (!mounted) return;
     final model = annotation.model;
     final target = model.pdfTarget!;
     final contextText = model.annotationContext ??
@@ -553,19 +568,29 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       existingAnnotation: SelectionAnnotationHandle(ref: model.ref),
     );
     try {
-      final outcome = await showAnnotationEditor(
-        context: context,
-        book: widget.book,
-        session: session,
+      final ranges = _renderedAnnotations.values
+          .expand((items) => items)
+          .where((item) => item.model.ref == model.ref)
+          .map((item) => item.range)
+          .toList()
+        ..sort((a, b) {
+          final page = a.pageNumber.compareTo(b.pageNumber);
+          return page != 0 ? page : a.start.compareTo(b.start);
+        });
+      if (ranges.isEmpty) return;
+      await controller.textSelectionDelegate.setTextSelectionPointRange(
+        PdfTextSelectionRange.fromPoints(
+          PdfTextSelectionPoint(ranges.first.pageText, ranges.first.start),
+          PdfTextSelectionPoint(ranges.last.pageText, ranges.last.end - 1),
+        ),
       );
-      if (outcome == AnnotationEditorOutcome.saved ||
-          outcome == AnnotationEditorOutcome.deleted) {
-        await refreshAnnotations();
-      }
+      if (!mounted || generation != _wordSelectionGeneration) return;
+      _annotationSelectionSession = session;
+      _annotationSelectionRange =
+          controller.textSelectionDelegate.textSelectionPointRange;
+      controller.showSelectionMenu(position);
     } catch (error) {
       if (mounted) AnxToast.show(error.toString());
-    } finally {
-      _annotationEditorOpen = false;
     }
   }
 
@@ -642,6 +667,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
               onGeneralTap: _onGeneralTap,
               buildContextMenu: _buildContextMenu,
               textSelectionParams: const PdfTextSelectionParams(
+                showContextMenuAutomatically: false,
                 buildSelectionHandle: buildPdfSelectionHandle,
               ),
               pagePaintCallbacks: [_paintAnnotations],

@@ -423,7 +423,9 @@ export class Translator {
       wrapper.style.marginTop = '0.2em'
       element.appendChild(wrapper)
     }
-    wrapper.textContent = translatedText
+    // Reconciliation also runs after layout changes. Avoid replacing identical
+    // text nodes and triggering another reflow on every reconciliation.
+    if (wrapper.textContent !== translatedText) wrapper.textContent = translatedText
     this.#updateElementDisplay(element, wrapper)
   }
 

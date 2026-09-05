@@ -1,3 +1,5 @@
+import { observeContentLayout } from './content-layout-observer.mjs'
+
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const lerp = (min, max, x) => x * (max - min) + min
@@ -182,6 +184,7 @@ class View {
   #iframe = document.createElement('iframe')
   #contentRange = document.createRange()
   #overlayer
+  #stopObservingContent
   #vertical = false
   #rtl = false
   #writingMode = 'horizontal-ltr'
@@ -244,6 +247,8 @@ class View {
         this.#iframe.style.display = 'block'
         this.render(layout)
         this.#observer.observe(doc.body)
+        this.#stopObservingContent?.()
+        this.#stopObservingContent = observeContentLayout(doc, () => this.expand())
 
         // the resize observer above doesn't work in Firefox
         // (see https://bugzilla.mozilla.org/show_bug.cgi?id=1832939)
@@ -403,6 +408,7 @@ class View {
     return this.#writingMode
   }
   destroy() {
+    this.#stopObservingContent?.()
     if (this.document) this.#observer.unobserve(this.document.body)
   }
 }

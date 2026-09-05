@@ -266,6 +266,20 @@ test('slow result materializes after completion', async () => {
   assert.equal(wrappers(chapter.paragraphs[0]).length, 1)
 })
 
+test('layout reconciliation preserves already materialized translation nodes', async () => {
+  const { translator, calls } = setup()
+  await translator.setTranslationMode(TranslationMode.BILINGUAL)
+  const chapter = makeDocument('stable translated paragraph')
+  translator.observeDocument(chapter.doc)
+  await relocate(translator, chapter)
+  const wrapper = wrappers(chapter.paragraphs[0])[0]
+  const textNode = wrapper.childNodes[0]
+  await relocate(translator, chapter)
+  await relocate(translator, chapter)
+  assert.equal(wrapper.childNodes[0], textNode)
+  assert.equal(calls.length, 1)
+})
+
 test('reconciliation restores a removed wrapper without another bridge call', async () => {
   const { translator, calls } = setup()
   await translator.setTranslationMode(TranslationMode.BILINGUAL)

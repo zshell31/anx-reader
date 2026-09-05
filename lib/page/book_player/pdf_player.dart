@@ -345,8 +345,11 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       final resolutions = await resolvePdfAnnotationsByPage(
         annotations: renderable,
         targetFor: (model) => model.pdfTarget,
-        loadPageText: (pageNumber) =>
-            pdf.pages[pageNumber - 1].loadStructuredText(),
+        loadPageText: (pageNumber) async {
+          // Progressive loading exposes placeholder pages whose text is empty.
+          final page = await pdf.pages[pageNumber - 1].ensureLoaded();
+          return page.loadStructuredText();
+        },
         fullTextFor: (pageText) => pageText.fullText,
       );
       for (final resolution in resolutions) {
@@ -367,8 +370,10 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   }
 
   void _paintAnnotations(ui.Canvas canvas, Rect pageRect, PdfPage page) {
-    for (final annotation
-        in _renderedAnnotations[page.pageNumber] ?? const []) {
+    // Keep the fallback typed: a dynamic fragment cannot invoke PdfRect's
+    // toRectInDocument extension when painting a saved annotation.
+    for (final annotation in _renderedAnnotations[page.pageNumber] ??
+        const <_PdfRenderedAnnotation>[]) {
       final presentation = annotation.model.effectivePresentation(
         defaultStyle: Prefs().annotationType,
         defaultColor: Prefs().annotationColor,

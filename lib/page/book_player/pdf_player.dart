@@ -12,6 +12,7 @@ import 'package:anx_reader/page/book_player/pdf_outline.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/book_player/pdf_reflow_view.dart';
 import 'package:anx_reader/page/book_player/pdf_selection_action_menu.dart';
+import 'package:anx_reader/page/book_player/pdf_selection_handle.dart';
 import 'package:anx_reader/page/book_player/pdf_text_blocks.dart';
 import 'package:anx_reader/page/book_player/pdf_viewport.dart';
 import 'package:anx_reader/page/book_player/pdf_word_selection.dart';
@@ -431,6 +432,14 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     PdfViewerGeneralTapHandlerDetails details,
   ) {
     final interactionGeneration = ++_wordSelectionGeneration;
+    if (details.type == PdfViewerGeneralTapType.tap &&
+        details.tapOn != PdfViewerPart.selectedText &&
+        value.textSelectionDelegate.hasSelectedText) {
+      // Match EPUB: the first outside tap belongs to the active selection. It
+      // only dismisses that selection and must not turn a page or show chrome.
+      unawaited(value.textSelectionDelegate.clearTextSelection());
+      return true;
+    }
     if (details.type == PdfViewerGeneralTapType.tap) {
       final hit = hitTestPdfAnnotations(
         position: details.documentPosition,
@@ -632,6 +641,9 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
               onPageChanged: _onPageChanged,
               onGeneralTap: _onGeneralTap,
               buildContextMenu: _buildContextMenu,
+              textSelectionParams: const PdfTextSelectionParams(
+                buildSelectionHandle: buildPdfSelectionHandle,
+              ),
               pagePaintCallbacks: [_paintAnnotations],
               loadingBannerBuilder: _buildLoadingBanner,
               errorBannerBuilder: _buildErrorBanner,

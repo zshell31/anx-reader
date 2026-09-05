@@ -1524,12 +1524,11 @@ packages:
     source: hosted
     version: "2.2.24"
   pdfrx_engine:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: pdfrx_engine
-      sha256: a8914433d1f6188b903c53d36b9d7dc908bfa89131591a9db22f1a22470d3a48
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/pdfrx/packages/pdfrx_engine"
+      relative: true
+    source: path
     version: "0.3.9"
   permission_handler:
     dependency: "direct main"

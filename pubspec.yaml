@@ -135,6 +135,8 @@ dependencies:
   google_mlkit_language_id: 0.13.1
 
 dependency_overrides:
+  pdfrx_engine:
+    path: third_party/pdfrx/packages/pdfrx_engine
   langchain:
     git:
       url: https://github.com/Anxcye/langchain_dart.git

@@ -61,7 +61,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "de": [
@@ -126,7 +129,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "es": [
@@ -191,7 +197,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "fr": [
@@ -256,7 +265,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "it": [
@@ -321,7 +333,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "ja": [
@@ -386,7 +401,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "ko": [
@@ -451,7 +469,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "pt": [
@@ -516,7 +537,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "ro": [
@@ -581,7 +605,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "ru": [
@@ -683,7 +710,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "zh": [
@@ -734,7 +764,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "zh_CN": [
@@ -779,7 +812,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "zh_LZH": [
@@ -844,7 +880,10 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ],
 
   "zh_TW": [
@@ -909,6 +948,9 @@
     "annotationEditorSectionGrammar",
     "annotationEditorSectionUsage",
     "annotationEditorRoleAi",
-    "annotationEditorRoleYou"
+    "annotationEditorRoleYou",
+    "notesSearchHint",
+    "notesSearchNoResults",
+    "notesWithoutChapter"
   ]
 }

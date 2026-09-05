@@ -104,10 +104,10 @@ class BookNotesController extends _$BookNotesController {
     );
   }
 
-  void selectAllVisible() {
+  void selectAllVisible({List<AnnotationUiModel>? annotations}) {
     final current = state.valueOrNull;
     if (current == null) return;
-    final ids = current.visibleAnnotations
+    final ids = (annotations ?? current.visibleAnnotations)
         .map((annotation) => annotation.ref.annotationId)
         .toSet();
     _emit(

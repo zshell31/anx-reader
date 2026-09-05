@@ -50,9 +50,56 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
     );
   }
   if (!context.mounted) return null;
+  final result = await _showAnnotationEditorDraft(
+    context: context,
+    book: book,
+    draft: draft,
+    initialProvider: initialProvider,
+    focusPersonalNote: focusPersonalNote,
+  );
+  if (result?.outcome == AnnotationEditorOutcome.saved &&
+      result?.ref != null &&
+      session.annotationRef == null) {
+    session.attachExisting(SelectionAnnotationHandle(ref: result!.ref!));
+  }
+  return result?.outcome;
+}
+
+/// Opens an existing note without creating a new reader selection.
+Future<AnnotationEditorOutcome?> showExistingAnnotationEditor({
+  required BuildContext context,
+  required Book book,
+  required AnnotationUiModel annotation,
+}) async {
+  final result = await _showAnnotationEditorDraft(
+    context: context,
+    book: book,
+    draft: AnnotationEditorDraft.forAnnotation(
+      bookTitle: book.title,
+      annotation: annotation,
+      selection: SelectionSnapshot(
+        selectedText: annotation.selectedText,
+        annotationContext: annotation.annotationContext,
+        lookupContext: annotation.annotationContext,
+        chapter: annotation.chapter ?? '',
+        selector: annotation.epubCfi ?? '',
+        pdfTarget: annotation.pdfTarget,
+      ),
+    ),
+  );
+  return result?.outcome;
+}
+
+Future<_AnnotationEditorResult?> _showAnnotationEditorDraft({
+  required BuildContext context,
+  required Book book,
+  required AnnotationEditorDraft draft,
+  AnnotationEditorProvider? initialProvider,
+  bool focusPersonalNote = false,
+}) async {
   final controller = AnnotationEditorController(draft: draft, book: book);
   try {
-    final result = await showDialog<_AnnotationEditorResult>(
+    return await showDialog<_AnnotationEditorResult>(
       context: context,
       barrierDismissible: false,
       useSafeArea: true,
@@ -62,12 +109,6 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
         focusPersonalNote: focusPersonalNote,
       ),
     );
-    if (result?.outcome == AnnotationEditorOutcome.saved &&
-        result?.ref != null &&
-        session.annotationRef == null) {
-      session.attachExisting(SelectionAnnotationHandle(ref: result!.ref!));
-    }
-    return result?.outcome;
   } finally {
     controller.dispose();
   }

@@ -3,6 +3,7 @@ import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/hint_key.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/models/book_notes_state.dart';
+import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor.dart';
 import 'package:anx_reader/page/book_player/pdf_reading_position.dart';
 import 'package:anx_reader/page/reading_page.dart';
 import 'package:anx_reader/providers/book_notes.dart';
@@ -26,10 +27,12 @@ class BookNotesList extends ConsumerWidget {
     required this.fingerprint,
     required this.reading,
     this.exportNotes,
+    this.searchQuery = '',
   });
 
   final String fingerprint;
   final bool reading;
+  final String searchQuery;
   final void Function(BuildContext context, AnnotationBookUiModel book,
       {List<AnnotationUiModel>? notes})? exportNotes;
 
@@ -51,36 +54,82 @@ class BookNotesList extends ConsumerWidget {
 
   Widget _buildContent(
       BuildContext context, WidgetRef ref, BookNotesState state) {
-    return Column(
-      children: [
-        StickyHeader(
-          header: _header(context, ref, state),
-          content: state.visibleAnnotations.isEmpty
-              ? const Column(
+    final query = searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      state = state.copyWith(
+        visibleAnnotations: state.visibleAnnotations.where((note) {
+          return [
+            note.selectedText,
+            note.chapter ?? '',
+            note.effectivePersonalNote?.content ?? '',
+          ].any((text) => text.toLowerCase().contains(query));
+        }).toList(),
+      );
+    }
+    final chapters = <String, List<AnnotationUiModel>>{};
+    if (reading) {
+      for (final note in state.visibleAnnotations) {
+        chapters.putIfAbsent(note.chapter?.trim() ?? '', () => []).add(note);
+      }
+    }
+    return _notesLayout(
+      header: _header(context, ref, state),
+      content: state.visibleAnnotations.isEmpty
+          ? query.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(L10n.of(context).notesSearchNoResults),
+                )
+              : const Column(
                   children: [
                     Divider(),
                     NotesTips(),
                   ],
                 )
-              : Column(
-                  children: [
-                    HintBanner(
-                      icon: const Icon(Icons.info_outline),
-                      hintKey: HintKey.bookNotesOperations,
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Text(L10n.of(context).bookNotesOperationsHint),
-                    ),
-                    ...state.visibleAnnotations.map(
-                      (bookNote) => _slidableNote(
-                        context,
-                        ref,
-                        bookNote,
-                        _bookNoteItem(context, ref, state, bookNote),
-                      ),
-                    ),
-                  ],
+          : Column(
+              children: [
+                HintBanner(
+                  icon: const Icon(Icons.info_outline),
+                  hintKey: HintKey.bookNotesOperations,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Text(L10n.of(context).bookNotesOperationsHint),
                 ),
-        ),
+                if (reading)
+                  for (final chapter in chapters.entries)
+                    _NotesChapter(
+                      // Rebuild expansion state when the search changes.
+                      key: ValueKey((fingerprint, chapter.key, query)),
+                      initiallyExpanded: query.isNotEmpty,
+                      title: chapter.key.isEmpty
+                          ? L10n.of(context).notesWithoutChapter
+                          : chapter.key,
+                      count: chapter.value.length,
+                      children: [
+                        for (final note in chapter.value)
+                          _slidableNote(context, ref, note,
+                              _bookNoteItem(context, ref, state, note)),
+                      ],
+                    )
+                else
+                  ...state.visibleAnnotations.map(
+                    (bookNote) => _slidableNote(
+                      context,
+                      ref,
+                      bookNote,
+                      _bookNoteItem(context, ref, state, bookNote),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _notesLayout({required Widget header, required Widget content}) {
+    if (!reading) return StickyHeader(header: header, content: content);
+    return Column(
+      children: [
+        header,
+        Expanded(child: ListView(children: [content])),
       ],
     );
   }
@@ -90,9 +139,9 @@ class BookNotesList extends ConsumerWidget {
         ref.read(bookNotesControllerProvider(fingerprint).notifier);
     final buttonColor = Theme.of(context).colorScheme.primary;
     if (state.isSelecting) {
-      final allSelected = state.selectedAnnotationIds.length ==
-              state.visibleAnnotations.length &&
-          state.visibleAnnotations.isNotEmpty;
+      final allSelected = state.visibleAnnotations.isNotEmpty &&
+          state.visibleAnnotations.every((note) =>
+              state.selectedAnnotationIds.contains(note.ref.annotationId));
       return Row(
         children: [
           IconButton(
@@ -100,7 +149,8 @@ class BookNotesList extends ConsumerWidget {
               if (allSelected) {
                 notifier.clearSelection();
               } else {
-                notifier.selectAllVisible();
+                notifier.selectAllVisible(
+                    annotations: state.visibleAnnotations);
               }
             },
             icon: Icon(
@@ -349,6 +399,8 @@ class BookNotesList extends ConsumerWidget {
                     } else {
                       epubPlayerKey.currentState?.goToCfi(cfi!);
                     }
+                    readingPageKey.currentState
+                        ?.showOrHideAppBarAndBottomBar(false);
                   } else {
                     final position = pdfTarget == null
                         ? cfi
@@ -377,7 +429,11 @@ class BookNotesList extends ConsumerWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
             )
-          : null,
+          : IconButton(
+              tooltip: L10n.of(context).commonEdit,
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => _editBookNote(context, ref, bookNote),
+            ),
     );
   }
 
@@ -427,9 +483,28 @@ class BookNotesList extends ConsumerWidget {
   AnnotationBookUiModel? stateBook(WidgetRef ref) =>
       ref.read(bookNotesControllerProvider(fingerprint)).valueOrNull?.book;
 
-  void _editBookNote(
-      BuildContext context, WidgetRef ref, AnnotationUiModel bookNote) {
+  Future<void> _editBookNote(
+      BuildContext context, WidgetRef ref, AnnotationUiModel bookNote) async {
     final isBookmark = bookNote.motivation == AnnotationMotivation.bookmark;
+    final book = stateBook(ref)?.localBook;
+    if (!isBookmark && book != null) {
+      final notifier =
+          ref.read(bookNotesControllerProvider(fingerprint).notifier);
+      final outcome = await showExistingAnnotationEditor(
+        context: context,
+        book: book,
+        annotation: bookNote,
+      );
+      if (outcome == AnnotationEditorOutcome.saved ||
+          outcome == AnnotationEditorOutcome.deleted) {
+        if (context.mounted) await notifier.refresh();
+        if (reading) {
+          await epubPlayerKey.currentState?.refreshAnnotations();
+          await pdfPlayerKey.currentState?.refreshAnnotations();
+        }
+      }
+      return;
+    }
     final prefs = Prefs();
     final effectivePresentation = bookNote.effectivePresentation(
       defaultStyle: prefs.annotationType,
@@ -562,6 +637,42 @@ class BookNotesList extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _NotesChapter extends StatefulWidget {
+  const _NotesChapter({
+    super.key,
+    required this.title,
+    required this.count,
+    required this.initiallyExpanded,
+    required this.children,
+  });
+
+  final String title;
+  final int count;
+  final bool initiallyExpanded;
+  final List<Widget> children;
+
+  @override
+  State<_NotesChapter> createState() => _NotesChapterState();
+}
+
+class _NotesChapterState extends State<_NotesChapter> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      initiallyExpanded: widget.initiallyExpanded,
+      onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+      leading:
+          Icon(_expanded ? Icons.keyboard_arrow_down : Icons.chevron_right),
+      title: Text(widget.title),
+      trailing: Text('${widget.count}'),
+      childrenPadding: const EdgeInsets.only(left: 12),
+      children: widget.children,
     );
   }
 }

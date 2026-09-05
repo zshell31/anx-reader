@@ -917,5 +917,8 @@
    "annotationEditorSectionGrammar": "Грамматика",
    "annotationEditorSectionUsage": "Употребление",
    "annotationEditorRoleAi": "ИИ",
-   "annotationEditorRoleYou": "Вы"
+   "annotationEditorRoleYou": "Вы",
+  "notesSearchHint": "Поиск по заметкам и главам",
+  "notesSearchNoResults": "Заметки не найдены",
+  "notesWithoutChapter": "Без главы"
 }

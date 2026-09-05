@@ -958,5 +958,8 @@
   "annotationEditorSectionGrammar": "Grammar",
   "annotationEditorSectionUsage": "Usage",
   "annotationEditorRoleAi": "AI",
-  "annotationEditorRoleYou": "You"
+  "annotationEditorRoleYou": "You",
+  "notesSearchHint": "Search notes or chapters",
+  "notesSearchNoResults": "No matching notes",
+  "notesWithoutChapter": "Without chapter"
 }

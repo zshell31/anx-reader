@@ -40,6 +40,7 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
   bool _isModified = false;
   bool _isFetchingModels = false;
   final GlobalKey _fetchButtonKey = GlobalKey();
+  final GlobalKey _fetchTtsButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -195,15 +196,31 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              TextField(
-                key: const Key('ai-provider-tts-model'),
-                controller: _ttsModelController,
-                decoration: const InputDecoration(
-                  labelText: 'TTS model',
-                  hintText: 'gpt-4o-mini-tts',
-                  border: OutlineInputBorder(),
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                  key: const Key('ai-provider-tts-model'),
+                  controller: _ttsModelController,
+                  readOnly: true,
+                  onTap: _isFetchingModels
+                      ? null
+                      : () => _fetchModels(ttsOnly: true),
+                  decoration: const InputDecoration(
+                    labelText: 'TTS model',
+                    hintText: 'gpt-4o-mini-tts',
+                    border: OutlineInputBorder(),
+                  ),
+                )),
+                const SizedBox(width: 8),
+                AnxButton(
+                  key: _fetchTtsButtonKey,
+                  onPressed: _isFetchingModels
+                      ? null
+                      : () => _fetchModels(ttsOnly: true),
+                  isLoading: _isFetchingModels,
+                  child: Text(l10n.settingsAiProviderFetchModels),
                 ),
-              ),
+              ]),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('ai-provider-tts-voice'),
@@ -569,7 +586,8 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
     }
   }
 
-  Future<void> _fetchModels() async {
+  Future<void> _fetchModels({bool ttsOnly = false}) async {
+    if (_isFetchingModels) return;
     final l10n = L10n.of(context);
     final enabledKeys = _apiKeys.where((k) => k.enabled && k.key.isNotEmpty);
     if (enabledKeys.isEmpty || _urlController.text.isEmpty) {
@@ -579,16 +597,23 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
       return;
     }
 
+    final requestUrl = _urlController.text.trim();
+    final requestProtocol = _selectedProtocol;
     setState(() => _isFetchingModels = true);
 
     try {
       final models = await fetchAiModels(
-        url: _urlController.text.trim(),
+        url: requestUrl,
         apiKey: enabledKeys.first.key,
+        ttsOnly: ttsOnly,
       );
 
       if (!mounted) return;
       setState(() => _isFetchingModels = false);
+      if (_urlController.text.trim() != requestUrl ||
+          _selectedProtocol != requestProtocol) {
+        return;
+      }
 
       if (models.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -598,8 +623,9 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
       }
 
       // Position the dropdown below the fetch button
-      final renderBox =
-          _fetchButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      final renderBox = (ttsOnly ? _fetchTtsButtonKey : _fetchButtonKey)
+          .currentContext
+          ?.findRenderObject() as RenderBox?;
       final offset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
       final size = renderBox?.size ?? Size.zero;
 
@@ -625,8 +651,11 @@ class _AiProviderDetailPageState extends ConsumerState<AiProviderDetailPage> {
             .toList(),
       );
 
-      if (selected != null) {
-        _modelController.text = selected;
+      if (selected != null &&
+          mounted &&
+          _urlController.text.trim() == requestUrl &&
+          _selectedProtocol == requestProtocol) {
+        (ttsOnly ? _ttsModelController : _modelController).text = selected;
         setState(() => _isModified = true);
       }
     } catch (e) {

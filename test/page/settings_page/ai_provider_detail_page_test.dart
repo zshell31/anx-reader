@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   setUp(() async {
@@ -20,6 +22,9 @@ void main() {
           'model': 'gpt-text',
           'ttsModel': 'gpt-4o-mini-tts',
           'ttsVoice': 'alloy',
+          'apiKeys': [
+            {'id': 'test', 'key': 'test-key', 'enabled': true}
+          ],
         },
         {
           'id': 'claude',
@@ -50,25 +55,47 @@ void main() {
 
   testWidgets('saves Audio model and voice on the OpenAI provider',
       (tester) async {
-    await _pumpProvider(tester, 'openai');
+    await http.runWithClient(() async {
+      await _pumpProvider(tester, 'openai');
+      final field = find.byKey(const Key('ai-provider-tts-model'));
+      expect(tester.widget<TextField>(field).readOnly, isTrue);
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(
+          find.widgetWithText(PopupMenuItem<String>, 'gpt-text'), findsNothing);
+      expect(find.widgetWithText(PopupMenuItem<String>, 'whisper-1'),
+          findsNothing);
+      await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'tts-1-hd'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('ai-provider-tts-voice')),
+        'verse',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const Key('ai-provider-tts-model')),
-      'new-tts-model',
-    );
-    await tester.enterText(
-      find.byKey(const Key('ai-provider-tts-voice')),
-      'verse',
-    );
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-
-    final openAi = Prefs()
-        .getAiProviders()
-        .cast<Map<String, dynamic>>()
-        .firstWhere((provider) => provider['id'] == 'openai');
-    expect(openAi['ttsModel'], 'new-tts-model');
-    expect(openAi['ttsVoice'], 'verse');
+      final openAi = Prefs()
+          .getAiProviders()
+          .cast<Map<String, dynamic>>()
+          .firstWhere((provider) => provider['id'] == 'openai');
+      expect(openAi['ttsModel'], 'tts-1-hd');
+      expect(openAi['model'], 'gpt-text');
+      expect(openAi['ttsVoice'], 'verse');
+    },
+        () => MockClient((request) async {
+              expect(
+                  request.url.toString(), 'https://api.openai.com/v1/models');
+              expect(request.headers['Authorization'], 'Bearer test-key');
+              return http.Response(
+                  jsonEncode({
+                    'data': [
+                      for (final id in ['tts-1-hd', 'gpt-text', 'whisper-1'])
+                        {'id': id},
+                    ]
+                  }),
+                  200);
+            }));
   });
 }
 

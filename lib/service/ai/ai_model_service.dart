@@ -1,6 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+/// Models documented for POST /audio/speech, not transcription or Realtime.
+/// https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create
+const openAiSpeechModels = {
+  'tts-1',
+  'tts-1-hd',
+  'gpt-4o-mini-tts',
+  'gpt-4o-mini-tts-2025-12-15',
+};
+
 /// Fetches the list of available model IDs from an OpenAI-compatible /models endpoint.
 ///
 /// Returns a sorted list of model ID strings on success, or throws an exception
@@ -8,6 +17,7 @@ import 'package:http/http.dart' as http;
 Future<List<String>> fetchAiModels({
   required String url,
   required String apiKey,
+  bool ttsOnly = false,
   Duration timeout = const Duration(seconds: 10),
 }) async {
   final baseUrl = url.trim();
@@ -35,6 +45,10 @@ Future<List<String>> fetchAiModels({
 
   final ids =
       models.map<String>((m) => (m['id'] ?? m.toString()) as String).toList();
-  ids.sort();
-  return ids;
+  final filtered = ids
+      .where((id) => !ttsOnly || openAiSpeechModels.contains(id))
+      .toSet()
+      .toList()
+    ..sort();
+  return filtered;
 }

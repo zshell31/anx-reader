@@ -93,14 +93,22 @@ export class Overlayer {
     }
     hitTest({ x, y }) {
         const arr = Array.from(this.#map.entries())
-        // loop in reverse to hit more recently added items first
+        let match = []
+        let smallestArea = Infinity
+        // Prefer the most specific highlight, independent of restoration order.
+        // Equal-sized annotations retain the most recently drawn item priority.
         for (let i = arr.length - 1; i >= 0; i--) {
             const [key, obj] = arr[i]
-            for (const { left, top, right, bottom } of obj.rects)
-                if (top <= y && left <= x && bottom > y && right > x)
-                    return [key, obj.range]
+            if (!obj.rects.some(({ left, top, right, bottom }) =>
+                top <= y && left <= x && bottom > y && right > x)) continue
+            const area = obj.rects.reduce((sum, rect) =>
+                sum + Math.max(0, rect.right - rect.left) * Math.max(0, rect.bottom - rect.top), 0)
+            if (area < smallestArea) {
+                smallestArea = area
+                match = [key, obj.range]
+            }
         }
-        return []
+        return match
     }
     static underline(rects, options = {}) {
         const { color = 'red', width: strokeWidth = 2, padding = 0, writingMode } = options

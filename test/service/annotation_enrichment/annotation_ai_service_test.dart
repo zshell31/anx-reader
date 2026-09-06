@@ -8,6 +8,31 @@ import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.d
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('analysis limits chunks to the selection and its containing sentence',
+      () {
+    final prompt = buildAnnotationAnalysisPrompt(
+      selectedText: 'gave up',
+      context: 'He broke the ice. She gave up waiting. They hit the road.',
+      bookTitle: 'Book',
+      chapter: 'One',
+      targetLanguageCode: 'ru',
+      targetLanguageName: 'Russian',
+    );
+    expect(prompt, contains('translate only the selected text'));
+    expect(prompt, contains('prioritize the selected phrase'));
+    expect(prompt, contains('only to explain the selection'));
+    expect(
+        prompt,
+        contains(
+            'Never extract chunks or discuss constructions from the previous or next sentence'));
+    expect(
+        prompt,
+        contains(
+            'If several sentences are selected, analyze only the selection'));
+    expect(prompt, contains('Selected text:\ngave up'));
+    expect(prompt, contains('translation reference only'));
+  });
+
   test('analysis prompt uses configured language and does not force English',
       () {
     final prompt = buildAnnotationAnalysisPrompt(

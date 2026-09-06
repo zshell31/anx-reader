@@ -1019,11 +1019,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       'requested=$selectionSessionGeneration overlay=$overlayGeneration '
       'present=${entry != null} mounted=${entry?.mounted == true}',
     );
-    if (entry?.mounted == true) {
-      entry?.remove();
-    }
     contextMenuEntry = null;
     contextMenuSelectionSessionGeneration = null;
+    // An inserted entry may not have built its first frame yet. It still
+    // belongs to the overlay and must be removed before we forget it.
+    entry?.remove();
+    entry?.dispose();
   }
 
   void hideSelectionActions(int generation) {

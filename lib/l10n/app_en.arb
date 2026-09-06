@@ -961,5 +961,14 @@
   "annotationEditorRoleYou": "You",
   "notesSearchHint": "Search notes or chapters",
   "notesSearchNoResults": "No matching notes",
-  "notesWithoutChapter": "Without chapter"
+  "notesWithoutChapter": "Without chapter",
+  "pdfCropMargins": "Crop side margins",
+  "pdfRestoreMargins": "Restore side margins",
+  "pdfCropOff": "No cropping",
+  "pdfCropAutomatic": "Automatic side margins",
+  "pdfCropManual": "Manual crop",
+  "pdfCropApply": "Apply",
+  "pdfCropCancel": "Cancel",
+  "pdfCropHelp": "Move the frame or drag its edges. The area inside will be used for all pages of this book.",
+  "pdfCropPreviewFailed": "Could not load page preview. Go back and try again."
 }

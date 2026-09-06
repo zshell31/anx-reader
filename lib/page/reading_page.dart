@@ -94,6 +94,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   bool _isResizingAiChat = false;
   bool bookmarkExists = false;
   bool _pdfReflowMode = false;
+  bool _pdfCropMode = false;
   String? _annotationFingerprint;
   late final void Function() _annotationRefresh;
 
@@ -900,11 +901,25 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                                         icon: const Icon(EvaIcons.headphones),
                                         onPressed: ttsHandler,
                                       ),
+                                    if (_isPdf && !_pdfReflowMode)
+                                      IconButton(
+                                        icon: const Icon(Icons.crop),
+                                        isSelected: _pdfCropMode,
+                                        tooltip: _pdfCropMode
+                                            ? L10n.of(context).pdfRestoreMargins
+                                            : L10n.of(context).pdfCropMargins,
+                                        onPressed: () {
+                                          pdfPlayerKey.currentState
+                                              ?.showCropMenu();
+                                          hideBottomBar();
+                                        },
+                                      ),
                                     if (_isPdf)
                                       IconButton(
                                         icon: Icon(_pdfReflowMode
                                             ? Icons.picture_as_pdf_outlined
-                                            : Icons.chrome_reader_mode_outlined),
+                                            : Icons
+                                                .chrome_reader_mode_outlined),
                                         tooltip: _pdfReflowMode
                                             ? L10n.of(context)
                                                 .readingPageOriginal
@@ -994,6 +1009,11 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                                     initialPosition: widget.cfi,
                                     showOrHideAppBarAndBottomBar:
                                         showOrHideAppBarAndBottomBar,
+                                    onCropModeChanged: (enabled) {
+                                      if (mounted) {
+                                        setState(() => _pdfCropMode = enabled);
+                                      }
+                                    },
                                     onReadingModeChanged: (reflow) {
                                       if (mounted) {
                                         setState(() {

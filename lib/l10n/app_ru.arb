@@ -920,5 +920,14 @@
    "annotationEditorRoleYou": "Вы",
   "notesSearchHint": "Поиск по заметкам и главам",
   "notesSearchNoResults": "Заметки не найдены",
-  "notesWithoutChapter": "Без главы"
+  "notesWithoutChapter": "Без главы",
+  "pdfCropMargins": "Обрезать боковые поля",
+  "pdfRestoreMargins": "Вернуть боковые поля",
+  "pdfCropOff": "Без обрезки",
+  "pdfCropAutomatic": "Автоматически убрать боковые поля",
+  "pdfCropManual": "Обрезать вручную",
+  "pdfCropApply": "Применить",
+  "pdfCropCancel": "Отмена",
+  "pdfCropHelp": "Перемещайте рамку или тяните за её края. Область внутри будет применена ко всем страницам этой книги.",
+  "pdfCropPreviewFailed": "Не удалось загрузить страницу. Вернитесь назад и попробуйте снова."
 }

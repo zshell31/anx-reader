@@ -1,3 +1,4 @@
+import 'package:anx_reader/page/book_player/pdf_crop.dart';
 import 'dart:convert';
 import 'dart:core';
 
@@ -1585,6 +1586,21 @@ class Prefs extends ChangeNotifier {
         modes.map((key, value) => MapEntry(key, value.code));
     prefs.setString('bookTranslationModes', jsonEncode(encoded));
     notifyListeners();
+  }
+
+  PdfCropSettings getPdfCropSettings(int bookId) {
+    try {
+      final value = prefs.getString('pdfCropSettings_$bookId');
+      if (value != null) {
+        return PdfCropSettings.fromMap(
+            jsonDecode(value) as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    return const PdfCropSettings();
+  }
+
+  void setPdfCropSettings(int bookId, PdfCropSettings settings) {
+    prefs.setString('pdfCropSettings_$bookId', jsonEncode(settings.toMap()));
   }
 
   TranslationModeEnum getBookTranslationMode(int bookId) {

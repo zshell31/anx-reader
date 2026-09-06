@@ -1,3 +1,7 @@
+import 'package:anx_reader/l10n/generated/L10n.dart';
+import 'package:anx_reader/page/book_player/pdf_crop.dart';
+import 'package:anx_reader/page/book_player/pdf_crop_editor.dart';
+import 'package:anx_reader/page/book_player/pdf_crop_viewport.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -36,12 +40,14 @@ class PdfPlayer extends ConsumerStatefulWidget {
     this.initialPosition,
     required this.showOrHideAppBarAndBottomBar,
     required this.onReadingModeChanged,
+    this.onCropModeChanged,
   });
 
   final Book book;
   final String? initialPosition;
   final void Function(bool show) showOrHideAppBarAndBottomBar;
   final ValueChanged<bool> onReadingModeChanged;
+  final ValueChanged<bool>? onCropModeChanged;
 
   @override
   ConsumerState<PdfPlayer> createState() => PdfPlayerState();
@@ -59,6 +65,11 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   late final PdfTextBlockPageLoader _textBlockLoader;
   PageController? _reflowPageController;
   bool _reflowMode = false;
+  late PdfCropSettings _cropSettings;
+  final Map<int, Rect> _automaticCrops = {};
+  final Map<int, Future<void>> _cropLoading = {};
+  bool get _cropEnabled => _cropSettings.mode != PdfCropMode.off;
+
   SelectionPersistenceSession? _annotationSelectionSession;
   PdfTextSelectionRange? _annotationSelectionRange;
   Map<String, PdfDest> _outlineDestinations = const {};
@@ -68,6 +79,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   @override
   void initState() {
     super.initState();
+    _cropSettings = Prefs().getPdfCropSettings(widget.book.id);
     _initialPageNumber = decodePdfReadingPosition(
           widget.initialPosition ?? widget.book.lastReadPosition,
         ) ??
@@ -78,6 +90,115 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _currentPageNumber = _initialPageNumber;
     _textBlockLoader = PdfTextBlockPageLoader(loadPageText: _loadPageText);
     ref.read(bookTocProvider.notifier).setToc(const []);
+  }
+
+  Rect _cropForPage(int page) => switch (_cropSettings.mode) {
+        PdfCropMode.manual => _cropSettings.manual,
+        PdfCropMode.automatic =>
+          _automaticCrops[page] ?? const Rect.fromLTWH(0, 0, 1, 1),
+        PdfCropMode.off => const Rect.fromLTWH(0, 0, 1, 1),
+      };
+
+  Future<void> showCropMenu() async {
+    if (!controller.isReady || _reflowMode) return;
+    final l10n = L10n.of(context);
+    final mode = await showModalBottomSheet<PdfCropMode>(
+        context: context,
+        builder: (context) => SafeArea(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final option in PdfCropMode.values)
+                ListTile(
+                    leading: Icon(option == _cropSettings.mode
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked),
+                    title: Text(switch (option) {
+                      PdfCropMode.off => l10n.pdfCropOff,
+                      PdfCropMode.automatic => l10n.pdfCropAutomatic,
+                      PdfCropMode.manual => l10n.pdfCropManual
+                    }),
+                    onTap: () => Navigator.pop(context, option)),
+            ])));
+    if (!mounted || mode == null) return;
+    var manual = _cropSettings.manual;
+    if (mode == PdfCropMode.manual) {
+      final page = await controller
+          .useDocument((pdf) async => pdf.pages[_currentPageNumber - 1]);
+      if (!mounted || page == null) return;
+      final rect = await Navigator.of(context).push<Rect>(MaterialPageRoute(
+          builder: (_) => PdfCropEditor(
+              page: page,
+              initialCrop: _cropSettings.mode == PdfCropMode.automatic
+                  ? _cropForPage(_currentPageNumber)
+                  : manual)));
+      if (!mounted || rect == null) return;
+      manual = rect;
+    }
+    if (mode == PdfCropMode.automatic) {
+      await _loadAutomaticCrop(_currentPageNumber);
+    }
+    if (!mounted) return;
+    final currentPage = _currentPageNumber;
+    await controller.textSelectionDelegate.clearTextSelection();
+    if (!mounted) return;
+    setState(() => _cropSettings = PdfCropSettings(mode: mode, manual: manual));
+    Prefs().setPdfCropSettings(widget.book.id, _cropSettings);
+    widget.onCropModeChanged?.call(_cropEnabled);
+    _refitAfterCrop(currentPage);
+  }
+
+  Future<void> _loadAutomaticCrop(int pageNumber) {
+    if (_automaticCrops.containsKey(pageNumber)) return Future.value();
+    return _cropLoading.putIfAbsent(
+      pageNumber,
+      () => _detectAutomaticCrop(pageNumber),
+    );
+  }
+
+  Future<void> _detectAutomaticCrop(int pageNumber) async {
+    try {
+      final crop = await controller.useDocument((pdf) async {
+        return loadAutomaticPdfCrop(pdf.pages[pageNumber - 1]);
+      });
+      if (mounted && crop != null) _automaticCrops[pageNumber] = crop;
+    } catch (_) {
+      if (mounted)
+        _automaticCrops[pageNumber] = const Rect.fromLTWH(0, 0, 1, 1);
+    } finally {
+      _cropLoading.remove(pageNumber);
+    }
+  }
+
+  void _refitAfterCrop(int pageNumber) {
+    controller.invalidate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !controller.isReady) return;
+      final rect = controller.layout.visiblePageRects[pageNumber - 1];
+      final zoom = controller.viewSize.width / rect.width;
+      controller.value = controller.calcMatrixFor(
+          Offset(
+              rect.center.dx, rect.top + controller.viewSize.height / zoom / 2),
+          zoom: zoom);
+    });
+  }
+
+  PdfPageLayout _cropLayout(List<PdfPage> pages, PdfViewerParams params) =>
+      layoutCroppedPdfPages([
+        for (final page in pages) Size(page.width, page.height)
+      ], (index) => _cropForPage(index + 1), gap: params.margin);
+
+  Matrix4 _normalizeCropMatrix(Matrix4 matrix, Size viewSize,
+      PdfPageLayout layout, PdfViewerController? value) {
+    if (value == null || !value.isReady || layout.documentSize.isEmpty) {
+      return matrix;
+    }
+    final constrained = constrainPdfCropViewport(
+        center: matrix.calcPosition(viewSize),
+        zoom: matrix.zoom,
+        viewSize: viewSize,
+        crop: Offset.zero & layout.documentSize,
+        documentHeight: layout.documentSize.height);
+    return value.calcMatrixFor(constrained.center,
+        zoom: constrained.zoom, viewSize: viewSize);
   }
 
   Future<void> nextPage() => _goToRelativePage(1);
@@ -264,6 +385,16 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _currentPageNumber = value.pageNumber ??
         _initialPageNumber.clamp(1, _pageCount < 1 ? 1 : _pageCount);
     _publishReadingState();
+    widget.onCropModeChanged?.call(_cropEnabled);
+    if (_cropSettings.mode == PdfCropMode.automatic) {
+      unawaited(_loadAutomaticCrop(_currentPageNumber).then((_) {
+        if (mounted && _cropSettings.mode == PdfCropMode.automatic) {
+          _refitAfterCrop(_currentPageNumber);
+        }
+      }));
+    } else if (_cropEnabled) {
+      _refitAfterCrop(_currentPageNumber);
+    }
     unawaited(refreshAnnotations());
     unawaited(_loadOutline(document));
     if (_initialPageOffsetRatio != null) {
@@ -432,6 +563,14 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   void _onPageChanged(int? pageNumber) {
     if (pageNumber == null || pageNumber == _currentPageNumber) return;
     _currentPageNumber = pageNumber;
+    if (_cropSettings.mode == PdfCropMode.automatic &&
+        !_automaticCrops.containsKey(pageNumber)) {
+      unawaited(_loadAutomaticCrop(pageNumber).then((_) {
+        if (mounted && _cropSettings.mode == PdfCropMode.automatic) {
+          controller.invalidate();
+        }
+      }));
+    }
     _publishReadingState();
     _saveDebounce?.cancel();
     _saveDebounce = Timer(
@@ -497,10 +636,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         rectsFor: (annotation) sync* {
           for (final fragment
               in annotation.range.enumerateLineBoundingRects()) {
-            yield controller.calcRectForRectInsidePage(
-              pageNumber: annotation.range.pageNumber,
-              rect: fragment,
-            );
+            final pageNumber = annotation.range.pageNumber;
+            final rect = controller
+                .calcRectForRectInsidePage(
+                    pageNumber: pageNumber, rect: fragment)
+                .intersect(controller.layout.visiblePageRects[pageNumber - 1]);
+            if (!rect.isEmpty) yield rect;
           }
         },
       );
@@ -552,7 +693,10 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       final layouts = controller.layout.pageLayouts;
       for (var index = 0; index < layouts.length; index++) {
         final pageRect = layouts[index];
-        if (!pageRect.contains(documentPosition)) continue;
+        if (!controller.layout.visiblePageRects[index]
+            .contains(documentPosition)) {
+          continue;
+        }
         final page = pdf.pages[index];
         final pageText = await page.loadStructuredText();
         final point = documentPosition
@@ -703,6 +847,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
             params: PdfViewerParams(
               backgroundColor:
                   Theme.of(context).colorScheme.surfaceContainerHighest,
+              layoutPages: _cropEnabled ? _cropLayout : null,
+              normalizeMatrix: _cropEnabled ? _normalizeCropMatrix : null,
               panEnabled: true,
               scaleEnabled: true,
               onViewerReady: _onViewerReady,

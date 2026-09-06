@@ -64,7 +64,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "de": [
@@ -132,7 +141,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "es": [
@@ -200,7 +218,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "fr": [
@@ -268,7 +295,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "it": [
@@ -336,7 +372,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "ja": [
@@ -404,7 +449,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "ko": [
@@ -472,7 +526,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "pt": [
@@ -540,7 +603,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "ro": [
@@ -608,7 +680,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "ru": [
@@ -713,7 +794,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "zh": [
@@ -767,7 +857,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "zh_CN": [
@@ -815,7 +914,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "zh_LZH": [
@@ -883,7 +991,16 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ],
 
   "zh_TW": [
@@ -951,6 +1068,15 @@
     "annotationEditorRoleYou",
     "notesSearchHint",
     "notesSearchNoResults",
-    "notesWithoutChapter"
+    "notesWithoutChapter",
+    "pdfCropMargins",
+    "pdfRestoreMargins",
+    "pdfCropOff",
+    "pdfCropAutomatic",
+    "pdfCropManual",
+    "pdfCropApply",
+    "pdfCropCancel",
+    "pdfCropHelp",
+    "pdfCropPreviewFailed"
   ]
 }

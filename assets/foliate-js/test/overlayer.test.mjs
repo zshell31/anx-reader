@@ -42,3 +42,13 @@ test('redraw updates both painted geometry and tap targets after text moves', ()
     assert.deepEqual(overlay.hitTest({ x: 10, y: 10 }), [])
     assert.equal(overlay.hitTest({ x: 10, y: 110 })[0], 'note')
 })
+
+test('saved highlights have 10px padding and direct hits take priority', () => {
+    const overlay = new Overlayer(document)
+    overlay.add('first', range([rect(20, 20, 40)]), Overlayer.highlight)
+    overlay.add('second', range([rect(20, 45, 40)]), Overlayer.highlight)
+    assert.equal(overlay.hitTest({ x: 10, y: 10 })[0], 'first')
+    assert.deepEqual(overlay.hitTest({ x: 9, y: 20 }), [])
+    assert.equal(overlay.hitTest({ x: 30, y: 46 })[0], 'second')
+    assert.equal(overlay.hitTest({ x: 30, y: 44 })[0], 'second')
+})

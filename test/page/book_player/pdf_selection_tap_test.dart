@@ -95,9 +95,10 @@ void main() {
           pageNumber: 1,
           rect: const PdfRect(50, 550, 110, 530),
         )
-        .center;
+        .topCenter;
     final local = controller.textSelectionDelegate.doc2local
-        .offsetToLocal(viewerContext, docPoint)!;
+            .offsetToLocal(viewerContext, docPoint)! -
+        const Offset(0, 9);
     await tester.tapAt(tester.getTopLeft(find.byType(PdfViewer)) + local);
     await tester.pumpAndSettle();
     expect(controller.textSelectionDelegate.hasSelectedText, isTrue);

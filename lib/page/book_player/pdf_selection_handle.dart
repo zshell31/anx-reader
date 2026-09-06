@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-const double _selectionHandleHitSize = 40;
+const double _selectionHandleHitSize = 48;
 
 /// Builds Android Material selection handles while preserving pdfrx's anchor
 /// corners (start above the selection, end below it).
@@ -41,9 +41,12 @@ Widget buildPdfSelectionHandle(
   );
   return SizedBox.square(
     dimension: _selectionHandleHitSize,
-    child: Align(
-      alignment: alignment,
-      child: RotatedBox(quarterTurns: quarterTurns, child: handle),
+    child: ColoredBox(
+      color: Colors.transparent,
+      child: Align(
+        alignment: alignment,
+        child: RotatedBox(quarterTurns: quarterTurns, child: handle),
+      ),
     ),
   );
 }

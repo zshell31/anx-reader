@@ -95,15 +95,18 @@ export class Overlayer {
         const arr = Array.from(this.#map.entries())
         let match = []
         let smallestArea = Infinity
+        let bestDistance = Infinity
         // Prefer the most specific highlight, independent of restoration order.
         // Equal-sized annotations retain the most recently drawn item priority.
         for (let i = arr.length - 1; i >= 0; i--) {
             const [key, obj] = arr[i]
-            if (!obj.rects.some(({ left, top, right, bottom }) =>
-                top <= y && left <= x && bottom > y && right > x)) continue
+            const distance = Math.min(...obj.rects.map(({ left, top, right, bottom }) =>
+                Math.max(left - x, x - right, top - y, y - bottom, 0)))
+            if (distance > 10) continue
             const area = obj.rects.reduce((sum, rect) =>
                 sum + Math.max(0, rect.right - rect.left) * Math.max(0, rect.bottom - rect.top), 0)
-            if (area < smallestArea) {
+            if (distance < bestDistance || (distance === bestDistance && area < smallestArea)) {
+                bestDistance = distance
                 smallestArea = area
                 match = [key, obj.range]
             }

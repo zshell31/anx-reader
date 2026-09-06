@@ -53,5 +53,17 @@ void main() {
     );
 
     expect(findPdfCharacterIndex(structured, const PdfPoint(27, 5)), 5);
+    expect(
+        findPdfCharacterIndex(structured, const PdfPoint(27, 16),
+            hitTestMargin: 10),
+        5);
+    expect(
+        findPdfCharacterIndex(structured, const PdfPoint(27, 21),
+            hitTestMargin: 10),
+        isNull);
+    expect(
+        findPdfCharacterIndex(structured, const PdfPoint(12, 5),
+            hitTestMargin: 10),
+        1);
   });
 }

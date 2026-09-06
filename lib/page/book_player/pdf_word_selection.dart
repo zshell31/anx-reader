@@ -1,27 +1,25 @@
 import 'package:flutter/painting.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-/// Finds the character under [point] while keeping the hit inside one PDF text
-/// fragment. PDFium often exposes a whole paragraph as a single fragment, so
-/// the fragment itself is not a useful word boundary.
-int? findPdfCharacterIndex(PdfPageText pageText, PdfPoint point) {
-  for (final fragment in pageText.fragments) {
-    if (!fragment.bounds.containsPoint(point)) continue;
-
-    var closestIndex = -1;
-    var closestDistance = double.infinity;
-    for (var index = fragment.index; index < fragment.end; index++) {
-      final rect = pageText.charRects[index];
-      if (rect.containsPoint(point)) return index;
-      final distance = rect.distanceSquaredTo(point);
-      if (distance < closestDistance) {
-        closestIndex = index;
-        closestDistance = distance;
-      }
+/// Finds the nearest non-whitespace character within [hitTestMargin] PDF units.
+/// The caller converts the screen-space touch tolerance to page coordinates.
+int? findPdfCharacterIndex(PdfPageText pageText, PdfPoint point,
+    {double hitTestMargin = 0}) {
+  int? closestIndex;
+  var closestDistance = double.infinity;
+  for (var index = 0; index < pageText.charRects.length; index++) {
+    if (index >= pageText.fullText.length ||
+        pageText.fullText[index].trim().isEmpty) {
+      continue;
     }
-    return closestIndex < 0 ? null : closestIndex;
+    final rect = pageText.charRects[index];
+    final distance = rect.distanceSquaredTo(point);
+    if (distance < closestDistance) {
+      closestIndex = index;
+      closestDistance = distance;
+    }
   }
-  return null;
+  return closestDistance <= hitTestMargin * hitTestMargin ? closestIndex : null;
 }
 
 /// Returns the Unicode word containing [characterIndex].

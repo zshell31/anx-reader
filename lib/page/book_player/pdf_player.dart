@@ -492,16 +492,15 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     if (details.type == PdfViewerGeneralTapType.tap) {
       final hit = hitTestPdfAnnotations(
         position: details.documentPosition,
+        hitSlop: 10 / value.currentZoom,
         annotations: _renderedAnnotations.values.expand((value) => value),
         rectsFor: (annotation) sync* {
           for (final fragment
               in annotation.range.enumerateLineBoundingRects()) {
-            yield controller
-                .calcRectForRectInsidePage(
-                  pageNumber: annotation.range.pageNumber,
-                  rect: fragment,
-                )
-                .inflate(2);
+            yield controller.calcRectForRectInsidePage(
+              pageNumber: annotation.range.pageNumber,
+              rect: fragment,
+            );
           }
         },
       );
@@ -513,7 +512,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       if (hit.kind == PdfAnnotationHitKind.ambiguous) return true;
     }
     if (details.type == PdfViewerGeneralTapType.longPress &&
-        details.tapOn == PdfViewerPart.nonSelectedText) {
+        details.tapOn != PdfViewerPart.selectedText) {
       unawaited(_selectTouchedPdfWord(
         details.documentPosition,
         interactionGeneration,
@@ -549,6 +548,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     _annotationSelectionSession = null;
     final range =
         await controller.useDocument<PdfTextSelectionRange?>((pdf) async {
+      if (pdf.permissions?.allowsCopying == false) return null;
       final layouts = controller.layout.pageLayouts;
       for (var index = 0; index < layouts.length; index++) {
         final pageRect = layouts[index];
@@ -558,7 +558,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         final point = documentPosition
             .translate(-pageRect.left, -pageRect.top)
             .toPdfPoint(page: page, scaledPageSize: pageRect.size);
-        final characterIndex = findPdfCharacterIndex(pageText, point);
+        final characterIndex = findPdfCharacterIndex(
+          pageText,
+          point,
+          hitTestMargin:
+              10 / controller.currentZoom * page.width / pageRect.width,
+        );
         if (characterIndex == null) return null;
         final word = pdfWordRangeAt(pageText.fullText, characterIndex);
         if (word == null) return null;

@@ -23,15 +23,37 @@ PdfAnnotationHit<T> hitTestPdfAnnotations<T>({
   required Offset position,
   required Iterable<T> annotations,
   required Iterable<Rect> Function(T annotation) rectsFor,
+  double hitSlop = 0,
 }) {
   T? match;
+  var bestDistance = double.infinity;
+  var ambiguous = false;
   for (final annotation in annotations) {
-    if (!rectsFor(annotation).any((rect) => rect.contains(position))) {
-      continue;
+    var distance = double.infinity;
+    for (final rect in rectsFor(annotation)) {
+      final dx = position.dx < rect.left
+          ? rect.left - position.dx
+          : position.dx > rect.right
+              ? position.dx - rect.right
+              : 0.0;
+      final dy = position.dy < rect.top
+          ? rect.top - position.dy
+          : position.dy > rect.bottom
+              ? position.dy - rect.bottom
+              : 0.0;
+      final candidate = dx > dy ? dx : dy;
+      if (candidate < distance) distance = candidate;
     }
-    if (match != null) return const PdfAnnotationHit.ambiguous();
-    match = annotation;
+    if (distance > hitSlop) continue;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      match = annotation;
+      ambiguous = false;
+    } else if (distance == bestDistance) {
+      ambiguous = true;
+    }
   }
+  if (ambiguous) return const PdfAnnotationHit.ambiguous();
   return match == null
       ? const PdfAnnotationHit.none()
       : PdfAnnotationHit.unique(match);

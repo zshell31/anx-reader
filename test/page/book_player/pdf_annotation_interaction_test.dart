@@ -7,6 +7,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('PDF annotation hit testing', () {
+    test('padding uses nearest highlight and preserves direct-hit priority',
+        () {
+      final rects = {
+        'first': const Rect.fromLTWH(20, 20, 40, 12),
+        'second': const Rect.fromLTWH(20, 40, 40, 12),
+      };
+      PdfAnnotationHit<String> hit(Offset point) => hitTestPdfAnnotations(
+            position: point,
+            annotations: rects.keys,
+            rectsFor: (key) => [rects[key]!],
+            hitSlop: 10,
+          );
+      expect(hit(const Offset(10, 10)).annotation, 'first');
+      expect(hit(const Offset(9, 20)).kind, PdfAnnotationHitKind.none);
+      expect(hit(const Offset(30, 41)).annotation, 'second');
+      expect(hit(const Offset(30, 39)).annotation, 'second');
+      expect(hit(const Offset(30, 36)).kind, PdfAnnotationHitKind.ambiguous);
+    });
+
     test('resolves the annotation whose rendered rectangle was tapped', () {
       final firstRef = AnnotationRef(
         bookFingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',

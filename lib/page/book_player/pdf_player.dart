@@ -667,8 +667,24 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     final edgeAction = pdfEdgeTapAction(
       x: details.localPosition.dx,
       viewWidth: controller.viewSize.width,
+      y: details.localPosition.dy,
+      viewHeight: controller.viewSize.height,
     );
     switch (edgeAction) {
+      case PdfEdgeTapAction.scrollUp:
+      case PdfEdgeTapAction.scrollDown:
+        final down = edgeAction == PdfEdgeTapAction.scrollDown;
+        final target = pdfVerticalTapTarget(
+          viewport: controller.visibleRect,
+          page: controller.layout.visiblePageRects[_currentPageNumber - 1],
+          down: down,
+        );
+        unawaited(target != null
+            ? controller.goTo(controller.calcMatrixFor(target))
+            : down
+                ? nextPage()
+                : prevPage());
+        return true;
       case PdfEdgeTapAction.previousPage:
         unawaited(prevPage());
         return true;

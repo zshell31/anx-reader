@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:anx_reader/page/book_player/pdf_crop.dart';
 import 'package:anx_reader/page/book_player/pdf_crop_viewport.dart';
+import 'package:anx_reader/page/book_player/pdf_selection_handle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -79,6 +80,42 @@ class _PlaceholderPage extends _Page {
 }
 
 void main() {
+  for (final start in [true, false]) {
+    testWidgets('dragging the ${start ? "start" : "end"} text edge expands selection', (tester) async {
+      final document = _Document();
+      final controller = PdfViewerController();
+      await tester.pumpWidget(MaterialApp(home: PdfViewer(
+        PdfDocumentRefDirect(document), controller: controller,
+        params: const PdfViewerParams(textSelectionParams: PdfTextSelectionParams(
+          enableSelectionHandles: true,
+          showContextMenuAutomatically: false,
+          buildSelectionHandle: buildPdfSelectionHandle,
+        )),
+      )));
+      await tester.pumpAndSettle();
+      final text = await document.page.loadStructuredText();
+      await controller.textSelectionDelegate.setTextSelectionPointRange(
+        PdfTextSelectionRange.fromPoints(PdfTextSelectionPoint(text, 2), PdfTextSelectionPoint(text, 2)));
+      await tester.pumpAndSettle();
+      expect(await controller.textSelectionDelegate.getSelectedText(), 'l');
+      final rect = controller.calcRectForRectInsidePage(
+        pageNumber: 1, rect: text.charRects[2]);
+      final viewerContext = tester.element(find.byType(PdfViewer));
+      final local = controller.textSelectionDelegate.doc2local.offsetToLocal(
+        viewerContext, start ? rect.centerLeft : rect.centerRight)!;
+      final gesture = await tester.startGesture(tester.getTopLeft(find.byType(PdfViewer)) + local);
+      await gesture.moveBy(Offset(start ? -20 : 20, 0));
+      await tester.pump();
+      await gesture.moveBy(Offset((start ? -24 : 24) * controller.currentZoom, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(await controller.textSelectionDelegate.getSelectedText(), start ? 'hel' : 'llo');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+  }
+
   test('automatic crop waits for progressive page text before caching bounds', () async {
     final document = _ProgressiveDocument();
     final loaded = document.page;

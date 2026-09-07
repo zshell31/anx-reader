@@ -27,10 +27,14 @@ PdfAnnotationHit<T> hitTestPdfAnnotations<T>({
 }) {
   T? match;
   var bestDistance = double.infinity;
+  var smallestArea = double.infinity;
   var ambiguous = false;
   for (final annotation in annotations) {
     var distance = double.infinity;
+    var area = 0.0;
     for (final rect in rectsFor(annotation)) {
+      if (rect.isEmpty) continue;
+      area += rect.width * rect.height;
       final dx = position.dx < rect.left
           ? rect.left - position.dx
           : position.dx > rect.right
@@ -45,11 +49,15 @@ PdfAnnotationHit<T> hitTestPdfAnnotations<T>({
       if (candidate < distance) distance = candidate;
     }
     if (distance > hitSlop) continue;
-    if (distance < bestDistance) {
+    // Nested word notes take priority over their surrounding phrase, regardless
+    // of restoration order. Distance still gives direct hits priority over slop.
+    if (distance < bestDistance ||
+        (distance == bestDistance && area < smallestArea)) {
       bestDistance = distance;
+      smallestArea = area;
       match = annotation;
       ambiguous = false;
-    } else if (distance == bestDistance) {
+    } else if (distance == bestDistance && area == smallestArea) {
       ambiguous = true;
     }
   }

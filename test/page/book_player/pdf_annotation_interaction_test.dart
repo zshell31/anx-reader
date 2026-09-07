@@ -7,6 +7,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('PDF annotation hit testing', () {
+    test('nested word wins over phrase in either restoration order', () {
+      final rects = {
+        'phrase': [const Rect.fromLTWH(0, 0, 300, 12)],
+        'word': [const Rect.fromLTWH(160, 0, 90, 12)],
+      };
+      for (final order in [rects.keys, rects.keys.toList().reversed]) {
+        PdfAnnotationHit<String> hit(Offset point) => hitTestPdfAnnotations(
+              position: point,
+              annotations: order,
+              rectsFor: (key) => rects[key]!,
+              hitSlop: 10,
+            );
+        expect(hit(const Offset(200, 6)).annotation, 'word');
+        expect(hit(const Offset(50, 6)).annotation, 'phrase');
+        expect(hit(const Offset(155, 6)).annotation, 'phrase');
+        expect(hit(const Offset(200, 16)).annotation, 'word');
+      }
+    });
+
+    test('specificity uses all lines, not just the line tapped', () {
+      final hit = hitTestPdfAnnotations(
+        position: const Offset(10, 26),
+        annotations: const ['word', 'phrase'],
+        rectsFor: (key) => key == 'word'
+            ? [const Rect.fromLTWH(0, 20, 40, 12)]
+            : [
+                const Rect.fromLTWH(0, 0, 300, 12),
+                const Rect.fromLTWH(0, 20, 40, 12),
+              ],
+      );
+      expect(hit.annotation, 'word');
+    });
+
     test('padding uses nearest highlight and preserves direct-hit priority',
         () {
       final rects = {

@@ -376,7 +376,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
           if (widget.persistenceSession.hasPersistedAnnotation)
             IconAndText(
               compact: true,
-              onTap: () => _openEditor(focusPersonalNote: true),
+              onTap: () => _openEditor(),
               icon: const Icon(EvaIcons.edit_2_outline),
               text: L10n.of(context).annotationEditorEditTitle,
             ),

@@ -322,7 +322,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SelectableText(
-                      '“${draft.selection.selectedText}”',
+                      // PDF line breaks describe page layout, not how the
+                      // quote should wrap here. Preserve the stored selection.
+                      '“${draft.selection.selectedText.replaceAll(RegExp(r'\s+'), ' ').trim()}”',
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: 4),

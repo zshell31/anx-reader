@@ -421,6 +421,40 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('quote reflows without changing the stored selection',
+      (tester) async {
+    const quote = 'generally warm\r\nand approachable';
+    final draft = AnnotationEditorDraft.forSelection(
+      selection: const SelectionSnapshot(
+        selectedText: quote,
+        annotationContext: '',
+        lookupContext: null,
+        chapter: 'Page 5',
+        selector: '',
+      ),
+      bookTitle: 'Book',
+    );
+    final controller = _controller(draft: draft);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    expect(find.text('“generally warm and approachable”'), findsOneWidget);
+    expect(draft.selection.selectedText, quote);
+  });
+
+  testWidgets('opening an existing note leaves the keyboard closed',
+      (tester) async {
+    final controller = _controller(draft: _existingDraft());
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+
+    final noteField = tester.widget<TextField>(
+      find.byKey(const Key('annotation-editor-personal-note')),
+    );
+    expect(noteField.focusNode?.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   testWidgets('write idea intent focuses personal notes', (tester) async {
     final controller = _controller();
     addTearDown(controller.dispose);

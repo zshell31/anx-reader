@@ -15,6 +15,14 @@ class ReadingActivitySyncService {
           sharedState: sharedState,
           transport: transport,
           syncDomain: readingActivityDomain,
+          // A locked statistics document must not hold up every startup with
+          // repeated PUTs. Keep it dirty and retry later without breaking locks.
+          maxLockContentionRetries: 0,
+          networkBackoff: const [
+            Duration(minutes: 1),
+            Duration(minutes: 5),
+            Duration(minutes: 15),
+          ],
           normalizeDocumentId: (id) => id,
           remotePathFor: readingActivityRemotePath,
           decodeDocument: decodeReadingActivityDocument,

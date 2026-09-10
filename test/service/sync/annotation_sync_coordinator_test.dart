@@ -986,6 +986,41 @@ void main() {
     expect(await store.pendingOutbox(), isEmpty);
   });
 
+  test(
+      'persistent locks defer without immediate retries or losing retry eligibility',
+      () async {
+    await putLocal([entity('locked')]);
+    remote.putFailure = const WebDavLocked();
+    // Simulate previous application launches exhausting the network budget.
+    final revision = (await store.pendingOutbox()).single.localRevision;
+    for (var i = 0; i < 5; i++) {
+      await store.recordFailure(
+          annotationSyncDomain, fingerprint, revision, const WebDavLocked());
+    }
+    Duration? scheduledDelay;
+    var immediateRetries = 0;
+    await coordinator.close();
+    coordinator = createCoordinator(
+      lockRetries: 0,
+      waitForLockRetry: (_) async {
+        immediateRetries++;
+      },
+      networkBackoff: const [Duration(minutes: 1), Duration(minutes: 15)],
+      scheduleRetry: (delay, callback) {
+        scheduledDelay = delay;
+        return Timer(const Duration(days: 1), callback);
+      },
+    );
+    await expectLater(
+        coordinator.syncBook(fingerprint), throwsA(isA<WebDavLocked>()));
+    expect(immediateRetries, 0);
+    expect(scheduledDelay, const Duration(minutes: 15));
+    expect(await store.pendingOutbox(), hasLength(1));
+    remote.putFailure = null;
+    await coordinator.syncBook(fingerprint);
+    expect(await store.pendingOutbox(), isEmpty);
+  });
+
   test('network retry uses injectable bounded backoff', () async {
     await putLocal([entity('offline')]);
     remote.getFailure = const WebDavTransportException('offline');

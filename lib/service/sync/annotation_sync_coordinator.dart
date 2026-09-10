@@ -715,8 +715,12 @@ class SharedDocumentSyncCoordinator {
     final memoryAttempts = _networkAttempts[id] ?? 0;
     final recordedAttempts =
         durableAttempts > memoryAttempts ? durableAttempts : memoryAttempts;
-    if (recordedAttempts > networkBackoff.length) return;
-    final attempt = recordedAttempts < 1 ? 1 : recordedAttempts;
+    // A server lock can outlive the usual network retry budget. Keep durable
+    // work eligible for a later attempt at the longest interval.
+    if (recordedAttempts > networkBackoff.length && error is! WebDavLocked) {
+      return;
+    }
+    final attempt = recordedAttempts.clamp(1, networkBackoff.length);
     final delay = networkBackoff[attempt - 1];
     syncWarning('domain=$syncDomain doc=${shortSyncId(id)} '
         'retryScheduled=${_durationLabel(delay)} '

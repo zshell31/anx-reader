@@ -3,12 +3,15 @@ import 'dart:typed_data';
 
 import 'package:anx_reader/service/sync/annotation_audio_asset_sync.dart';
 import 'package:crypto/crypto.dart';
+import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class MemoryAudioTransport implements AnnotationAudioAssetTransport {
   final Map<String, List<int>> objects = {};
   int uploads = 0;
   int downloads = 0;
+  int checks = 0;
 
   String _key(List<String> path) => path.join('/');
 
@@ -19,8 +22,10 @@ class MemoryAudioTransport implements AnnotationAudioAssetTransport {
   }
 
   @override
-  Future<bool> exists(List<String> path) async =>
-      objects.containsKey(_key(path));
+  Future<bool> exists(List<String> path) async {
+    checks++;
+    return objects.containsKey(_key(path));
+  }
 
   @override
   Future<void> upload(String localPath, List<String> remotePath) async {
@@ -81,6 +86,7 @@ Map<String, dynamic> document(
     };
 
 void main() {
+  sqfliteFfiInit();
   late Directory directory;
   late AnnotationAudioAssetStore store;
   late MemoryAudioTransport transport;
@@ -130,6 +136,52 @@ void main() {
     );
   });
 
+  test('remote receipts survive restart and missing local audio is restored',
+      () async {
+    final dbPath = '${directory.path}/receipts.sqlite';
+    var db = SharedStateDatabase(path: dbPath, factory: databaseFactoryFfi);
+    AnnotationAudioAssetSyncService makeService(String scope) =>
+        AnnotationAudioAssetSyncService(
+          transport: transport,
+          remoteRoot: 'Lingua Reader',
+          store: store,
+          isRemoteConfirmed: (asset) async {
+            final receipt = await db.importReceipt(scope, asset.assetRef);
+            return receipt?.status == 'present' &&
+                receipt?.sharedId == '${asset.sha256}:${asset.byteLength}';
+          },
+          recordRemotePresence: (asset, present) => db.recordImport(
+            source: scope,
+            sourceKey: asset.assetRef,
+            sharedId: '${asset.sha256}:${asset.byteLength}',
+            status: present ? 'present' : 'missing',
+          ),
+        );
+    try {
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final audio = metadata(bytes);
+      await store.persist(audio, bytes);
+      await makeService('server-a').syncDocument(document(audio));
+      expect(transport.checks, 1);
+      expect(transport.uploads, 1);
+      await db.close();
+      db = SharedStateDatabase(path: dbPath, factory: databaseFactoryFfi);
+      final cached =
+          await makeService('server-a').syncDocument(document(audio));
+      expect(cached.trustedRemote, 1);
+      expect(transport.checks, 1);
+      await makeService('server-b').syncDocument(document(audio));
+      expect(transport.checks, 2);
+      await File(store.pathFor(audio['assetRef']! as String)).delete();
+      final restored =
+          await makeService('server-a').syncDocument(document(audio));
+      expect(restored.downloaded, 1);
+      expect(transport.checks, 3);
+    } finally {
+      await db.close();
+    }
+  });
+
   test('downloads remote bytes atomically and verifies integrity', () async {
     final bytes = <int>[7, 8, 9];
     final audio = metadata(bytes);
@@ -155,7 +207,11 @@ void main() {
       () async {
     final expected = <int>[10, 11, 12];
     final audio = metadata(expected);
-    transport.objects['Lingua Reader/annotation-assets/audio/asset.mp3'] = [99];
+    transport.objects['Lingua Reader/annotation-assets/audio/asset.mp3'] = [
+      99,
+      99,
+      99
+    ];
 
     await expectLater(
       service.syncDocument(document(audio)),

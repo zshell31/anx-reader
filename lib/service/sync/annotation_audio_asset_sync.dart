@@ -102,8 +102,9 @@ class AnnotationAudioAssetStore {
   Future<bool> contains(AnnotationAudioAsset asset) async {
     final file = File(pathFor(asset.assetRef));
     if (!await file.exists()) return false;
-    if (await file.length() != asset.byteLength) return false;
-    return await _fileDigest(file) == asset.sha256;
+    // Audio assets are immutable and verified when persisted or downloaded.
+    // Availability checks must not reread every existing file for SHA-256.
+    return await file.length() == asset.byteLength;
   }
 
   Future<void> persist(
@@ -188,11 +189,13 @@ class AnnotationAudioAssetSyncResult {
   final int uploaded;
   final int downloaded;
   final int missing;
+  final int trustedRemote;
 
   const AnnotationAudioAssetSyncResult({
     this.uploaded = 0,
     this.downloaded = 0,
     this.missing = 0,
+    this.trustedRemote = 0,
   });
 }
 
@@ -200,10 +203,15 @@ class AnnotationAudioAssetSyncService {
   final AnnotationAudioAssetTransport transport;
   final AnnotationAudioAssetStore store;
   final String remoteRoot;
+  final Future<bool> Function(AnnotationAudioAsset asset)? isRemoteConfirmed;
+  final Future<void> Function(AnnotationAudioAsset asset, bool present)?
+      recordRemotePresence;
 
   AnnotationAudioAssetSyncService({
     required this.transport,
     required this.remoteRoot,
+    this.isRemoteConfirmed,
+    this.recordRemotePresence,
     AnnotationAudioAssetStore? store,
   }) : store = store ?? AnnotationAudioAssetStore();
 
@@ -213,8 +221,13 @@ class AnnotationAudioAssetSyncService {
     var uploaded = 0;
     var downloaded = 0;
     var missing = 0;
+    var trustedRemote = 0;
     for (final asset in annotationAudioAssets(document)) {
       final local = await store.contains(asset);
+      if (local && await isRemoteConfirmed?.call(asset) == true) {
+        trustedRemote++;
+        continue;
+      }
       final remotePath = annotationAudioAssetRemoteSegments(
         remoteRoot,
         asset.assetRef,
@@ -238,11 +251,15 @@ class AnnotationAudioAssetSyncService {
       } else if (!local && !remote) {
         missing++;
       }
+      // Only successful checks/transfers establish a durable receipt. Missing
+      // local files always reach the server, even if an old receipt exists.
+      await recordRemotePresence?.call(asset, local || remote);
     }
     return AnnotationAudioAssetSyncResult(
       uploaded: uploaded,
       downloaded: downloaded,
       missing: missing,
+      trustedRemote: trustedRemote,
     );
   }
 }

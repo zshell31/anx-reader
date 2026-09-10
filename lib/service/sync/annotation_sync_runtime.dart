@@ -45,6 +45,7 @@ class AnnotationSyncRuntime {
   static final AnnotationSyncRuntime instance = AnnotationSyncRuntime._();
 
   static const assetPresenceReceiptLifetime = Duration(hours: 24);
+  String? _audioReceiptScope;
 
   final SharedStateDatabase sharedState = SharedStateDatabase();
   final Map<String, Set<void Function()>> _openBookRefresh = {};
@@ -703,15 +704,17 @@ class AnnotationSyncRuntime {
     var uploaded = 0;
     var downloaded = 0;
     var missing = 0;
+    var trustedRemote = 0;
     for (final fingerprint
         in await sharedState.documentIds(annotationSyncDomain)) {
       final result = await _syncAnnotationAudioAssetsFor(fingerprint);
       uploaded += result.uploaded;
       downloaded += result.downloaded;
       missing += result.missing;
+      trustedRemote += result.trustedRemote;
     }
     syncInfo('annotationAudioAssets uploaded=$uploaded '
-        'downloaded=$downloaded missing=$missing');
+        'downloaded=$downloaded missing=$missing trustedRemote=$trustedRemote');
   }
 
   Future<AnnotationAudioAssetSyncResult> _syncAnnotationAudioAssetsFor(
@@ -733,7 +736,19 @@ class AnnotationSyncRuntime {
   }
 
   void _ensureAuxiliarySyncServices(SyncClientBase client) {
-    if (identical(_auxiliarySyncClient, client)) return;
+    final config = Prefs().getSyncInfo(SyncProtocol.webdav);
+    final scope = sha256
+        .convert(utf8.encode(jsonEncode([
+          config['url'],
+          config['username'],
+          remoteRoot,
+        ])))
+        .toString();
+    if (identical(_auxiliarySyncClient, client) &&
+        _audioReceiptScope == scope) {
+      return;
+    }
+    _audioReceiptScope = scope;
     _auxiliarySyncClient = client;
     _assetSyncService = LibraryAssetSyncService(
       transport: SyncClientLibraryAssetTransport(client),
@@ -749,6 +764,18 @@ class AnnotationSyncRuntime {
     _annotationAudioAssetSyncService = AnnotationAudioAssetSyncService(
       transport: SyncClientAnnotationAudioAssetTransport(client),
       remoteRoot: remoteRoot,
+      isRemoteConfirmed: (asset) async {
+        final receipt = await sharedState.importReceipt(
+            'audio-remote:$scope', asset.assetRef);
+        return receipt?.status == 'present' &&
+            receipt?.sharedId == '${asset.sha256}:${asset.byteLength}';
+      },
+      recordRemotePresence: (asset, present) => sharedState.recordImport(
+        source: 'audio-remote:$scope',
+        sourceKey: asset.assetRef,
+        sharedId: '${asset.sha256}:${asset.byteLength}',
+        status: present ? 'present' : 'missing',
+      ),
     );
     _translationCacheSyncService = TranslationCacheSyncService(client: client);
   }

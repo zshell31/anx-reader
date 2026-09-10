@@ -632,6 +632,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       final hit = hitTestPdfAnnotations(
         position: details.documentPosition,
         hitSlop: 10 / value.currentZoom,
+        compareIdentity: (a, b) {
+          final time = a.model.createdAt.compareTo(b.model.createdAt);
+          return time != 0
+              ? time
+              : a.model.ref.annotationId.compareTo(b.model.ref.annotationId);
+        },
         annotations: _renderedAnnotations.values.expand((value) => value),
         rectsFor: (annotation) sync* {
           for (final fragment

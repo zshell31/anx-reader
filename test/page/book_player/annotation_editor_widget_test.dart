@@ -449,7 +449,8 @@ void main() {
     await _openDialog(tester, controller);
 
     final noteField = tester.widget<TextField>(
-      find.byKey(const Key('annotation-editor-personal-note')),
+      find.byKey(const Key('annotation-editor-personal-note'),
+          skipOffstage: false),
     );
     expect(noteField.focusNode?.hasFocus, isFalse);
     expect(tester.testTextInput.isVisible, isFalse);
@@ -463,7 +464,8 @@ void main() {
     await tester.pump();
 
     final noteField = tester.widget<TextField>(
-      find.byKey(const Key('annotation-editor-personal-note')),
+      find.byKey(const Key('annotation-editor-personal-note'),
+          skipOffstage: false),
     );
     expect(noteField.focusNode?.hasFocus, isTrue);
   });

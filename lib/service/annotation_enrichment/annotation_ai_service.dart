@@ -1,3 +1,4 @@
+import 'notes_rfc_prompt.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -108,20 +109,14 @@ String buildAnnotationAnalysisPrompt({
   required String targetLanguageCode,
   required String targetLanguageName,
 }) =>
-    '''Analyze the selected book text as one practical, learning-oriented analysis.
-Write every explanatory value in $targetLanguageName ($targetLanguageCode).
-Do not default to English unless that is the configured target language.
-Scope: translate only the selected text. Reading context is reference material only for resolving the meaning of that translation; never translate the whole context.
-For translationNotes, grammar, usage and chunks, prioritize the selected phrase. Only when the selection is part of a sentence may you extend the analysis to that one containing sentence, and only to explain the selection. Never extract chunks or discuss constructions from the previous or next sentence. If several sentences are selected, analyze only the selection without extending it. If the containing sentence cannot be identified reliably, analyze only the selected text. Examples may be new sentences illustrating the selected construction.
-Prioritize: (1) a natural translation, (2) genuinely reusable chunks, (3) transferable grammar and lexical patterns, (4) useful nuance, register and collocation, then (5) short examples. Keep translationNotes, grammar and usage concise and consistent with the chunks. Prefer explaining how a pattern transfers to new sentences over naming grammar for its own sake.
-Return only one JSON object with string fields translation, translationNotes, grammar and usage, plus a chunks array.
-Return 0-5 chunks; zero is valid, so never invent items to fill the list. Extract only collocations, fixed or semi-fixed expressions, phrasal verbs, idioms, and productive grammatical or lexical patterns that are genuinely worth remembering. Avoid trivial compositional phrases and ordinary standalone words. Generalize tense, person and number where appropriate. canonicalForm is the reusable learning form; surfaceForm may be the source form. Avoid duplicate variants and do not canonize accidental or questionable wording. meaning is a short learner-facing meaning or translation. type, surfaceForm and examples are optional; type is one of collocation, expression, phrasal_verb, idiom or pattern; examples contains at most two short natural examples demonstrating the same meaning.
-
-Selected text:
-${selectedText.trim()}
-
-${context?.trim().isNotEmpty == true ? 'Reading context (translation reference only; previous, containing and next sentence):\n${context!.trim()}\n\n' : ''}Book: ${bookTitle.trim()}
-Chapter: ${chapter.trim()}''';
+    '$notesRfcAnalysisPrompt\n'
+    'Explicit explanatory language: $targetLanguageName ($targetLanguageCode).\n'
+    'Source data: ${jsonEncode({
+          'selectedText': selectedText,
+          'contextText': context,
+          'bookTitle': bookTitle,
+          'chapter': chapter
+        })}';
 
 List<ChatMessage> buildAnnotationFollowUpMessages({
   required AnnotationEditorDraft draft,

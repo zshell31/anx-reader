@@ -1,0 +1,50 @@
+{
+  "defaultCollapsed": [
+    "context",
+    "provider",
+    "personal-note",
+    "ai-thread"
+  ],
+  "newActions": [
+    "AI",
+    "Translate",
+    "Note",
+    "AI Chat",
+    "Audio"
+  ],
+  "existingFirst": "View Note",
+  "activeKinds": {
+    "AI": "ai-analysis",
+    "Translate": "translation",
+    "Note": "personal-note",
+    "AI Chat": "ai-thread",
+    "Audio": "audio"
+  },
+  "overlap": {
+    "ranges": [
+      {
+        "id": "wide",
+        "start": 0,
+        "end": 45,
+        "createdAt": "2026-09-10T00:00:00.000Z"
+      },
+      {
+        "id": "narrow",
+        "start": 4,
+        "end": 16,
+        "createdAt": "2026-09-10T00:00:00.000Z"
+      },
+      {
+        "id": "word",
+        "start": 12,
+        "end": 16,
+        "createdAt": "2026-09-10T00:00:00.000Z"
+      }
+    ],
+    "point": 13,
+    "expected": "word"
+  },
+  "removal": "sticky tombstone; re-add new ID",
+  "selectionInside": "create independent ID and preserve existing range",
+  "dictionary": "multiple provider IDs coexist"
+}

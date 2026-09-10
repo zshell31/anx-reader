@@ -148,6 +148,21 @@ class AnnotationEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeAdditionalSource(AnnotationEditorSourceResult result) {
+    draft.additionalSources.remove(result);
+    notifyListeners();
+  }
+
+  void removeChat() {
+    ++_chatGeneration;
+    chatLoading = false;
+    chatError = null;
+    draft.aiMessages.clear();
+    draft.aiThreadId = null;
+    draft.aiThreadCreatedAt = null;
+    notifyListeners();
+  }
+
   void setPersonalNote(String value) {
     draft.setPersonalNote(value);
     notifyListeners();
@@ -224,23 +239,25 @@ class AnnotationEditorController extends ChangeNotifier {
         creation: draft.existingRef == null ? _selectionCreation() : null,
         existingRef: draft.existingRef,
         materials: [
-          for (final provider in AnnotationEditorProvider.values)
-            if (draft.sourceResults[provider] case final result?)
-              AnnotationEditorMaterialInput(
-                enrichmentId: result.enrichmentId,
-                providerId: result.providerId,
-                providerName: result.providerName,
-                kind: result.kind,
-                translation: result.translation,
-                markdown: result.markdown,
-                commentary: result.commentary?.toMap() ?? const {},
-                metadata: result.metadata,
-                ipa: result.ipa,
-                voice: result.voice,
-                model: result.model,
-                audio: result.audio,
-                audioBytes: result.audioBytes,
-              ),
+          for (final result in [
+            ...draft.sourceResults.values,
+            ...draft.additionalSources
+          ])
+            AnnotationEditorMaterialInput(
+              enrichmentId: result.enrichmentId,
+              providerId: result.providerId,
+              providerName: result.providerName,
+              kind: result.kind,
+              translation: result.translation,
+              markdown: result.markdown,
+              commentary: result.commentary?.toMap() ?? const {},
+              metadata: result.metadata,
+              ipa: result.ipa,
+              voice: result.voice,
+              model: result.model,
+              audio: result.audio,
+              audioBytes: result.audioBytes,
+            ),
         ],
         personalNote: draft.personalNote,
         aiThreadId: draft.aiThreadId,

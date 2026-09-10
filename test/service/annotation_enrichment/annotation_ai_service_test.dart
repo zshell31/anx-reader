@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:anx_reader/enums/ai_reasoning_effort.dart';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
@@ -18,19 +19,13 @@ void main() {
       targetLanguageCode: 'ru',
       targetLanguageName: 'Russian',
     );
-    expect(prompt, contains('translate only the selected text'));
-    expect(prompt, contains('prioritize the selected phrase'));
-    expect(prompt, contains('only to explain the selection'));
     expect(
         prompt,
-        contains(
-            'Never extract chunks or discuss constructions from the previous or next sentence'));
-    expect(
-        prompt,
-        contains(
-            'If several sentences are selected, analyze only the selection'));
-    expect(prompt, contains('Selected text:\ngave up'));
-    expect(prompt, contains('translation reference only'));
+        contains(File('protocol/notes-rfc/ai/reference-prompt.txt')
+            .readAsStringSync()
+            .trim()));
+    expect(prompt, contains('"selectedText":"gave up"'));
+    expect(prompt, contains('never extract chunks from neighboring sentences'));
   });
 
   test('analysis prompt uses configured language and does not force English',
@@ -82,7 +77,7 @@ void main() {
       'type': 'expression',
       'examples': ["I've had my suspicions for a while."],
     });
-    expect(prompt, contains('0-5 chunks'));
+    expect(prompt, contains('0–5 chunks'));
     expect(prompt, contains('transferable grammar'));
   });
 

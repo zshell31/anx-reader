@@ -473,7 +473,12 @@ class AnnotationRepository {
       for (final material in desired)
         _editorMaterialSlot(material.kind, material.providerId): material,
     };
-    for (final slot in const {
+    for (final slot in {
+      ...desiredBySlot.keys,
+      ...enrichments
+          .where((e) => observedIds?.contains(e['id']) == true)
+          .map(_editorMaterialSlotForEntity)
+          .whereType<String>(),
       'translation:google-translate',
       'dictionary:ldoce',
       'ai-analysis',
@@ -695,17 +700,10 @@ class AnnotationRepository {
   }
 
   String? _editorMaterialSlotForEntity(Map<String, dynamic> entity) {
-    if (entity['kind'] == 'ai-analysis') return 'ai-analysis';
-    if (entity['kind'] == 'audio' && entity['providerId'] == 'openai-audio') {
-      return 'audio:openai-audio';
-    }
-    if (entity['kind'] == 'translation' &&
-        entity['providerId'] == 'google-translate') {
-      return 'translation:google-translate';
-    }
-    if (entity['kind'] == 'dictionary' && entity['providerId'] == 'ldoce') {
-      return 'dictionary:ldoce';
-    }
+    final kind = entity['kind'];
+    if (kind == 'ai-analysis') return 'ai-analysis';
+    if (const {'translation', 'dictionary', 'audio'}.contains(kind))
+      return '$kind:${entity['providerId'] ?? 'unknown'}';
     return null;
   }
 

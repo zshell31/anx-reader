@@ -1,0 +1,131 @@
+{
+  "id": "all-materials",
+  "createdAt": "2026-09-10T00:00:00.000Z",
+  "updatedAt": "2026-09-10T00:00:00.000Z",
+  "motivation": "selection",
+  "target": {
+    "selectedText": "tighten your grip",
+    "context": "You tighten your grip on the ancient sword.",
+    "selectors": [
+      {
+        "type": "text-quote",
+        "exact": "tighten your grip"
+      }
+    ]
+  },
+  "enrichments": [
+    {
+      "id": "translation",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "translation",
+      "providerId": "google-translate",
+      "providerName": "Google Translate",
+      "translation": "сжать крепче"
+    },
+    {
+      "id": "dictionary",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "dictionary",
+      "providerId": "ldoce",
+      "providerName": "LDOCE",
+      "markdown": "# Grip\n\nA firm hold."
+    },
+    {
+      "id": "personal-note",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "personal-note",
+      "content": "My <memory> *cue*"
+    },
+    {
+      "id": "ai-analysis",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "ai-analysis",
+      "providerId": "openai",
+      "providerName": "OpenAI",
+      "commentary": {
+        "translation": "крепче сжать",
+        "translationNotes": "Значение определяется данным контекстом.",
+        "grammar": "",
+        "usage": "Используйте в этом значении.",
+        "chunks": [
+          {
+            "canonicalForm": "tighten one’s grip",
+            "surfaceForm": "tighten your grip",
+            "meaning": "крепче сжать",
+            "type": "collocation",
+            "examples": [
+              "Tighten your grip on the rope."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "audio",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "audio",
+      "ipa": "/ɡrɪp/",
+      "voice": "alloy",
+      "model": "tts",
+      "audio": {
+        "assetRef": "annotation-assets/audio/grip.mp3",
+        "format": "mp3",
+        "mimeType": "audio/mpeg",
+        "byteLength": 0,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "id": "ai-thread",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "ai-thread",
+      "contextSnapshot": {
+        "selectedText": "tighten your grip",
+        "enrichmentIds": [
+          "ai-analysis"
+        ]
+      },
+      "messages": [
+        {
+          "id": "q",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "role": "user",
+          "sequence": 0,
+          "content": "Why **grip**?"
+        },
+        {
+          "id": "answer",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "role": "assistant",
+          "sequence": 1,
+          "content": "# Meaning\n\nA firm hold."
+        }
+      ]
+    },
+    {
+      "id": "deleted",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "kind": "translation",
+      "providerId": "google-translate",
+      "translation": "DO NOT DISPLAY",
+      "deletedAt": "2026-09-10T00:00:00.000Z"
+    }
+  ],
+  "future": {
+    "nullable": null,
+    "array": [
+      3,
+      1,
+      2
+    ]
+  }
+}

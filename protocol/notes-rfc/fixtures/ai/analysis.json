@@ -1,0 +1,187 @@
+[
+  {
+    "id": "collocation",
+    "selectedText": "tighten your grip",
+    "contextText": "tighten your grip.",
+    "result": {
+      "translation": "крепче сжать",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "tighten one’s grip",
+          "surfaceForm": "tighten your grip",
+          "meaning": "крепче сжать",
+          "type": "collocation",
+          "examples": [
+            "Tighten your grip on the rope."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "phrasal-verb",
+    "selectedText": "took off",
+    "contextText": "took off.",
+    "result": {
+      "translation": "взлететь",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "take off",
+          "surfaceForm": "took off",
+          "meaning": "взлететь",
+          "type": "phrasal_verb",
+          "examples": [
+            "The plane took off at noon."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "idiom",
+    "selectedText": "break the ice",
+    "contextText": "break the ice.",
+    "result": {
+      "translation": "разрядить обстановку",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "break the ice",
+          "surfaceForm": null,
+          "meaning": "разрядить обстановку",
+          "type": "idiom",
+          "examples": [
+            "Her joke broke the ice."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "ambiguity",
+    "selectedText": "run out of mana",
+    "contextText": "run out of mana.",
+    "result": {
+      "translation": "исчерпать запас",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "run out of",
+          "surfaceForm": "run out of mana",
+          "meaning": "исчерпать запас",
+          "type": "phrasal_verb",
+          "examples": [
+            "We ran out of water."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "fictional",
+    "selectedText": "cast a Fireball",
+    "contextText": "cast a Fireball.",
+    "result": {
+      "translation": "произнести заклинание",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "cast a spell",
+          "surfaceForm": "cast a Fireball",
+          "meaning": "произнести заклинание",
+          "type": "collocation",
+          "examples": [
+            "The wizard cast a spell."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "multiple",
+    "selectedText": "keep an eye on and take care of",
+    "contextText": "keep an eye on and take care of.",
+    "result": {
+      "translation": "присматривать",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "keep an eye on",
+          "surfaceForm": "keep an eye on and take care of",
+          "meaning": "присматривать",
+          "type": "expression",
+          "examples": [
+            "Keep an eye on the door."
+          ]
+        },
+        {
+          "canonicalForm": "take care of",
+          "surfaceForm": null,
+          "meaning": "заботиться",
+          "type": "expression",
+          "examples": [
+            "Take care of yourself."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "surface-form",
+    "selectedText": "had given up",
+    "contextText": "had given up.",
+    "result": {
+      "translation": "сдаться",
+      "translationNotes": "Значение определяется данным контекстом.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "give up",
+          "surfaceForm": "had given up",
+          "meaning": "сдаться",
+          "type": "phrasal_verb",
+          "examples": [
+            "Never give up."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "ocr",
+    "selectedText": "rnake up your rnind",
+    "contextText": "rnake up your rnind.",
+    "result": {
+      "translation": "решиться",
+      "translationNotes": "OCR may have confused rn and m; interpretation is uncertain.",
+      "grammar": "",
+      "usage": "Используйте в этом значении.",
+      "chunks": [
+        {
+          "canonicalForm": "make up one’s mind",
+          "surfaceForm": "rnake up your rnind",
+          "meaning": "решиться",
+          "type": "idiom",
+          "examples": [
+            "She made up her mind."
+          ]
+        }
+      ]
+    }
+  }
+]

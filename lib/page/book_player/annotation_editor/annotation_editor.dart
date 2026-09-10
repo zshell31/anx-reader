@@ -24,6 +24,7 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
   required SelectionPersistenceSession session,
   AnnotationEditorProvider? initialProvider,
   bool focusPersonalNote = false,
+  bool focusAiChat = false,
 }) async {
   final snapshot = session.snapshot;
   final ref = session.annotationRef;
@@ -56,6 +57,7 @@ Future<AnnotationEditorOutcome?> showAnnotationEditor({
     draft: draft,
     initialProvider: initialProvider,
     focusPersonalNote: focusPersonalNote,
+    focusAiChat: focusAiChat,
   );
   if (result?.outcome == AnnotationEditorOutcome.saved &&
       result?.ref != null &&
@@ -96,6 +98,7 @@ Future<_AnnotationEditorResult?> _showAnnotationEditorDraft({
   required AnnotationEditorDraft draft,
   AnnotationEditorProvider? initialProvider,
   bool focusPersonalNote = false,
+  bool focusAiChat = false,
 }) async {
   final controller = AnnotationEditorController(draft: draft, book: book);
   try {
@@ -107,6 +110,7 @@ Future<_AnnotationEditorResult?> _showAnnotationEditorDraft({
         controller: controller,
         initialProvider: initialProvider,
         focusPersonalNote: focusPersonalNote,
+        focusAiChat: focusAiChat,
       ),
     );
   } finally {
@@ -125,12 +129,14 @@ class AnnotationEditorDialog extends StatefulWidget {
   final AnnotationEditorController controller;
   final AnnotationEditorProvider? initialProvider;
   final bool focusPersonalNote;
+  final bool focusAiChat;
 
   const AnnotationEditorDialog({
     super.key,
     required this.controller,
     this.initialProvider,
     this.focusPersonalNote = false,
+    this.focusAiChat = false,
   });
 
   @override
@@ -388,65 +394,96 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                           onRemove: () => controller.removeProvider(provider),
                         ),
                       ],
+                    for (final result in draft.additionalSources)
+                      ExpansionTile(
+                          title: Text(result.providerName),
+                          children: [
+                            if (result.markdown?.isNotEmpty == true)
+                              StyledMarkdown(data: result.markdown!)
+                            else if (result.translation?.isNotEmpty == true)
+                              SelectableText(result.translation!),
+                            TextButton.icon(
+                                onPressed: () =>
+                                    controller.removeAdditionalSource(result),
+                                icon: const Icon(Icons.delete_outline),
+                                label: Text(l10n.commonRemove)),
+                          ]),
                     const SizedBox(height: 20),
-                    Text(
-                      l10n.annotationEditorPersonalNote,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      key: const Key('annotation-editor-personal-note'),
-                      controller: _noteController,
-                      focusNode: _noteFocusNode,
-                      minLines: 3,
-                      maxLines: 8,
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        hintText: l10n.annotationEditorPersonalNoteHint,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      l10n.annotationEditorAiChat,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    if (draft.aiMessages.isEmpty)
-                      Text(l10n.annotationEditorAiChatEmpty),
-                    for (final message in draft.aiMessages)
-                      _ChatMessage(message: message),
-                    if (controller.chatError case final error?)
-                      _ErrorText(error),
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    ExpansionTile(
+                      title: Text(l10n.annotationEditorPersonalNote),
+                      maintainState: true,
+                      initiallyExpanded: widget.focusPersonalNote,
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _questionController,
-                            minLines: 1,
-                            maxLines: 5,
-                            enabled: !controller.chatLoading,
-                            decoration: InputDecoration(
-                              border: const OutlineInputBorder(),
-                              hintText: l10n.annotationEditorQuestionHint,
-                            ),
-                            onSubmitted: (_) => _sendQuestion(),
+                        TextButton.icon(
+                          onPressed: () {
+                            _noteController.clear();
+                            controller.setPersonalNote('');
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: Text(l10n.annotationEditorRemoveSource),
+                        ),
+                        TextField(
+                          key: const Key('annotation-editor-personal-note'),
+                          controller: _noteController,
+                          focusNode: _noteFocusNode,
+                          minLines: 3,
+                          maxLines: 8,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            hintText: l10n.annotationEditorPersonalNoteHint,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: l10n.annotationEditorSend,
-                          onPressed:
-                              controller.chatLoading ? null : _sendQuestion,
-                          icon: controller.chatLoading
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.send),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    ExpansionTile(
+                      title: Text(l10n.annotationEditorAiChat),
+                      initiallyExpanded: widget.focusAiChat,
+                      children: [
+                        if (draft.aiMessages.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: controller.removeChat,
+                            icon: const Icon(Icons.delete_outline),
+                            label: Text(l10n.annotationEditorRemoveSource),
+                          ),
+                        if (draft.aiMessages.isEmpty)
+                          Text(l10n.annotationEditorAiChatEmpty),
+                        for (final message in draft.aiMessages)
+                          _ChatMessage(message: message),
+                        if (controller.chatError case final error?)
+                          _ErrorText(error),
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _questionController,
+                                minLines: 1,
+                                maxLines: 5,
+                                enabled: !controller.chatLoading,
+                                decoration: InputDecoration(
+                                  border: const OutlineInputBorder(),
+                                  hintText: l10n.annotationEditorQuestionHint,
+                                ),
+                                onSubmitted: (_) => _sendQuestion(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filled(
+                              tooltip: l10n.annotationEditorSend,
+                              onPressed:
+                                  controller.chatLoading ? null : _sendQuestion,
+                              icon: controller.chatLoading
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send),
+                            ),
+                          ],
                         ),
                       ],
                     ),

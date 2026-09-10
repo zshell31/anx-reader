@@ -24,6 +24,7 @@ PdfAnnotationHit<T> hitTestPdfAnnotations<T>({
   required Iterable<T> annotations,
   required Iterable<Rect> Function(T annotation) rectsFor,
   double hitSlop = 0,
+  int Function(T a, T b)? compareIdentity,
 }) {
   T? match;
   var bestDistance = double.infinity;
@@ -58,7 +59,11 @@ PdfAnnotationHit<T> hitTestPdfAnnotations<T>({
       match = annotation;
       ambiguous = false;
     } else if (distance == bestDistance && area == smallestArea) {
-      ambiguous = true;
+      if (compareIdentity != null && match != null) {
+        if (compareIdentity(annotation, match) < 0) match = annotation;
+      } else {
+        ambiguous = true;
+      }
     }
   }
   if (ambiguous) return const PdfAnnotationHit.ambiguous();

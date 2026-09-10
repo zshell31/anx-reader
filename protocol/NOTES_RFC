@@ -1,0 +1,6 @@
+repository: /home/zshell/projects/obsidian/notes_rfc
+version: 1.0.0
+revision: 1972ad05c80a32b4fa2fe20b7ff6f98efd9b5a35
+fixture_revision: 1972ad05c80a32b4fa2fe20b7ff6f98efd9b5a35
+role: producer/consumer + AI + reference Study Note Editor
+status: adoption in progress; see RFC PROGRESS.md

@@ -73,7 +73,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "de": [
@@ -150,7 +151,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "es": [
@@ -227,7 +229,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "fr": [
@@ -304,7 +307,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "it": [
@@ -381,7 +385,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "ja": [
@@ -458,7 +463,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "ko": [
@@ -535,7 +541,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "pt": [
@@ -612,7 +619,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "ro": [
@@ -689,7 +697,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "ru": [
@@ -803,7 +812,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "zh": [
@@ -866,7 +876,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "zh_CN": [
@@ -923,7 +934,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "zh_LZH": [
@@ -1000,7 +1012,8 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ],
 
   "zh_TW": [
@@ -1077,6 +1090,7 @@
     "pdfCropApply",
     "pdfCropCancel",
     "pdfCropHelp",
-    "pdfCropPreviewFailed"
+    "pdfCropPreviewFailed",
+    "annotationViewNote"
   ]
 }

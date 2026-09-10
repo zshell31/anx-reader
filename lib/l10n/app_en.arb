@@ -970,5 +970,6 @@
   "pdfCropApply": "Apply",
   "pdfCropCancel": "Cancel",
   "pdfCropHelp": "Move the frame or drag its edges. The area inside will be used for all pages of this book.",
-  "pdfCropPreviewFailed": "Could not load page preview. Go back and try again."
+  "pdfCropPreviewFailed": "Could not load page preview. Go back and try again.",
+  "annotationViewNote": "View Note"
 }

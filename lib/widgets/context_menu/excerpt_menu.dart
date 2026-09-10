@@ -109,6 +109,8 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         annoType = annotation.localPresentation?.style.name ?? annoType;
         annoColor = annotation.localPresentation?.color ?? annoColor;
         _completedProviders = Set.unmodifiable(draft.sourceResults.keys);
+        _hasPersonalNote = draft.personalNote.trim().isNotEmpty;
+        _hasChat = draft.aiThreadId != null;
         _existingAnnotationLoaded = true;
       });
     } catch (_) {
@@ -116,6 +118,9 @@ class ExcerptMenuState extends State<ExcerptMenu> {
       if (mounted) setState(() => _existingAnnotationLoaded = true);
     }
   }
+
+  bool _hasPersonalNote = false;
+  bool _hasChat = false;
 
   bool _showProviderAction(AnnotationEditorProvider provider) =>
       _existingAnnotationLoaded &&
@@ -153,6 +158,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
   Future<void> _openEditor({
     AnnotationEditorProvider? initialProvider,
     bool focusPersonalNote = false,
+    bool focusAiChat = false,
   }) async {
     final modalContext = navigatorKey.currentContext;
     if (modalContext == null) return;
@@ -167,6 +173,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
         session: session,
         initialProvider: initialProvider,
         focusPersonalNote: focusPersonalNote,
+        focusAiChat: focusAiChat,
       );
       if (outcome == AnnotationEditorOutcome.saved ||
           outcome == AnnotationEditorOutcome.deleted) {
@@ -378,7 +385,7 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               compact: true,
               onTap: () => _openEditor(),
               icon: const Icon(EvaIcons.edit_2_outline),
-              text: L10n.of(context).annotationEditorEditTitle,
+              text: L10n.of(context).annotationViewNote,
             ),
           if (_showProviderAction(AnnotationEditorProvider.ai))
             IconAndText(
@@ -389,12 +396,6 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(EvaIcons.message_circle_outline),
               text: L10n.of(context).navBarAI,
             ),
-          IconAndText(
-            compact: true,
-            onTap: _openDictionary,
-            icon: const Icon(Icons.menu_book),
-            text: L10n.of(context).contextMenuDictionary,
-          ),
           if (_showProviderAction(AnnotationEditorProvider.googleTranslate))
             IconAndText(
               compact: true,
@@ -404,6 +405,21 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(Icons.g_translate),
               text: L10n.of(context).contextMenuGoogleTranslate,
             ),
+          if (_existingAnnotationLoaded &&
+              !_hasPersonalNote &&
+              !widget.footnote)
+            IconAndText(
+              compact: true,
+              onTap: () => _openEditor(focusPersonalNote: true),
+              icon: const Icon(EvaIcons.edit_2_outline),
+              text: L10n.of(context).contextMenuWriteIdea,
+            ),
+          if (_existingAnnotationLoaded && !_hasChat)
+            IconAndText(
+                compact: true,
+                onTap: () => _openEditor(focusAiChat: true),
+                icon: const Icon(Icons.chat_bubble_outline),
+                text: L10n.of(context).annotationEditorAiChat),
           if (_showProviderAction(AnnotationEditorProvider.audio))
             IconAndText(
               compact: true,
@@ -413,14 +429,12 @@ class ExcerptMenuState extends State<ExcerptMenu> {
               icon: const Icon(Icons.volume_up_outlined),
               text: 'Озвучить / Audio',
             ),
-          if (!widget.persistenceSession.hasPersistedAnnotation &&
-              !widget.footnote)
-            IconAndText(
-              compact: true,
-              onTap: () => _openEditor(focusPersonalNote: true),
-              icon: const Icon(EvaIcons.edit_2_outline),
-              text: L10n.of(context).contextMenuWriteIdea,
-            ),
+          IconAndText(
+            compact: true,
+            onTap: _openDictionary,
+            icon: const Icon(Icons.menu_book),
+            text: L10n.of(context).contextMenuDictionary,
+          ),
           PopupMenuButton<_SecondarySelectionAction>(
             tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
             icon: const Icon(Icons.more_horiz),

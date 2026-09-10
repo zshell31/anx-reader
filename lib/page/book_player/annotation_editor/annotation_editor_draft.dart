@@ -279,6 +279,7 @@ class AnnotationEditorDraft {
   final String bookTitle;
 
   String personalNote;
+  final List<AnnotationEditorSourceResult> additionalSources;
   String? aiThreadId;
   DateTime? aiThreadCreatedAt;
   final Map<AnnotationEditorProvider, AnnotationEditorSourceResult>
@@ -302,9 +303,10 @@ class AnnotationEditorDraft {
     required this.observedMaterialIds,
     required this.observedAiThreadIds,
     required this.providerStates,
+    List<AnnotationEditorSourceResult>? additionalSources,
     this.aiThreadId,
     this.aiThreadCreatedAt,
-  }) {
+  }) : additionalSources = additionalSources ?? [] {
     _initialState = _editableState();
   }
 
@@ -333,13 +335,21 @@ class AnnotationEditorDraft {
     final materialCandidates =
         <AnnotationEditorProvider, List<AnnotationEnrichmentView>>{};
     final threads = <AnnotationEnrichmentView>[];
+    final additional = <AnnotationEditorSourceResult>[];
     for (final enrichment in annotation.allEnrichments) {
       if (enrichment.kind == 'ai-thread') {
         threads.add(enrichment);
         continue;
       }
       final provider = _providerFor(enrichment);
-      if (provider == null) continue;
+      if (provider == null) {
+        if (!enrichment.isTombstoned &&
+            const {'translation', 'dictionary', 'audio'}
+                .contains(enrichment.kind))
+          additional
+              .add(AnnotationEditorSourceResult.fromEnrichment(enrichment));
+        continue;
+      }
       materialCandidates.putIfAbsent(provider, () => []).add(enrichment);
     }
     for (final entry in materialCandidates.entries) {
@@ -361,11 +371,17 @@ class AnnotationEditorDraft {
       bookTitle: bookTitle,
       personalNote: annotation.effectivePersonalNote?.content ?? '',
       sourceResults: results,
+      additionalSources: additional,
       aiMessages: messages,
       observedMaterialIds: Set.unmodifiable(
-        materialCandidates.values
-            .expand((candidates) => candidates)
-            .map((candidate) => candidate.id),
+        [
+          ...materialCandidates.values
+              .expand((candidates) => candidates)
+              .map((candidate) => candidate.id),
+          ...additional
+              .map((result) => result.enrichmentId!)
+              .whereType<String>()
+        ],
       ),
       observedAiThreadIds: Set.unmodifiable(
         threads.map((candidate) => candidate.id),
@@ -502,6 +518,8 @@ class AnnotationEditorDraft {
 
   String _editableState() => jsonEncode({
         'personalNote': personalNote,
+        'additionalSources':
+            additionalSources.map((result) => result.semanticState()).toList(),
         'sourceResults': {
           for (final provider in AnnotationEditorProvider.values)
             provider.providerId: sourceResults[provider]?.semanticState(),

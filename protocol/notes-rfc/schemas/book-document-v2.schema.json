@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "book": {
+      "type": "object",
+      "properties": {
+        "fingerprintAlgorithm": {
+          "const": "md5"
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fingerprintAlgorithm",
+        "fingerprint"
+      ],
+      "additionalProperties": true
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "shared-annotation.schema.json"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "book",
+    "annotations"
+  ],
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://notes-rfc.local/schemas/book-document-v2.schema.json"
+}

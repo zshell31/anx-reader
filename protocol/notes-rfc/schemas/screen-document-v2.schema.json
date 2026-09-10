@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "sourceType": {
+      "const": "screen"
+    },
+    "sourceKey": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windowTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "shared-annotation.schema.json"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sourceType",
+    "sourceKey",
+    "annotations"
+  ],
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://notes-rfc.local/schemas/screen-document-v2.schema.json"
+}

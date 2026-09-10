@@ -1,5 +1,10 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:anx_reader/service/annotation_enrichment/notes_rfc_analysis_schema.dart';
+import 'package:langchain_openai/langchain_openai.dart';
+import 'package:langchain_core/prompts.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:anx_reader/enums/ai_reasoning_effort.dart';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
@@ -10,6 +15,91 @@ import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.d
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('analysis sends the RFC schema through the real OpenAI adapter',
+      () async {
+    final original = EffectiveAiRoute(
+      config: _route().config.copyWith(baseUrl: 'https://api.openai.com/v1'),
+      protocol: AiProtocol.openai,
+      provider: _route().provider,
+    );
+    late Map<String, dynamic> sent;
+    final service = AnnotationAiService(
+      resolveRoute: () => original,
+      generate: (messages, route) async {
+        final client = MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+              jsonEncode({
+                'id': 'test',
+                'object': 'chat.completion',
+                'created': 1,
+                'model': 'model',
+                'choices': [
+                  {
+                    'index': 0,
+                    'finish_reason': 'stop',
+                    'message': {
+                      'role': 'assistant',
+                      'content': jsonEncode({
+                        'translation': 'перевод',
+                        'translationNotes': '',
+                        'grammar': '',
+                        'usage': '',
+                        'chunks': [],
+                      }),
+                    }
+                  }
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'});
+        });
+        addTearDown(client.close);
+        final model = ChatOpenAI(
+            apiKey: 'test',
+            client: client,
+            defaultOptions: route.config.toOpenAIOptions());
+        final result = await model.invoke(PromptValue.chat(messages));
+        return result.output.content;
+      },
+    );
+    await service.analyze(
+        selectedText: 'take',
+        context: '',
+        bookTitle: '',
+        chapter: '',
+        targetLanguageCode: 'ru',
+        targetLanguageName: 'Russian');
+    expect(sent['response_format'], {
+      'type': 'json_schema',
+      'json_schema': {
+        'name': 'annotation_analysis',
+        'strict': true,
+        'schema': jsonDecode(
+            File('protocol/notes-rfc/schemas/ai-analysis.schema.json')
+                .readAsStringSync()),
+      },
+    });
+    expect(original.config.toOpenAIOptions().responseFormat, isNull);
+  });
+
+  test('vendored schema matches RFC and prompt supplies it to other providers',
+      () {
+    expect(
+        notesRfcAnalysisSchema,
+        jsonDecode(File('protocol/notes-rfc/schemas/ai-analysis.schema.json')
+            .readAsStringSync()));
+    expect(annotationAnalysisRoute(_route()).config.responseFormat, isNull);
+    final prompt = buildAnnotationAnalysisPrompt(
+        selectedText: 'take',
+        context: '',
+        bookTitle: '',
+        chapter: '',
+        targetLanguageCode: 'ru',
+        targetLanguageName: 'Russian');
+    expect(prompt, contains(jsonEncode(notesRfcAnalysisSchema)));
+  });
+
   final fixtures = jsonDecode(
       File('protocol/notes-rfc/fixtures/ai/analysis.json')
           .readAsStringSync()) as List;

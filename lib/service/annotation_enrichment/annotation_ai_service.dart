@@ -1,4 +1,8 @@
 import 'notes_rfc_prompt.dart';
+import 'notes_rfc_analysis_schema.dart';
+import 'package:anx_reader/models/ai_provider.dart';
+import 'package:anx_reader/service/ai/openai_chat_compatibility.dart';
+import 'package:langchain_openai/langchain_openai.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -34,7 +38,7 @@ class AnnotationAiService {
     required String targetLanguageCode,
     required String targetLanguageName,
   }) async {
-    final route = _route();
+    final route = annotationAnalysisRoute(_route());
     final prompt = buildAnnotationAnalysisPrompt(
       selectedText: selectedText,
       context: context,
@@ -111,6 +115,7 @@ String buildAnnotationAnalysisPrompt({
 }) =>
     '$notesRfcAnalysisPrompt\n'
     'Explicit explanatory language: $targetLanguageName ($targetLanguageCode).\n'
+    'Analysis JSON schema: ${jsonEncode(notesRfcAnalysisSchema)}\n'
     'Source data: ${jsonEncode({
           'selectedText': selectedText,
           'contextText': context,
@@ -192,3 +197,26 @@ Map<String, dynamic> _decodeObject(String value) {
 
 String? _text(Object? value) =>
     value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+/// Scope structured output to analysis; follow-up chat keeps its normal format.
+EffectiveAiRoute annotationAnalysisRoute(EffectiveAiRoute route) {
+  if (route.protocol != AiProtocol.openai ||
+      !OpenAiChatCompatibilityPolicy.isOfficialOpenAiEndpoint(
+          route.config.baseUrl ?? 'https://api.openai.com/v1')) {
+    return route;
+  }
+  return EffectiveAiRoute(
+    protocol: route.protocol,
+    provider: route.provider,
+    providers: route.providers,
+    config: route.config.copyWith(
+      responseFormat: const ChatOpenAIResponseFormatJsonSchema(
+        jsonSchema: ChatOpenAIJsonSchema(
+          name: 'annotation_analysis',
+          strict: true,
+          schema: notesRfcAnalysisSchema,
+        ),
+      ),
+    ),
+  );
+}

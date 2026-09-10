@@ -19,7 +19,10 @@ class LangchainAiConfig {
     this.maxOutputTokens,
     this.reasoningEffort = AiReasoningEffort.auto,
     this.additional,
+    this.responseFormat,
   }) : headers = Map.unmodifiable(headers ?? const {});
+
+  final ChatOpenAIResponseFormat? responseFormat;
 
   final String identifier;
   final String model;
@@ -35,6 +38,7 @@ class LangchainAiConfig {
 
   ChatOpenAIOptions toOpenAIOptions() {
     return ChatOpenAIOptions(
+      responseFormat: responseFormat,
       model: model.isEmpty ? null : model,
       temperature: temperature,
       topP: topP,
@@ -119,6 +123,7 @@ class LangchainAiConfig {
     int? maxOutputTokens,
     AiReasoningEffort? reasoningEffort,
     Map<String, dynamic>? additional,
+    ChatOpenAIResponseFormat? responseFormat,
   }) {
     return LangchainAiConfig(
       identifier: identifier,
@@ -132,6 +137,7 @@ class LangchainAiConfig {
       maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       additional: additional ?? this.additional,
+      responseFormat: responseFormat ?? this.responseFormat,
     );
   }
 }
@@ -232,6 +238,7 @@ LangchainAiConfig mergeConfigs(
         ? override.reasoningEffort
         : base.reasoningEffort,
     additional: mergeMaps(base.additional, override.additional),
+    responseFormat: override.responseFormat ?? base.responseFormat,
   );
 }
 

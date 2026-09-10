@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
@@ -110,17 +111,44 @@ String ldoceArticleToMarkdown(LdoceArticle article) =>
     }).join('\n\n');
 
 class LdoceAnnotationDictionaryService {
-  final http.Client client;
+  final http.Client? _client;
+  final http.Client Function() _clientFactory;
+  final Duration retryDelay;
   final Duration timeout;
   final String baseUrl;
 
   LdoceAnnotationDictionaryService({
     http.Client? client,
-    this.timeout = const Duration(seconds: 15),
+    http.Client Function()? clientFactory,
+    this.timeout = const Duration(seconds: 30),
+    this.retryDelay = const Duration(seconds: 1),
     this.baseUrl = ldoceAnnotationDictionaryBaseUrl,
-  }) : client = client ?? http.Client();
+  })  : _client = client,
+        _clientFactory = clientFactory ?? http.Client.new;
 
   Future<LdoceArticle> lookup(String text) async {
+    for (var attempt = 0;; attempt++) {
+      final client = _client ?? _clientFactory();
+      try {
+        return await _lookup(client, text);
+      } on TimeoutException {
+        if (attempt >= 1) {
+          throw TimeoutException(
+            'LDOCE did not respond after two attempts. Check the connection and try again.',
+            timeout,
+          );
+        }
+      } on http.ClientException {
+        if (attempt >= 1) rethrow;
+      } finally {
+        // Closing an owned client also aborts a timed-out HTTP request.
+        if (_client == null) client.close();
+      }
+      await Future<void>.delayed(retryDelay);
+    }
+  }
+
+  Future<LdoceArticle> _lookup(http.Client client, String text) async {
     final response = await client.get(
       ldoceAnnotationDictionaryUri(text, baseUrl: baseUrl),
       headers: const {
@@ -130,6 +158,12 @@ class LdoceAnnotationDictionaryService {
             '(KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36',
       },
     ).timeout(timeout);
+    if (response.statusCode == 403 || response.statusCode == 429) {
+      throw StateError(
+        'LDOCE denied the request (HTTP ${response.statusCode}). '
+        'Try opening the entry in a browser or try again later.',
+      );
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
           'LDOCE request failed with HTTP ${response.statusCode}.');

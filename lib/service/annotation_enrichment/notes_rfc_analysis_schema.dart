@@ -1,0 +1,56 @@
+// Vendored from Notes RFC schemas/ai-analysis.schema.json; revision: protocol/NOTES_RFC.
+const Map<String, dynamic> notesRfcAnalysisSchema = {
+  "type": "object",
+  "properties": {
+    "translation": {"type": "string"},
+    "translationNotes": {"type": "string"},
+    "grammar": {"type": "string"},
+    "usage": {"type": "string"},
+    "chunks": {
+      "type": "array",
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "properties": {
+          "canonicalForm": {"type": "string", "minLength": 1},
+          "surfaceForm": {
+            "type": ["string", "null"]
+          },
+          "meaning": {"type": "string", "minLength": 1},
+          "type": {
+            "enum": [
+              "collocation",
+              "expression",
+              "phrasal_verb",
+              "idiom",
+              "pattern",
+              null
+            ]
+          },
+          "examples": {
+            "anyOf": [
+              {
+                "type": "array",
+                "maxItems": 2,
+                "items": {"type": "string"}
+              },
+              {"type": "null"}
+            ]
+          }
+        },
+        "required": [
+          "canonicalForm",
+          "surfaceForm",
+          "meaning",
+          "type",
+          "examples"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["translation", "translationNotes", "grammar", "usage", "chunks"],
+  "additionalProperties": false,
+  r"$schema": "https://json-schema.org/draft/2020-12/schema",
+  r"$id": "https://notes-rfc.local/schemas/ai-analysis.schema.json"
+};

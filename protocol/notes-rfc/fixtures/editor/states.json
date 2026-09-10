@@ -42,9 +42,78 @@
       }
     ],
     "point": 13,
-    "expected": "word"
+    "expected": "word",
+    "screenVisuallyDistinct": true
   },
   "removal": "sticky tombstone; re-add new ID",
   "selectionInside": "create independent ID and preserve existing range",
-  "dictionary": "multiple provider IDs coexist"
+  "dictionary": "multiple provider IDs coexist",
+  "invocation": {
+    "expanded": true,
+    "pendingVisible": true,
+    "pendingIsEnrichment": false
+  },
+  "blockActions": {
+    "removeOnlyActive": true,
+    "addOnlyAbsent": true,
+    "removeHidesBlock": true,
+    "removeRestoresAdd": true,
+    "personalNoteAction": "Clear note",
+    "clearKeepsNoteField": true,
+    "removeHidesBlockExcept": [
+      "ai-thread",
+      "personal-note"
+    ]
+  },
+  "dismissal": {
+    "saveSuccess": "close",
+    "saveFailure": "keep draft",
+    "dirtyClose": [
+      "Cancel",
+      "Discard",
+      "Save"
+    ],
+    "pendingClose": "confirm",
+    "discard": "restore saved state; invalidate pending completions"
+  },
+  "chat": {
+    "editorAddButton": false,
+    "removeKeepsBlock": true,
+    "removeClearsHistory": true,
+    "questionField": true,
+    "pendingVisible": true,
+    "pendingVisibleWhenCollapsed": true
+  },
+  "ocrEditing": {
+    "original": "The gr1p. \ud83d\ude00",
+    "corrected": "The grip. \ud83d\ude00",
+    "selectionStart": 4,
+    "selectionEnd": 8,
+    "selectedText": "grip",
+    "cancelPreservesText": true,
+    "savedOriginalUnchanged": true,
+    "marksRequireExactContext": true,
+    "savedNotesRemainAccessible": true
+  },
+  "screenWindow": {
+    "resizeEdges": [
+      "left",
+      "right",
+      "top",
+      "bottom",
+      "top-left",
+      "top-right",
+      "bottom-left",
+      "bottom-right"
+    ],
+    "rememberGeometry": true,
+    "clampToWorkArea": true,
+    "editorModelButton": false
+  },
+  "aiText": {
+    "assistant": "Here **over** means *nearby*. <b>literal</b>",
+    "boldText": "over",
+    "user": "Why **over**?",
+    "userLiteral": "**over**"
+  }
 }

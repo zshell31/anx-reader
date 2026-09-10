@@ -1,0 +1,353 @@
+[
+  {
+    "id": "chunk-only",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "chunk-only",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "tighten one's grip",
+                    "surfaceForm": "tighten your grip",
+                    "meaning": "сжать крепче",
+                    "type": "collocation",
+                    "examples": [
+                      "The climber tightened her grip on the rope."
+                    ]
+                  }
+                ],
+                "usage": ""
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": [
+      "tighten one's grip"
+    ]
+  },
+  {
+    "id": "usage-only",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "usage-only",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [],
+                "usage": "- **on closer inspection** — при более внимательном рассмотрении."
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": [
+      "on closer inspection"
+    ]
+  },
+  {
+    "id": "same-expression",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "same-expression",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "tighten one's grip",
+                    "surfaceForm": "tighten your grip",
+                    "meaning": "сжать крепче",
+                    "type": "collocation",
+                    "examples": [
+                      "The climber tightened her grip on the rope."
+                    ]
+                  }
+                ],
+                "usage": "- **TIGHTEN  ONE’S GRIP** — крепко сжимать."
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": [
+      "tighten one's grip"
+    ]
+  },
+  {
+    "id": "surface-alias",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "surface-alias",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "tighten one's grip",
+                    "surfaceForm": "tighten your grip",
+                    "meaning": "сжать крепче",
+                    "type": "collocation",
+                    "examples": [
+                      "The climber tightened her grip on the rope."
+                    ]
+                  }
+                ],
+                "usage": "- **tighten your grip** — сжать крепче."
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": [
+      "tighten one's grip"
+    ]
+  },
+  {
+    "id": "distinct",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "distinct",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "tighten one's grip",
+                    "surfaceForm": "tighten your grip",
+                    "meaning": "сжать крепче",
+                    "type": "collocation",
+                    "examples": [
+                      "The climber tightened her grip on the rope."
+                    ]
+                  }
+                ],
+                "usage": "- **on closer inspection** — при более внимательном рассмотрении."
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": [
+      "tighten one's grip",
+      "on closer inspection"
+    ]
+  },
+  {
+    "id": "unmarked",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "unmarked",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "This entire source sentence has more than eight English words in it.",
+            "context": "You tighten your grip on the ancient sword.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tighten your grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [],
+                "usage": "English words and collocations in prose.\n- Обычное слово **grip**.\n- **English** is mentioned.\nInline **carry on** is not a construction bullet.\n```\n- **give up** — code example\n```"
+              }
+            }
+          ],
+          "future": {
+            "nullable": null,
+            "array": [
+              3,
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "expressions": []
+  }
+]

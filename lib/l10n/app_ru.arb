@@ -902,7 +902,8 @@
    "annotationEditorQuestionHint": "Задайте уточняющий вопрос…",
    "annotationEditorSend": "Отправить",
    "annotationEditorDelete": "Удалить аннотацию",
-   "annotationEditorRemoveSource": "Удалить источник",
+   "annotationEditorClearNote": "Очистить заметку",
+  "annotationEditorRemoveSource": "Удалить источник",
    "annotationEditorDetectedLanguage": "Определённый язык: {language}",
    "@annotationEditorDetectedLanguage": {
      "placeholders": {

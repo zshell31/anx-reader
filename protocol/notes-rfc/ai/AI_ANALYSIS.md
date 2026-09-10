@@ -37,4 +37,26 @@ Keep existing selected-text fallback (English selection <=8 words, unless matchi
 a chunk canonical/surface form) and grammarTopicId metadata. Canonical semantic
 records may have book or screen provenance; screen records never need a fake book.
 Occurrence metadata preserves annotation ID/date/context and meaningful source
-provenance. The Lingua API loader may remain as transport; semantics are source-neutral.
+provenance. Canonical folder transport is defined in ../canonical/FOLDER_CONSUMER.md.
+
+## Supplemental usage learning candidates
+
+Chunks are the primary structured lexical learning candidates. Consumers SHOULD
+also use clearly marked useful English constructions in canonical commentary.usage
+as supplemental candidates. Usage remains explanatory semantic content, never a
+replacement for chunks. Extraction support or absence never affects validity.
+Use the reference prompt convention conservatively: a bullet beginning with a
+bold multiword English expression identifies a construction; unmarked English
+words, Russian prose, inline mentions and code examples are not arbitrary lexical
+candidates. Preserve the expression as written and its explanation. Do not invent
+chunk type, examples, senses, source spans or linguistic generalizations.
+
+Process chunks, then usage, then the existing selected-text fallback. Deduplicate
+using lexical identity normalization (Unicode NFKC, apostrophe normalization,
+whitespace normalization and English case folding). Compare usage against both
+explicit chunk canonicalForm and surfaceForm. Their explicit relationship permits
+alias matching; do not guess inflection equivalence or merge distinct senses.
+Structured chunks take precedence: one annotation/concept occurrence. Usage-only
+occurrences retain actual selected text/context/date and book/screen provenance;
+mark ai-usage origin without claiming an alternative construction occurred in the
+source. Tombstoned analyses contribute neither chunks nor usage nor other material.

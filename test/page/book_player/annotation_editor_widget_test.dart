@@ -17,6 +17,7 @@ import 'package:anx_reader/service/annotation_enrichment/google_annotation_trans
 import 'package:anx_reader/service/annotation_enrichment/ldoce_annotation_dictionary.dart';
 import 'package:anx_reader/service/sync/annotation_read_model.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -513,6 +514,131 @@ void main() {
     expect(rect.bottom, logicalHeight - logicalBottomInset - 12);
   });
 
+  testWidgets(
+      'removed provider returns as an expanded pending/result card without empty remove',
+      (tester) async {
+    final google = _PendingGoogle();
+    final controller =
+        _controller(draft: _draftWithAllSources(), google: google);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    final card = find.ancestor(
+        of: find.text('Google Translate'), matching: find.byType(Card));
+    await tester.tap(
+        find.descendant(of: card, matching: find.byIcon(Icons.delete_outline)));
+    await tester.pumpAndSettle();
+    expect(card, findsNothing);
+    await tester.tap(find.widgetWithText(ActionChip, 'Google Translate'));
+    await tester.pump();
+    final pending = find.byKey(const ValueKey('pending-google-translate'));
+    expect(tester.widget<ExpansionTile>(pending).initiallyExpanded, isTrue);
+    expect(
+        find.descendant(
+            of: pending, matching: find.byIcon(Icons.delete_outline)),
+        findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    google.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('refreshed translation'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Google Translate'), findsNothing);
+  });
+
+  testWidgets(
+      'Clear note retains field; clearing chat retains composer and loading is visible collapsed',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final ai = _PendingChat();
+    final draft = _newDraft()
+      ..setPersonalNote('my note')
+      ..addAiExchange('Old question', 'Old answer');
+    // The composer/history behavior does not require the platform Markdown renderer.
+    draft.aiMessages.removeWhere((message) => message.role == 'assistant');
+    final controller = _controller(draft: draft, ai: ai);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    await tester.tap(find.text('Personal note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear note'));
+    await tester.pumpAndSettle();
+    expect(draft.personalNote, '');
+    expect(find.byKey(const Key('annotation-editor-personal-note')),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<TextButton>(find.ancestor(
+                of: find.text('Clear note'),
+                matching:
+                    find.byWidgetPredicate((widget) => widget is TextButton)))
+            .onPressed,
+        isNull);
+    expect(find.widgetWithText(ActionChip, 'AI chat'), findsNothing);
+    await tester.ensureVisible(find.text('AI chat'));
+    await tester.tap(find.text('AI chat'));
+    await tester.pumpAndSettle();
+    final chat = find.ancestor(
+        of: find.text('AI chat'), matching: find.byType(ExpansionTile));
+    final question = find.byKey(const Key('annotation-editor-chat-question'));
+    await tester.ensureVisible(question);
+    await tester.enterText(question, 'Meaning?');
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pump();
+    expect(controller.chatLoading, isTrue);
+    await tester.ensureVisible(find.text('AI chat'));
+    await tester.tap(find.text('AI chat'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.widget<ExpansionTile>(chat).trailing, isA<SizedBox>());
+    expect(
+        find.descendant(
+            of: chat, matching: find.byType(CircularProgressIndicator)),
+        findsAtLeastNWidgets(1));
+    await tester.tap(find.text('AI chat'));
+    await tester.pump(const Duration(milliseconds: 350));
+    final remove =
+        find.descendant(of: chat, matching: find.text('Remove source'));
+    await tester.ensureVisible(remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    expect(draft.aiMessages, isEmpty);
+    expect(controller.chatLoading, isFalse);
+    expect(chat, findsOneWidget);
+    expect(question, findsOneWidget);
+    expect(remove, findsNothing);
+    ai.answer.complete('LATE');
+    await tester.pumpAndSettle();
+    expect(draft.aiMessages, isEmpty);
+  });
+
+  testWidgets(
+      'Android Back and keyboard Escape confirm a clean draft with pending work',
+      (tester) async {
+    final google = _PendingGoogle();
+    final controller = _controller(draft: _existingDraft(), google: google);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    controller.runProvider(AnnotationEditorProvider.googleTranslate);
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(_promptAction('Cancel'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(find.ancestor(
+                of: _promptAction('Save'), matching: find.byType(FilledButton)))
+            .onPressed,
+        isNull);
+    await tester.tap(_promptAction('Cancel'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(AnnotationEditorDialog), findsOneWidget);
+    google.complete();
+    await tester.pumpAndSettle();
+  });
+
   test('editor has generated Russian localization strings', () {
     final l10n = L10nRu();
 
@@ -784,4 +910,15 @@ class _ImmediateAi extends AnnotationAiService {
     required String targetLanguageName,
   }) async =>
       'answer';
+}
+
+class _PendingChat extends _ImmediateAi {
+  final answer = Completer<String>();
+  @override
+  Future<String> followUp(
+          {required AnnotationEditorDraft draft,
+          required String question,
+          required String targetLanguageCode,
+          required String targetLanguageName}) =>
+      answer.future;
 }

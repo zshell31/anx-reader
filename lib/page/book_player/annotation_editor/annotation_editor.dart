@@ -14,6 +14,7 @@ import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/markdown/styled_markdown.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 enum AnnotationEditorOutcome { saved, deleted, discarded }
@@ -151,6 +152,12 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   final ScrollController _scrollController =
       ScrollController(keepScrollOffset: false);
   bool _closePromptOpen = false;
+  late final Map<AnnotationEditorProvider, int> _initialGenerations;
+
+  bool get _pending =>
+      controller.chatLoading ||
+      AnnotationEditorProvider.values
+          .any((provider) => draft.stateFor(provider).loading);
 
   AnnotationEditorController get controller => widget.controller;
   AnnotationEditorDraft get draft => controller.draft;
@@ -158,6 +165,10 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   @override
   void initState() {
     super.initState();
+    _initialGenerations = {
+      for (final provider in AnnotationEditorProvider.values)
+        provider: draft.stateFor(provider).generation
+    };
     _initialSourceProviders = Set.unmodifiable(draft.sourceResults.keys);
     _noteController = TextEditingController(text: draft.personalNote);
     _noteController.addListener(_noteChanged);
@@ -197,6 +208,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   void _noteChanged() => controller.setPersonalNote(_noteController.text);
 
   Future<void> _save() async {
+    if (_pending || controller.saving) return;
     final ref = await controller.save();
     if (!mounted || ref == null) return;
     Navigator.of(context).pop(
@@ -205,7 +217,10 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
   }
 
   Future<void> _requestClose() async {
-    if (!draft.isDirty) {
+    if (controller.saving) return;
+    if (!draft.isDirty &&
+        !_pending &&
+        _questionController.text.trim().isEmpty) {
       Navigator.of(context).pop(
         const _AnnotationEditorResult(AnnotationEditorOutcome.discarded),
       );
@@ -216,23 +231,28 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
     final l10n = L10n.of(context);
     final action = await showDialog<_UnsavedAction>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.annotationEditorUnsavedTitle),
-        content: Text(l10n.annotationEditorUnsavedMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, _UnsavedAction.cancel),
-            child: Text(l10n.commonCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, _UnsavedAction.discard),
-            child: Text(l10n.annotationEditorDiscard),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, _UnsavedAction.save),
-            child: Text(l10n.commonSave),
-          ),
-        ],
+      builder: (context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => AlertDialog(
+          title: Text(l10n.annotationEditorUnsavedTitle),
+          content: Text(l10n.annotationEditorUnsavedMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAction.cancel),
+              child: Text(l10n.commonCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAction.discard),
+              child: Text(l10n.annotationEditorDiscard),
+            ),
+            FilledButton(
+              onPressed: _pending
+                  ? null
+                  : () => Navigator.pop(context, _UnsavedAction.save),
+              child: Text(l10n.commonSave),
+            ),
+          ],
+        ),
       ),
     );
     _closePromptOpen = false;
@@ -284,251 +304,298 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
       media.size.height * 0.94,
       math.max(0.0, media.size.height - media.viewInsets.bottom - 24),
     );
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _requestClose();
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _requestClose
       },
-      child: Dialog(
-        insetPadding: const EdgeInsets.all(12),
-        insetAnimationDuration:
-            eInk ? Duration.zero : const Duration(milliseconds: 150),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 760,
-            maxHeight: dialogHeight,
-          ),
-          child: SizedBox(
-            width: double.maxFinite,
-            height: dialogHeight,
-            child: Scaffold(
-              resizeToAvoidBottomInset: false,
-              appBar: AppBar(
-                automaticallyImplyLeading: false,
-                title: Text(
-                  draft.isNew
-                      ? l10n.annotationEditorNewTitle
-                      : l10n.annotationEditorEditTitle,
-                ),
-                actions: [
-                  IconButton(
-                    tooltip: l10n.close,
-                    onPressed: controller.saving ? null : _requestClose,
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+      child: Focus(
+        autofocus: true,
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _requestClose();
+          },
+          child: Dialog(
+            insetPadding: const EdgeInsets.all(12),
+            insetAnimationDuration:
+                eInk ? Duration.zero : const Duration(milliseconds: 150),
+            clipBehavior: Clip.antiAlias,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 760,
+                maxHeight: dialogHeight,
               ),
-              body: SingleChildScrollView(
-                controller: _scrollController,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SelectableText(
-                      // PDF line breaks describe page layout, not how the
-                      // quote should wrap here. Preserve the stored selection.
-                      '“${draft.selection.selectedText.replaceAll(RegExp(r'\s+'), ' ').trim()}”',
-                      style: theme.textTheme.titleLarge,
+              child: SizedBox(
+                width: double.maxFinite,
+                height: dialogHeight,
+                child: Scaffold(
+                  resizeToAvoidBottomInset: false,
+                  appBar: AppBar(
+                    automaticallyImplyLeading: false,
+                    title: Text(
+                      draft.isNew
+                          ? l10n.annotationEditorNewTitle
+                          : l10n.annotationEditorEditTitle,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      [draft.selection.chapter, draft.bookTitle]
-                          .where((value) => value.trim().isNotEmpty)
-                          .join(' · '),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (draft.selection.lookupContext?.trim().isNotEmpty ==
-                        true)
-                      _ContextSection(
-                        title: l10n.annotationEditorContext,
-                        text: draft.selection.lookupContext!.trim(),
+                    actions: [
+                      IconButton(
+                        tooltip: l10n.close,
+                        onPressed: controller.saving ? null : _requestClose,
+                        icon: const Icon(Icons.close),
                       ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.annotationEditorAddSource,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    ],
+                  ),
+                  body: SingleChildScrollView(
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        SelectableText(
+                          // PDF line breaks describe page layout, not how the
+                          // quote should wrap here. Preserve the stored selection.
+                          '“${draft.selection.selectedText.replaceAll(RegExp(r'\s+'), ' ').trim()}”',
+                          style: theme.textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          [draft.selection.chapter, draft.bookTitle]
+                              .where((value) => value.trim().isNotEmpty)
+                              .join(' · '),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        if (draft.selection.lookupContext?.trim().isNotEmpty ==
+                            true)
+                          _ContextSection(
+                            title: l10n.annotationEditorContext,
+                            text: draft.selection.lookupContext!.trim(),
+                          ),
+                        const SizedBox(height: 12),
+                        Text(
+                          l10n.annotationEditorAddSource,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final provider
+                                in AnnotationEditorProvider.values)
+                              if (draft.sourceResults[provider] == null)
+                                _ProviderButton(
+                                  provider: provider,
+                                  state: draft.stateFor(provider),
+                                  onPressed: controller
+                                          .isProviderAvailable(provider)
+                                      ? () => controller.runProvider(provider)
+                                      : null,
+                                ),
+                          ],
+                        ),
                         for (final provider in AnnotationEditorProvider.values)
                           if (draft.sourceResults[provider] == null)
-                            _ProviderButton(
+                            if (draft.stateFor(provider).error
+                                case final error?)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _ErrorText(
+                                  '${provider.providerName}: $error',
+                                ),
+                              ),
+                        for (final provider in AnnotationEditorProvider.values)
+                          if (draft.sourceResults[provider] == null &&
+                              draft.stateFor(provider).loading)
+                            Card.outlined(
+                                child: ExpansionTile(
+                              key: ValueKey('pending-${provider.providerId}'),
+                              initiallyExpanded: true,
+                              title: Text(provider.providerName),
+                              trailing: const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2)),
+                              children: const [LinearProgressIndicator()],
+                            )),
+                        for (final provider in AnnotationEditorProvider.values)
+                          if (draft.sourceResults[provider]
+                              case final result?) ...[
+                            const SizedBox(height: 12),
+                            _SourceCard(
+                              key: ValueKey(provider),
                               provider: provider,
+                              result: result,
+                              selectedText: draft.selection.selectedText,
                               state: draft.stateFor(provider),
-                              onPressed:
+                              initiallyExpanded:
+                                  !_initialSourceProviders.contains(provider) ||
+                                      draft.stateFor(provider).generation >
+                                          _initialGenerations[provider]!,
+                              onRefresh:
                                   controller.isProviderAvailable(provider)
                                       ? () => controller.runProvider(provider)
                                       : null,
+                              onRemove: () =>
+                                  controller.removeProvider(provider),
                             ),
-                      ],
-                    ),
-                    for (final provider in AnnotationEditorProvider.values)
-                      if (draft.sourceResults[provider] == null)
-                        if (draft.stateFor(provider).error case final error?)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: _ErrorText(
-                              '${provider.providerName}: $error',
-                            ),
-                          ),
-                    for (final provider in AnnotationEditorProvider.values)
-                      if (draft.sourceResults[provider] case final result?) ...[
-                        const SizedBox(height: 12),
-                        _SourceCard(
-                          key: ValueKey(provider),
-                          provider: provider,
-                          result: result,
-                          selectedText: draft.selection.selectedText,
-                          state: draft.stateFor(provider),
-                          initiallyExpanded:
-                              !_initialSourceProviders.contains(provider),
-                          onRefresh: controller.isProviderAvailable(provider)
-                              ? () => controller.runProvider(provider)
-                              : null,
-                          onRemove: () => controller.removeProvider(provider),
-                        ),
-                      ],
-                    for (final result in draft.additionalSources)
-                      ExpansionTile(
-                          title: Text(result.providerName),
+                          ],
+                        for (final result in draft.additionalSources)
+                          ExpansionTile(
+                              title: Text(result.providerName),
+                              children: [
+                                if (result.markdown?.isNotEmpty == true)
+                                  StyledMarkdown(data: result.markdown!)
+                                else if (result.translation?.isNotEmpty == true)
+                                  SelectableText(result.translation!),
+                                TextButton.icon(
+                                    onPressed: () => controller
+                                        .removeAdditionalSource(result),
+                                    icon: const Icon(Icons.delete_outline),
+                                    label: Text(l10n.commonRemove)),
+                              ]),
+                        const SizedBox(height: 20),
+                        ExpansionTile(
+                          title: Text(l10n.annotationEditorPersonalNote),
+                          maintainState: true,
+                          initiallyExpanded: widget.focusPersonalNote,
                           children: [
-                            if (result.markdown?.isNotEmpty == true)
-                              StyledMarkdown(data: result.markdown!)
-                            else if (result.translation?.isNotEmpty == true)
-                              SelectableText(result.translation!),
                             TextButton.icon(
-                                onPressed: () =>
-                                    controller.removeAdditionalSource(result),
-                                icon: const Icon(Icons.delete_outline),
-                                label: Text(l10n.commonRemove)),
-                          ]),
-                    const SizedBox(height: 20),
-                    ExpansionTile(
-                      title: Text(l10n.annotationEditorPersonalNote),
-                      maintainState: true,
-                      initiallyExpanded: widget.focusPersonalNote,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            _noteController.clear();
-                            controller.setPersonalNote('');
-                          },
-                          icon: const Icon(Icons.delete_outline),
-                          label: Text(l10n.annotationEditorRemoveSource),
-                        ),
-                        TextField(
-                          key: const Key('annotation-editor-personal-note'),
-                          controller: _noteController,
-                          focusNode: _noteFocusNode,
-                          minLines: 3,
-                          maxLines: 8,
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            hintText: l10n.annotationEditorPersonalNoteHint,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    ExpansionTile(
-                      title: Text(l10n.annotationEditorAiChat),
-                      initiallyExpanded: widget.focusAiChat,
-                      children: [
-                        if (draft.aiMessages.isNotEmpty)
-                          TextButton.icon(
-                            onPressed: controller.removeChat,
-                            icon: const Icon(Icons.delete_outline),
-                            label: Text(l10n.annotationEditorRemoveSource),
-                          ),
-                        if (draft.aiMessages.isEmpty)
-                          Text(l10n.annotationEditorAiChatEmpty),
-                        for (final message in draft.aiMessages)
-                          _ChatMessage(message: message),
-                        if (controller.chatError case final error?)
-                          _ErrorText(error),
-                        const SizedBox(height: 8),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _questionController,
-                                minLines: 1,
-                                maxLines: 5,
-                                enabled: !controller.chatLoading,
-                                decoration: InputDecoration(
-                                  border: const OutlineInputBorder(),
-                                  hintText: l10n.annotationEditorQuestionHint,
-                                ),
-                                onSubmitted: (_) => _sendQuestion(),
+                              onPressed: draft.personalNote.trim().isEmpty
+                                  ? null
+                                  : () {
+                                      _noteController.clear();
+                                      controller.setPersonalNote('');
+                                    },
+                              icon: const Icon(Icons.delete_outline),
+                              label: Text(l10n.annotationEditorClearNote),
+                            ),
+                            TextField(
+                              key: const Key('annotation-editor-personal-note'),
+                              controller: _noteController,
+                              focusNode: _noteFocusNode,
+                              minLines: 3,
+                              maxLines: 8,
+                              decoration: InputDecoration(
+                                border: const OutlineInputBorder(),
+                                hintText: l10n.annotationEditorPersonalNoteHint,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            IconButton.filled(
-                              tooltip: l10n.annotationEditorSend,
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        ExpansionTile(
+                          title: Text(l10n.annotationEditorAiChat),
+                          trailing: controller.chatLoading
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : null,
+                          initiallyExpanded: widget.focusAiChat,
+                          children: [
+                            if (draft.aiMessages.isNotEmpty)
+                              TextButton.icon(
+                                onPressed: () {
+                                  controller.removeChat();
+                                  _questionController.clear();
+                                },
+                                icon: const Icon(Icons.delete_outline),
+                                label: Text(l10n.annotationEditorRemoveSource),
+                              ),
+                            if (draft.aiMessages.isEmpty)
+                              Text(l10n.annotationEditorAiChatEmpty),
+                            for (final message in draft.aiMessages)
+                              _ChatMessage(message: message),
+                            if (controller.chatError case final error?)
+                              _ErrorText(error),
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: const Key(
+                                        'annotation-editor-chat-question'),
+                                    controller: _questionController,
+                                    minLines: 1,
+                                    maxLines: 5,
+                                    enabled: !controller.chatLoading,
+                                    decoration: InputDecoration(
+                                      border: const OutlineInputBorder(),
+                                      hintText:
+                                          l10n.annotationEditorQuestionHint,
+                                    ),
+                                    onSubmitted: (_) => _sendQuestion(),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton.filled(
+                                  tooltip: l10n.annotationEditorSend,
+                                  onPressed: controller.chatLoading
+                                      ? null
+                                      : _sendQuestion,
+                                  icon: controller.chatLoading
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.send),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (controller.saveError case final error?)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: _ErrorText(error),
+                          ),
+                      ],
+                    ),
+                  ),
+                  bottomNavigationBar: SafeArea(
+                    top: false,
+                    child: Material(
+                      elevation: eInk ? 0 : 8,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            if (!draft.isNew)
+                              TextButton.icon(
+                                onPressed: controller.saving ? null : _delete,
+                                icon: const Icon(Icons.delete_outline),
+                                label: Text(l10n.annotationEditorDelete),
+                              ),
+                            const Spacer(),
+                            TextButton(
                               onPressed:
-                                  controller.chatLoading ? null : _sendQuestion,
-                              icon: controller.chatLoading
+                                  controller.saving ? null : _requestClose,
+                              child: Text(l10n.commonCancel),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: !draft.isDirty ||
+                                      controller.saving ||
+                                      _pending
+                                  ? null
+                                  : _save,
+                              child: controller.saving
                                   ? const SizedBox.square(
-                                      dimension: 20,
+                                      dimension: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Icon(Icons.send),
+                                  : Text(l10n.commonSave),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    if (controller.saveError case final error?)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: _ErrorText(error),
                       ),
-                  ],
-                ),
-              ),
-              bottomNavigationBar: SafeArea(
-                top: false,
-                child: Material(
-                  elevation: eInk ? 0 : 8,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        if (!draft.isNew)
-                          TextButton.icon(
-                            onPressed: controller.saving ? null : _delete,
-                            icon: const Icon(Icons.delete_outline),
-                            label: Text(l10n.annotationEditorDelete),
-                          ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: controller.saving ? null : _requestClose,
-                          child: Text(l10n.commonCancel),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: !draft.isDirty || controller.saving
-                              ? null
-                              : _save,
-                          child: controller.saving
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(l10n.commonSave),
-                        ),
-                      ],
                     ),
                   ),
                 ),

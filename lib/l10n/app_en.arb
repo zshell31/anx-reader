@@ -943,6 +943,7 @@
   "annotationEditorQuestionHint": "Ask a follow-up question…",
   "annotationEditorSend": "Send",
   "annotationEditorDelete": "Delete annotation",
+  "annotationEditorClearNote": "Clear note",
   "annotationEditorRemoveSource": "Remove source",
   "annotationEditorDetectedLanguage": "Detected language: {language}",
   "@annotationEditorDetectedLanguage": {

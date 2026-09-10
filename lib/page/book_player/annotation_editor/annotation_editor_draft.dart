@@ -20,6 +20,7 @@ class AiChunk {
   final String meaning;
   final String? type;
   final List<String>? examples;
+  final Map<String, Object?> unknownFields;
 
   const AiChunk({
     required this.canonicalForm,
@@ -27,9 +28,12 @@ class AiChunk {
     required this.meaning,
     this.type,
     this.examples,
+    this.unknownFields = const {},
   });
 
-  factory AiChunk.fromMap(Map<Object?, Object?> value) => AiChunk(
+  factory AiChunk.fromMap(Map<Object?, Object?> value,
+          {bool generated = false}) =>
+      AiChunk(
         canonicalForm: _optionalText(value['canonicalForm']) ?? '',
         surfaceForm: _optionalText(value['surfaceForm']),
         meaning: _optionalText(value['meaning']) ?? '',
@@ -40,14 +44,27 @@ class AiChunk {
         examples: value['examples'] is List
             ? (value['examples'] as List)
                 .whereType<String>()
-                .map((item) => item.trim())
-                .where((item) => item.isNotEmpty)
-                .take(2)
+                .map((item) => generated ? item.trim() : item)
+                .where((item) => !generated || item.isNotEmpty)
+                .take(generated ? 2 : (value['examples'] as List).length)
                 .toList(growable: false)
             : null,
+        unknownFields: Map.unmodifiable({
+          for (final entry in value.entries)
+            if (entry.key is String &&
+                !const {
+                  'canonicalForm',
+                  'surfaceForm',
+                  'meaning',
+                  'type',
+                  'examples'
+                }.contains(entry.key))
+              entry.key as String: entry.value,
+        }),
       );
 
   Map<String, Object?> toMap() => {
+        ...unknownFields,
         'canonicalForm': canonicalForm,
         if (surfaceForm?.isNotEmpty == true) 'surfaceForm': surfaceForm!,
         'meaning': meaning,
@@ -108,7 +125,6 @@ class AnnotationEditorCommentary {
                 .map((item) => AiChunk.fromMap(item))
                 .where((item) =>
                     item.canonicalForm.isNotEmpty && item.meaning.isNotEmpty)
-                .take(5)
                 .toList(growable: false)
             : null,
         unknownFields: Map.unmodifiable({
@@ -557,7 +573,7 @@ List<AnnotationEditorMessage> _messages(AnnotationEnrichmentView thread) {
   if (raw is! List) return [];
   final result = <AnnotationEditorMessage>[];
   for (final value in raw) {
-    if (value is! Map) continue;
+    if (value is! Map || value['deletedAt'] != null) continue;
     final role = value['role'];
     final content = value['content'];
     final sequence = value['sequence'];

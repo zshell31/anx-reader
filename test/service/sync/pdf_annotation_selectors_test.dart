@@ -4,6 +4,23 @@ import 'package:anx_reader/service/sync/annotation_selectors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final fixture in jsonDecode(
+      File('protocol/notes-rfc/fixtures/editor/pdf-selection-runs.json')
+          .readAsStringSync()) as List) {
+    test('RFC new PDF quote from Lingua ${fixture['id']}', () {
+      final quote = PdfAnnotationPageTarget.fromJson(fixture['expected'])!;
+      final text = fixture['fullText'] as String;
+      final restored = quote.resolve(text)!;
+      expect(text.substring(restored.start, restored.end), quote.exact);
+      expect(restored.start, quote.prefix.length);
+      final created = PdfAnnotationPageTarget.fromPageText(
+          page: quote.page,
+          pageText: text,
+          start: restored.start,
+          end: restored.end);
+      expect(created.toJson(), fixture['expected']);
+    });
+  }
   test('restores Lingua cross-page selectors and preserves the shared anchors',
       () {
     final fixture = jsonDecode(

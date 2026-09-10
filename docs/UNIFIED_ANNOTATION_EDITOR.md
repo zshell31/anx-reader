@@ -1,3 +1,6 @@
+> Historical implementation notes, non-normative. The shared Notes RFC at
+> `/home/zshell/projects/obsidian/notes_rfc` owns semantics; see `protocol/NOTES_RFC`.
+
 # Unified Annotation Editor
 
 ## Status checkpoint

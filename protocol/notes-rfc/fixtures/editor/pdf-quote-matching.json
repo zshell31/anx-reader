@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Lingua newline to PDFium CRLF",
+    "text": "Before. Most evenings, \r\ncreeping into town. After.",
+    "quote": {
+      "exact": "Most evenings,\ncreeping into town."
+    },
+    "expected": "Most evenings, \r\ncreeping into town."
+  },
+  {
+    "name": "ANX CRLF to Lingua spaces",
+    "text": "Before. Most evenings, creeping into town. After.",
+    "quote": {
+      "exact": "Most evenings, \r\ncreeping into town.",
+      "prefix": "Before. ",
+      "suffix": " After."
+    },
+    "expected": "Most evenings, creeping into town."
+  },
+  {
+    "name": "context resolves duplicate",
+    "text": "First same phrase. Second same\nphrase.",
+    "quote": {
+      "exact": "same phrase",
+      "prefix": "Second ",
+      "suffix": "."
+    },
+    "expected": "same\nphrase"
+  },
+  {
+    "name": "ambiguous after normalization",
+    "text": "same phrase and same\nphrase",
+    "quote": {
+      "exact": "same phrase"
+    },
+    "expected": null
+  },
+  {
+    "name": "word boundary is significant",
+    "text": "somewhere",
+    "quote": {
+      "exact": "some where"
+    },
+    "expected": null
+  },
+  {
+    "name": "UTF16 offsets",
+    "text": "😀 Before target 😀 after.",
+    "quote": {
+      "exact": "target 😀"
+    },
+    "expected": "target 😀"
+  }
+]

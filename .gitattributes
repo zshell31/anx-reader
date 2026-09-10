@@ -3,3 +3,6 @@
 # ignore diff for generated files
 *.gen.dart binary
 *.gen.dart linguist-generated=true
+
+# Preserve the byte-exact RFC empty-selection Markdown golden.
+protocol/notes-rfc/fixtures/markdown/empty.md whitespace=-blank-at-eol

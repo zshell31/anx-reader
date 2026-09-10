@@ -29,7 +29,21 @@
     "annotations": {
       "type": "array",
       "items": {
-        "$ref": "shared-annotation.schema.json"
+        "allOf": [
+          {
+            "$ref": "shared-annotation.schema.json"
+          },
+          {
+            "required": [
+              "sourceType"
+            ],
+            "properties": {
+              "sourceType": {
+                "const": "screen"
+              }
+            }
+          }
+        ]
       }
     }
   },

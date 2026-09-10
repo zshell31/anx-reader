@@ -56,7 +56,7 @@ class AnnotationAiService {
       chunks: payload['chunks'] is List
           ? (payload['chunks'] as List)
               .whereType<Map>()
-              .map((item) => AiChunk.fromMap(item))
+              .map((item) => AiChunk.fromMap(item, generated: true))
               .where((item) =>
                   item.canonicalForm.isNotEmpty && item.meaning.isNotEmpty)
               .take(5)

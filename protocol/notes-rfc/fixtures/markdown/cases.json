@@ -1,0 +1,269 @@
+[
+  {
+    "id": "empty",
+    "annotation": {
+      "id": "empty",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "motivation": "selection",
+      "target": {
+        "selectedText": "",
+        "selectors": []
+      },
+      "enrichments": [
+        {
+          "id": "empty",
+          "kind": "ai-analysis",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "commentary": {}
+        },
+        {
+          "id": "empty-dictionary",
+          "kind": "dictionary",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z"
+        },
+        {
+          "id": "deleted-note",
+          "kind": "personal-note",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "content": "DO NOT DISPLAY",
+          "deletedAt": "2026-09-10T00:00:00.000Z"
+        }
+      ],
+      "future": {
+        "nullable": null,
+        "array": [
+          3,
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "grouped-providers",
+    "annotation": {
+      "id": "grouped-providers",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "motivation": "selection",
+      "target": {
+        "selectedText": "a <word> [link]!",
+        "selectors": []
+      },
+      "enrichments": [
+        {
+          "id": "a",
+          "kind": "translation",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "google-translate",
+          "translation": "same"
+        },
+        {
+          "id": "b",
+          "kind": "translation",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "google-translate",
+          "translation": "same",
+          "content": "other"
+        },
+        {
+          "id": "c",
+          "kind": "dictionary",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "custom ! ID",
+          "providerName": "Custom <dictionary>",
+          "markdown": "definition"
+        },
+        {
+          "id": "d",
+          "kind": "dictionary",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "custom ! ID",
+          "providerName": "Custom <dictionary>",
+          "markdown": "definition"
+        },
+        {
+          "id": "e",
+          "kind": "translation",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "manual",
+          "translation": "same"
+        }
+      ],
+      "future": {
+        "nullable": null,
+        "array": [
+          3,
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "headings-and-fences",
+    "annotation": {
+      "id": "headings-and-fences",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "motivation": "selection",
+      "target": {
+        "selectedText": "a <word> [link]!",
+        "selectors": [],
+        "context": "first & <line>\r\n> quoted"
+      },
+      "enrichments": [
+        {
+          "id": "a",
+          "kind": "dictionary",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "ldoce",
+          "markdown": "# First\n\n## Second\n\n```md\n# literal\n```\n\n> # quoted\n\nSetext\n---"
+        },
+        {
+          "id": "b",
+          "kind": "personal-note",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "content": "# My note\n\n**Rich** text"
+        }
+      ],
+      "future": {
+        "nullable": null,
+        "array": [
+          3,
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "analysis-dedup",
+    "annotation": {
+      "id": "analysis-dedup",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "motivation": "selection",
+      "target": {
+        "selectedText": "a <word> [link]!",
+        "selectors": []
+      },
+      "enrichments": [
+        {
+          "id": "a",
+          "kind": "ai-analysis",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "openai",
+          "translation": "same",
+          "markdown": "# Explanation",
+          "commentary": {
+            "translation": "same",
+            "grammar": "## Grammar",
+            "chunks": [
+              {
+                "canonicalForm": "take care",
+                "meaning": "care",
+                "examples": [
+                  "One.",
+                  "Two.",
+                  "Three."
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "b",
+          "kind": "ai-analysis",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "providerId": "other-ai",
+          "commentary": {
+            "translation": "same",
+            "grammar": "## Grammar"
+          }
+        }
+      ],
+      "future": {
+        "nullable": null,
+        "array": [
+          3,
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "chat-escaping",
+    "annotation": {
+      "id": "chat-escaping",
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "motivation": "selection",
+      "target": {
+        "selectedText": "a <word> [link]!",
+        "selectors": []
+      },
+      "enrichments": [
+        {
+          "id": "a",
+          "kind": "ai-thread",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "contextSnapshot": {
+            "selectedText": "a",
+            "enrichmentIds": []
+          },
+          "messages": [
+            {
+              "id": "b",
+              "role": "assistant",
+              "sequence": 2,
+              "content": "# Title\n\n## Deep\n\n```md\n# literal\n```",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z"
+            },
+            {
+              "id": "a",
+              "role": "user",
+              "sequence": 1,
+              "content": "Why <this>?\nAnd [that]?",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z"
+            },
+            {
+              "id": "c",
+              "role": "assistant",
+              "sequence": 3,
+              "content": "DO NOT DISPLAY",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "deletedAt": "2026-09-10T00:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      "future": {
+        "nullable": null,
+        "array": [
+          3,
+          1,
+          2
+        ]
+      }
+    }
+  }
+]

@@ -40,6 +40,35 @@ void main() {
     controller.dispose();
   });
 
+  test(
+      'additional dictionary providers survive Save and are independently removable',
+      () async {
+    AnnotationEditorSaveInput? saved;
+    final controller = _controller(saveDraft: (input) async {
+      saved = input;
+      return _ref();
+    });
+    const first = AnnotationEditorSourceResult(
+        enrichmentId: 'custom-1',
+        providerId: 'custom-one',
+        providerName: 'One',
+        kind: 'dictionary',
+        markdown: 'one');
+    const second = AnnotationEditorSourceResult(
+        enrichmentId: 'custom-2',
+        providerId: 'custom-two',
+        providerName: 'Two',
+        kind: 'dictionary',
+        markdown: 'two');
+    controller.draft.additionalSources.addAll([first, second]);
+    controller.removeAdditionalSource(first);
+    expect(controller.draft.additionalSources, [second]);
+    await controller.save();
+    expect(saved!.materials.single.providerId, 'custom-two');
+    expect(saved!.materials.single.enrichmentId, 'custom-2');
+    controller.dispose();
+  });
+
   test('one explicit Save sends every draft field through one callback',
       () async {
     var saves = 0;

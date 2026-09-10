@@ -65,6 +65,53 @@
       "items": {
         "$ref": "#/$defs/enrichment"
       }
+    },
+    "sourceType": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "sourceType": {
+          "type": "string"
+        },
+        "application": {
+          "type": "string"
+        },
+        "applicationId": {
+          "type": "string"
+        },
+        "windowTitle": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "originalSelection": {
+      "type": "object",
+      "properties": {
+        "selectedText": {
+          "type": "string"
+        },
+        "contextText": {
+          "type": "string"
+        },
+        "selectionStart": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selectionEnd": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "selectedText",
+        "contextText",
+        "selectionStart",
+        "selectionEnd"
+      ],
+      "additionalProperties": true
     }
   },
   "required": [
@@ -372,5 +419,37 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://notes-rfc.local/schemas/shared-annotation.schema.json"
+  "$id": "https://notes-rfc.local/schemas/shared-annotation.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "sourceType"
+        ],
+        "properties": {
+          "sourceType": {
+            "const": "screen"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source",
+          "originalSelection"
+        ],
+        "properties": {
+          "source": {
+            "required": [
+              "sourceType"
+            ],
+            "properties": {
+              "sourceType": {
+                "const": "screen"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

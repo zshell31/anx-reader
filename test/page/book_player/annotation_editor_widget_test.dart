@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -24,6 +26,20 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await Prefs().initPrefs();
+  });
+
+  testWidgets('RFC default blocks start collapsed', (tester) async {
+    final fixture = jsonDecode(
+        File('protocol/notes-rfc/fixtures/editor/states.json')
+            .readAsStringSync()) as Map;
+    final controller = _controller(draft: _draftWithAllSources());
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    final tiles =
+        tester.widgetList<ExpansionTile>(find.byType(ExpansionTile)).toList();
+    expect(tiles.length,
+        greaterThanOrEqualTo((fixture['defaultCollapsed'] as List).length));
+    expect(tiles.every((tile) => !tile.initiallyExpanded), isTrue);
   });
 
   testWidgets('all source cards coexist at phone and desktop widths',

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {readFileSync} from 'node:fs'
 
 class Element {
     style = {}
@@ -51,4 +52,22 @@ test('saved highlights have 10px padding and direct hits take priority', () => {
     assert.deepEqual(overlay.hitTest({ x: 9, y: 20 }), [])
     assert.equal(overlay.hitTest({ x: 30, y: 46 })[0], 'second')
     assert.equal(overlay.hitTest({ x: 30, y: 44 })[0], 'second')
+})
+
+ test('equal ranges use canonical creation time then ID in either draw order', () => {
+    for (const order of [['a', 'b', 'old'], ['old', 'b', 'a']]) {
+        const overlay = new Overlayer(document)
+        for (const id of order) overlay.add(id, range([rect(0, 0, 40)]), Overlayer.highlight,
+            {createdAt:id === 'old' ? '2026-09-09T00:00:00.000Z' : '2026-09-10T00:00:00.000Z', annotationId:id})
+        assert.equal(overlay.hitTest({x:10,y:10})[0], 'old')
+        overlay.remove('old')
+        assert.equal(overlay.hitTest({x:10,y:10})[0], 'a')
+    }
+})
+
+test('RFC shared overlap fixture resolves the narrowest annotation', () => {
+    const fixture = JSON.parse(readFileSync(new URL('../../../protocol/notes-rfc/fixtures/editor/states.json', import.meta.url), 'utf8'))
+    const overlay = new Overlayer(document)
+    for (const r of fixture.overlap.ranges) overlay.add(r.id, range([rect(r.start, 0, r.end-r.start)]), Overlayer.highlight, {createdAt:r.createdAt, annotationId:r.id})
+    assert.equal(overlay.hitTest({x:fixture.overlap.point,y:10})[0], fixture.overlap.expected)
 })

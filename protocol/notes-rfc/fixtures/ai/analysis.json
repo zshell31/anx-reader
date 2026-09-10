@@ -183,5 +183,37 @@
         }
       ]
     }
+  },
+  {
+    "id": "no-useful-chunks",
+    "selectedText": "lamp",
+    "contextText": "The lamp is on.",
+    "result": {
+      "translation": "лампа",
+      "translationNotes": "",
+      "grammar": "",
+      "usage": "",
+      "chunks": []
+    }
+  },
+  {
+    "id": "nullable-optionals",
+    "selectedText": "take care",
+    "contextText": "Take care.",
+    "result": {
+      "translation": "береги себя",
+      "translationNotes": "",
+      "grammar": "",
+      "usage": "",
+      "chunks": [
+        {
+          "canonicalForm": "take care",
+          "meaning": "беречь себя",
+          "surfaceForm": null,
+          "type": null,
+          "examples": null
+        }
+      ]
+    }
   }
 ]

@@ -7,6 +7,7 @@ class FoliateAnnotationDto {
   final String type;
   final String color;
   final String note;
+  final String? createdAt;
 
   const FoliateAnnotationDto({
     required this.id,
@@ -14,10 +15,12 @@ class FoliateAnnotationDto {
     required this.type,
     required this.color,
     required this.note,
+    this.createdAt,
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
+        if (createdAt != null) 'createdAt': createdAt,
         'renderKey': id,
         'value': value,
         'type': type,
@@ -49,6 +52,7 @@ class FoliateAnnotationAdapter {
     if (annotation.motivation == AnnotationMotivation.bookmark) {
       return FoliateAnnotationDto(
         id: annotation.ref.annotationId,
+        createdAt: annotation.createdAt.toUtc().toIso8601String(),
         value: annotation.epubCfi!,
         type: 'bookmark',
         color: '#000000',
@@ -61,6 +65,7 @@ class FoliateAnnotationAdapter {
     );
     return FoliateAnnotationDto(
       id: annotation.ref.annotationId,
+      createdAt: annotation.createdAt.toUtc().toIso8601String(),
       value: annotation.epubCfi!,
       type: presentation.style.name,
       color: presentation.color,

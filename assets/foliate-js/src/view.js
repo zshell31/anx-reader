@@ -384,7 +384,7 @@ export class View extends HTMLElement {
       if (!remove) {
         const range = doc ? anchor(doc) : anchor
         const draw = (func, opts) =>
-          overlayer.add(renderKey, range, func, opts)
+          overlayer.add(renderKey, range, func, {...opts, createdAt: annotation.createdAt, annotationId: annotation.id})
         this.#emit('draw-annotation', { draw, annotation, doc, range })
       }
     }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:anx_reader/enums/ai_reasoning_effort.dart';
 import 'package:anx_reader/models/ai_provider.dart';
 import 'package:anx_reader/page/book_player/annotation_editor/annotation_editor_draft.dart';
@@ -9,6 +10,57 @@ import 'package:anx_reader/service/annotation_enrichment/annotation_ai_service.d
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final fixtures = jsonDecode(
+      File('protocol/notes-rfc/fixtures/ai/analysis.json')
+          .readAsStringSync()) as List;
+  for (final fixture in fixtures) {
+    test('RFC analysis ${fixture['id'] ?? fixture['name']}', () async {
+      final payload = fixture['result'] as Map;
+      final service = AnnotationAiService(
+          resolveRoute: () => _route(),
+          generate: (_, __) async => jsonEncode(payload));
+      final result = await service.analyze(
+          selectedText: 'selection',
+          context: 'context',
+          bookTitle: '',
+          chapter: '',
+          targetLanguageCode: 'ru',
+          targetLanguageName: 'Russian');
+      final commentary = result.commentary!;
+      expect(commentary.translation ?? '', payload['translation']);
+      expect(commentary.translationNotes ?? '', payload['translationNotes']);
+      expect(commentary.grammar ?? '', payload['grammar']);
+      expect(commentary.usage ?? '', payload['usage']);
+      expect(commentary.chunks?.map((c) => c.toMap()).toList() ?? [], [
+        for (final chunk in payload['chunks'])
+          {
+            for (final entry in (chunk as Map).entries)
+              if (entry.value != null &&
+                  !(entry.value is List && (entry.value as List).isEmpty))
+                entry.key: entry.value
+          }
+      ]);
+    });
+  }
+  test(
+      'historical chunk hydration preserves extension fields and producer-exceeding counts',
+      () {
+    final chunk = {
+      'canonicalForm': 'take care',
+      'meaning': 'care',
+      'examples': ['one', 'two', 'three'],
+      'future': {
+        'nested': [1, null]
+      }
+    };
+    final raw = {
+      'chunks': List.generate(6, (_) => chunk),
+      'futureCommentary': true
+    };
+    expect(AnnotationEditorCommentary.fromMap(raw).toMap(), raw);
+    expect(AiChunk.fromMap(chunk, generated: true).examples, ['one', 'two']);
+  });
+
   test('analysis limits chunks to the selection and its containing sentence',
       () {
     final prompt = buildAnnotationAnalysisPrompt(

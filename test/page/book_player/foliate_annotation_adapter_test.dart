@@ -46,6 +46,8 @@ void main() {
 
     final payloads = adapter.adapt(models).map((dto) => dto.toJson()).toList();
     expect(payloads.map((payload) => payload['id']), ['uuid-a', 'uuid-b']);
+    expect(payloads.map((payload) => payload['createdAt']),
+        [timestamp, timestamp]);
     expect(
         payloads.map((payload) => payload['renderKey']), ['uuid-a', 'uuid-b']);
     expect(payloads.map((payload) => payload['value']), [sameCfi, sameCfi]);

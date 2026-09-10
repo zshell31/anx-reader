@@ -1,0 +1,79 @@
+[
+  {
+    "id": "table-runs",
+    "page": 26,
+    "spans": [
+      "Moss 10",
+      "Valley",
+      "J Eden"
+    ],
+    "start": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 0
+    },
+    "end": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 6
+    },
+    "fullText": "Moss 10 Valley J Eden",
+    "expected": {
+      "page": 26,
+      "exact": "Valley",
+      "prefix": "Moss 10 ",
+      "suffix": " J Eden"
+    }
+  },
+  {
+    "id": "heading-runs",
+    "page": 5,
+    "spans": [
+      "The Midnight Owl",
+      "Not long after you arrive in town",
+      ", you find the diner."
+    ],
+    "start": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 0
+    },
+    "end": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 33
+    },
+    "fullText": "The Midnight Owl Not long after you arrive in town, you find the diner.",
+    "expected": {
+      "page": 5,
+      "exact": "Not long after you arrive in town",
+      "prefix": "The Midnight Owl ",
+      "suffix": ", you find the diner."
+    }
+  },
+  {
+    "id": "first-identical-phrase",
+    "page": 1,
+    "spans": [
+      "First target here.",
+      "Second target there."
+    ],
+    "start": {
+      "layerIndex": 0,
+      "spanIndex": 0,
+      "offset": 6
+    },
+    "end": {
+      "layerIndex": 0,
+      "spanIndex": 0,
+      "offset": 12
+    },
+    "fullText": "First target here. Second target there.",
+    "expected": {
+      "page": 1,
+      "exact": "target",
+      "prefix": "First ",
+      "suffix": " here. Second target there."
+    }
+  }
+]

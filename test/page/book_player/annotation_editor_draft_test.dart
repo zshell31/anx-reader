@@ -343,6 +343,15 @@ AnnotationEditorDraft _existingDraft() {
             },
             'messages': [
               {
+                'id': 'message:removed',
+                'role': 'assistant',
+                'sequence': 2,
+                'content': 'Removed answer',
+                'createdAt': '2026-01-01T00:04:00.000Z',
+                'updatedAt': '2026-01-01T00:04:00.000Z',
+                'deletedAt': '2026-01-01T00:04:00.000Z',
+              },
+              {
                 'id': 'message:assistant',
                 'role': 'assistant',
                 'sequence': 1,

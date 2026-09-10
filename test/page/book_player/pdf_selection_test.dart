@@ -1,9 +1,35 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:anx_reader/page/book_player/pdf_selection.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 void main() {
+  for (final fixture in jsonDecode(
+      File('protocol/notes-rfc/fixtures/editor/pdf-selection-runs.json')
+          .readAsStringSync()) as List) {
+    test('RFC PDF capture uses page text offsets: ${fixture['id']}', () async {
+      final fullText = fixture['fullText'] as String;
+      final expected = fixture['expected'] as Map;
+      final start = (expected['prefix'] as String).length;
+      final text = PdfPageText(
+          pageNumber: fixture['page'],
+          fullText: fullText,
+          charRects: [],
+          fragments: []);
+      final data = await buildPdfSelectionData([
+        PdfPageTextRange(
+            pageText: text,
+            start: start,
+            end: start + (expected['exact'] as String).length)
+      ], (_) async => const Size(600, 800));
+      expect(data!.target.pageTargets.single.toJson(), expected);
+      expect(data.context, fullText);
+      final restored = data.target.pageTargets.single.resolve(fullText)!;
+      expect(restored.start, start);
+    });
+  }
   test(
       'saves both page-local quotes for a selection crossing the page boundary',
       () async {

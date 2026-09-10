@@ -692,6 +692,53 @@ void main() {
     expect(cleared, contains('deletedAt'));
   });
 
+  test(
+      'additional dictionaries coexist, remove independently, and re-add with a fresh ID',
+      () async {
+    AnnotationEditorMaterialInput dictionary(String id,
+            {String? enrichmentId}) =>
+        AnnotationEditorMaterialInput(
+            enrichmentId: enrichmentId,
+            providerId: id,
+            providerName: id,
+            kind: 'dictionary',
+            markdown: 'definition');
+    final ref = await repository.saveAnnotationEditorDraft(
+        AnnotationEditorSaveInput(
+            creation: creation(),
+            materials: [dictionary('ldoce'), dictionary('custom-dictionary')]));
+    Future<List<Map<String, dynamic>>> materials() async => (annotationOf(
+            (await shared.annotationDocument(fingerprint))!,
+            ref.annotationId)['enrichments'] as List)
+        .cast<Map<String, dynamic>>();
+    final original = await materials();
+    final custom =
+        original.singleWhere((e) => e['providerId'] == 'custom-dictionary');
+    final ldoce = original.singleWhere((e) => e['providerId'] == 'ldoce');
+    await repository.saveAnnotationEditorDraft(AnnotationEditorSaveInput(
+        existingRef: ref,
+        observedMaterialIds: original.map((e) => e['id'] as String).toSet(),
+        materials: [dictionary('ldoce', enrichmentId: ldoce['id'] as String)]));
+    final removed = await materials();
+    expect(removed.singleWhere((e) => e['id'] == custom['id']),
+        contains('deletedAt'));
+    expect(removed.singleWhere((e) => e['id'] == ldoce['id']),
+        isNot(contains('deletedAt')));
+    await repository.saveAnnotationEditorDraft(AnnotationEditorSaveInput(
+        existingRef: ref,
+        observedMaterialIds: removed.map((e) => e['id'] as String).toSet(),
+        materials: [
+          dictionary('ldoce', enrichmentId: ldoce['id'] as String),
+          dictionary('custom-dictionary')
+        ]));
+    final readded = (await materials())
+        .where((e) => e['providerId'] == 'custom-dictionary')
+        .toList();
+    expect(readded, hasLength(2));
+    expect(readded.singleWhere((e) => !e.containsKey('deletedAt'))['id'],
+        isNot(custom['id']));
+  });
+
   test('editor removes AI and Google independently', () async {
     final ref = await repository.saveAnnotationEditorDraft(
       AnnotationEditorSaveInput(

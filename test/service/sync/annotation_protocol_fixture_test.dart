@@ -14,6 +14,27 @@ void main() {
   final cases = (corpus['cases'] as List).cast<Map<String, dynamic>>();
   final report = <Map<String, dynamic>>[];
 
+  final consumerFixtures = jsonDecode(
+      File('protocol/notes-rfc/fixtures/consumer/usage.json')
+          .readAsStringSync()) as List;
+  for (final fixture in consumerFixtures) {
+    test('RFC selected-target storage round trip: ${fixture['id']}', () {
+      final document = (fixture['document'] as Map).cast<String, dynamic>();
+      final restored = jsonDecode(canonicalAnnotationDocumentJson(document));
+      expect(restored['book'], document['book']);
+      final before = (document['annotations'] as List).single as Map;
+      final after = (restored['annotations'] as List).single as Map;
+      expect(after['target'], before['target']);
+      // Canonical serialization sorts entity arrays by ID without changing
+      // their content, including chunks, translations and tombstones.
+      expect(
+        {for (final e in after['enrichments'] as List) e['id']: e},
+        {for (final e in before['enrichments'] as List) e['id']: e},
+      );
+      expect(after['deletedAt'], before['deletedAt']);
+    });
+  }
+
   for (final fixture in cases) {
     test('M4A corpus: ${fixture['name']}', () {
       final outcome = _evaluate(fixture, documents, values);

@@ -291,5 +291,39 @@
         }
       ]
     }
+  },
+  {
+    "id": "selected-word-no-discovery",
+    "selectedText": "torch",
+    "contextText": "He pointed at the torch.",
+    "result": {
+      "translation": "факел",
+      "translationNotes": "",
+      "grammar": "",
+      "usage": "",
+      "chunks": []
+    }
+  },
+  {
+    "id": "selected-word-containing-collocation",
+    "selectedText": "torch",
+    "contextText": "He brandished the torch before entering the crypt. His companion took a deep breath.",
+    "result": {
+      "translation": "факел",
+      "translationNotes": "",
+      "grammar": "",
+      "usage": "",
+      "chunks": [
+        {
+          "canonicalForm": "brandish a torch",
+          "surfaceForm": "brandished the torch",
+          "meaning": "размахивать факелом",
+          "type": "collocation",
+          "examples": [
+            "The performer brandished a torch on stage."
+          ]
+        }
+      ]
+    }
   }
 ]

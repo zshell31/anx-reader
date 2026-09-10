@@ -10,6 +10,13 @@ independently invented extraction semantics are not. Send source text as data,
 separate from instructions where the API supports message roles. Tests inspect
 the request and parse fixture responses without a live model.
 
+selectedText is explicit learner intent; additional chunks supplement it. The
+ordinary-isolated-word exclusion applies only to automatic chunk discoveries,
+not meaningful single-word selections. Larger expressions from the containing
+sentence may qualify when directly connected to the selected occurrence; unrelated
+context mining remains forbidden. This changes instructions, not output fields:
+selectedText remains canonical target/input data and requires no synthetic chunk.
+
 ## B. Reference wording
 
 The companion plain-text file is the exact vendorable reference wording. Prompt

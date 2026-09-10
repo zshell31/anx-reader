@@ -40,8 +40,8 @@ void main() {
           resolveRoute: () => _route(),
           generate: (_, __) async => jsonEncode(payload));
       final result = await service.analyze(
-          selectedText: 'selection',
-          context: 'context',
+          selectedText: fixture['selectedText'],
+          context: fixture['contextText'],
           bookTitle: '',
           chapter: '',
           targetLanguageCode: 'ru',
@@ -97,7 +97,15 @@ void main() {
             .readAsStringSync()
             .trim()));
     expect(prompt, contains('"selectedText":"gave up"'));
-    expect(prompt, contains('never extract chunks from neighboring sentences'));
+    expect(prompt,
+        contains('Never mine unrelated expressions or neighboring sentences'));
+    expect(prompt, contains('selectedText is an explicit learning target'));
+    expect(prompt, contains('Chunks supplement selectedText'));
+    expect(prompt,
+        contains('This restriction does not apply to selectedText itself'));
+    expect(prompt, contains('Do not emit a synthetic chunk'));
+    expect(prompt,
+        contains('directly overlaps or semantically contains selectedText'));
   });
 
   test('analysis prompt uses configured language and does not force English',

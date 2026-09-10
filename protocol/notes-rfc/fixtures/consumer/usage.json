@@ -15,12 +15,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -59,7 +59,8 @@
     },
     "expressions": [
       "tighten one's grip"
-    ]
+    ],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
   },
   {
     "id": "usage-only",
@@ -77,12 +78,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -111,7 +112,8 @@
     },
     "expressions": [
       "on closer inspection"
-    ]
+    ],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
   },
   {
     "id": "same-expression",
@@ -129,12 +131,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -173,7 +175,8 @@
     },
     "expressions": [
       "tighten one's grip"
-    ]
+    ],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
   },
   {
     "id": "surface-alias",
@@ -191,12 +194,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -235,7 +238,8 @@
     },
     "expressions": [
       "tighten one's grip"
-    ]
+    ],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
   },
   {
     "id": "distinct",
@@ -253,12 +257,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -298,7 +302,8 @@
     "expressions": [
       "tighten one's grip",
       "on closer inspection"
-    ]
+    ],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
   },
   {
     "id": "unmarked",
@@ -316,12 +321,12 @@
           "updatedAt": "2026-09-10T00:00:00.000Z",
           "motivation": "selection",
           "target": {
-            "selectedText": "This entire source sentence has more than eight English words in it.",
-            "context": "You tighten your grip on the ancient sword.",
+            "selectedText": "You tighten your grip on the ancient sword as you look around the room.",
+            "context": "You tighten your grip on the ancient sword as you look around the room.",
             "selectors": [
               {
                 "type": "text-quote",
-                "exact": "tighten your grip"
+                "exact": "You tighten your grip on the ancient sword as you look around the room."
               }
             ]
           },
@@ -348,6 +353,756 @@
         }
       ]
     },
-    "expressions": []
+    "expressions": [],
+    "rationale": "Full narrative sentence, not a lexical item/expression; existing chunk/usage expectations remain unchanged."
+  },
+  {
+    "id": "selected-word-translation-only",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-word-translation-only",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He raised the torch above his head.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Explicit meaningful single word; no AI enrichment or synthetic chunk required.",
+    "meanings": {
+      "torch": "факел"
+    }
+  },
+  {
+    "id": "selected-word-broader-chunk",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-word-broader-chunk",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He carried a torch into the crypt.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            },
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "carry a torch",
+                    "surfaceForm": "carried a torch",
+                    "meaning": "нести факел",
+                    "type": "collocation",
+                    "examples": [
+                      "The guide carried a torch through the tunnel."
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch",
+      "carry a torch"
+    ],
+    "rationale": "Different lexical granularity: the collocation supplements the word.",
+    "meanings": {
+      "torch": "факел",
+      "carry a torch": "нести факел"
+    }
+  },
+  {
+    "id": "selected-canonicalized-expression",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-canonicalized-expression",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "tightened his grip",
+            "context": "He tightened his grip on the handle.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "tightened his grip"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "tighten one's grip",
+                    "surfaceForm": "tightened his grip",
+                    "meaning": "сжать крепче",
+                    "type": "collocation",
+                    "examples": [
+                      "The climber tightened her grip on the rope."
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "tighten one's grip"
+    ],
+    "rationale": "Confidently the same expression and sense with tense/person generalized; prefer structured chunk.",
+    "preferredOrigins": {
+      "tighten one's grip": "ai-chunk"
+    }
+  },
+  {
+    "id": "selected-phrase-duplicate-chunk",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-phrase-duplicate-chunk",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "upon closer inspection",
+            "context": "The flaw became clear upon closer inspection.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "upon closer inspection"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "upon closer inspection",
+                    "meaning": "при более внимательном рассмотрении",
+                    "type": "expression"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "upon closer inspection"
+    ],
+    "rationale": "Identical lexical expression and sense; one concept retains explicit selection provenance.",
+    "preferredOrigins": {
+      "upon closer inspection": "ai-chunk"
+    }
+  },
+  {
+    "id": "selected-phrase-duplicate-usage",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-phrase-duplicate-usage",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "upon closer inspection",
+            "context": "The flaw became clear upon closer inspection.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "upon closer inspection"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [],
+                "usage": "- **upon closer inspection** — при более внимательном рассмотрении."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "upon closer inspection"
+    ],
+    "rationale": "Identical lexical expression and sense; one concept retains explicit selection provenance.",
+    "preferredOrigins": {
+      "upon closer inspection": "selected-target"
+    }
+  },
+  {
+    "id": "selected-phrase-duplicate-chunk-and-usage",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-phrase-duplicate-chunk-and-usage",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "upon closer inspection",
+            "context": "The flaw became clear upon closer inspection.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "upon closer inspection"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "upon closer inspection",
+                    "meaning": "при более внимательном рассмотрении",
+                    "type": "expression"
+                  }
+                ],
+                "usage": "- **upon closer inspection** — при более внимательном рассмотрении."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "upon closer inspection"
+    ],
+    "rationale": "Identical lexical expression and sense; one concept retains explicit selection provenance.",
+    "preferredOrigins": {
+      "upon closer inspection": "ai-chunk"
+    }
+  },
+  {
+    "id": "selected-word-broader-usage",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-word-broader-usage",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He carried a torch into the crypt.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            },
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [],
+                "usage": "- **carry a torch** — нести факел."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch",
+      "carry a torch"
+    ],
+    "rationale": "Optional usage discovery supplements explicit single-word intent."
+  },
+  {
+    "id": "selected-word-unmarked-usage",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-word-unmarked-usage",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He raised the torch above his head.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [],
+                "usage": "Words like light and flame explain the meaning.\n- Обычное слово **grip**.\n- **English** is mentioned.\nInline **carry on** is not a construction bullet.\n```\n- **give up** — code example\n```"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Ordinary explanatory words, single-word bullets, inline mentions and fenced examples are not usage candidates."
+  },
+  {
+    "id": "selected-word-short-surface",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-word-short-surface",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He carried a torch into the crypt.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            },
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "carry a torch",
+                    "surfaceForm": "torch",
+                    "meaning": "нести факел",
+                    "type": "collocation",
+                    "examples": [
+                      "The guide carried a torch through the tunnel."
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch",
+      "carry a torch"
+    ],
+    "rationale": "Historical short surface fragment equals selection but is not the same lexical unit; MUST preserve both."
+  },
+  {
+    "id": "selected-ai-translation-no-chunks",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-ai-translation-no-chunks",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He raised the torch above his head.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "translation": "факел"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Historical commentary without chunks remains valid and supplies selected-target meaning.",
+    "meanings": {
+      "torch": "факел"
+    }
+  },
+  {
+    "id": "selected-personal-note-not-translation",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-personal-note-not-translation",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He raised the torch above his head.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "personal-note",
+              "kind": "personal-note",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "content": "Remember to review this tomorrow."
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Personal-note content is not translation; explicit target survives without a meaning.",
+    "meanings": {
+      "torch": null
+    }
+  },
+  {
+    "id": "selected-translation-after-personal-note",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-translation-after-personal-note",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He raised the torch above his head.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "personal-note",
+              "kind": "personal-note",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "content": "Remember this."
+            },
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Do not use the first arbitrary content field as learner-facing translation.",
+    "meanings": {
+      "torch": "факел"
+    }
+  },
+  {
+    "id": "selected-deleted-analysis",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-deleted-analysis",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He carried a torch into the crypt.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            },
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "carry a torch",
+                    "surfaceForm": "carried a torch",
+                    "meaning": "нести факел",
+                    "type": "collocation",
+                    "examples": [
+                      "The guide carried a torch through the tunnel."
+                    ]
+                  }
+                ]
+              },
+              "deletedAt": "2026-09-10T00:00:00.000Z"
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": [
+      "torch"
+    ],
+    "rationale": "Deleted AI contributes nothing but does not suppress the active target."
+  },
+  {
+    "id": "selected-deleted-parent",
+    "document": {
+      "schemaVersion": 2,
+      "book": {
+        "fingerprintAlgorithm": "md5",
+        "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "title": "Example"
+      },
+      "annotations": [
+        {
+          "id": "selected-deleted-parent",
+          "createdAt": "2026-09-10T00:00:00.000Z",
+          "updatedAt": "2026-09-10T00:00:00.000Z",
+          "motivation": "selection",
+          "target": {
+            "selectedText": "torch",
+            "context": "He carried a torch into the crypt.",
+            "selectors": [
+              {
+                "type": "text-quote",
+                "exact": "torch"
+              }
+            ]
+          },
+          "enrichments": [
+            {
+              "id": "translation",
+              "kind": "translation",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "translation": "факел"
+            },
+            {
+              "id": "ai-analysis",
+              "kind": "ai-analysis",
+              "createdAt": "2026-09-10T00:00:00.000Z",
+              "updatedAt": "2026-09-10T00:00:00.000Z",
+              "commentary": {
+                "chunks": [
+                  {
+                    "canonicalForm": "carry a torch",
+                    "surfaceForm": "carried a torch",
+                    "meaning": "нести факел",
+                    "type": "collocation",
+                    "examples": [
+                      "The guide carried a torch through the tunnel."
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "deletedAt": "2026-09-10T00:00:00.000Z"
+        }
+      ]
+    },
+    "expressions": [],
+    "rationale": "A tombstoned annotation contributes no learning candidates."
   }
 ]

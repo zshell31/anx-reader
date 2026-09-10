@@ -15,7 +15,7 @@
     },
     "chunks": {
       "type": "array",
-      "maxItems": 5,
+      "maxItems": 7,
       "items": {
         "type": "object",
         "properties": {

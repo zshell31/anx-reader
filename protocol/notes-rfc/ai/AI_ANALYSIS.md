@@ -1,7 +1,7 @@
 # AI analysis and useful chunks
 
 Modern producer transport is one structured JSON object: required string fields
-translation, translationNotes, grammar, usage and required chunks array (0–5).
+translation, translationNotes, grammar, usage and required chunks array (0–7).
 Use Russian unless an existing client explicitly configures another explanatory
 language. Empty explanation strings are allowed when irrelevant; do not fabricate
 content to fill a field. Scope is selectedText; contextText only disambiguates.
@@ -13,7 +13,11 @@ surfaceForm is the actual source form if meaningfully different. Optional type:
 collocation, expression, phrasal_verb, idiom, pattern. Optional examples are natural
 English in the same sense. Strict AI transport includes nullable surfaceForm/type/
 examples keys; normalize null to absence in canonical commentary. Up to two examples
-per modern generated chunk. Existing stored chunks/extra fields are retained;
+per modern generated chunk. Examples MUST be newly written English sentences
+in a different situation, retaining the same meaning of the chunk. Do not copy
+sentences from selectedText/contextText or merely swap names/pronouns in them.
+This is a generation requirement, not permission to rewrite historical examples.
+Existing stored chunks/extra fields are retained;
 producer limits are not retroactive limits on historical canonical data.
 
 Useful units are reusable expressions/patterns, not arbitrary n-grams. Attempt

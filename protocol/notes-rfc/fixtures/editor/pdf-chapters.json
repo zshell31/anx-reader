@@ -1,0 +1,207 @@
+[
+  {
+    "id": "russian-page",
+    "chapter": "Страница 5",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "expected": "Page 5"
+  },
+  {
+    "id": "english-page",
+    "chapter": "Page 5",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "expected": "Page 5"
+  },
+  {
+    "id": "cross-page",
+    "chapter": "Pages 4-5",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 4
+      },
+      {
+        "type": "anx-pdf-page-range",
+        "fragments": [
+          {
+            "page": 4,
+            "exact": "first"
+          },
+          {
+            "page": 5,
+            "exact": "second"
+          }
+        ]
+      }
+    ],
+    "expected": "Page 4"
+  },
+  {
+    "id": "saved-title",
+    "chapter": "The Midnight Owl",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "expected": "The Midnight Owl"
+  },
+  {
+    "id": "missing-label",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "expected": "Page 5"
+  },
+  {
+    "id": "epub-page-like-title",
+    "chapter": "Страница 5",
+    "selectors": [
+      {
+        "type": "epub-cfi",
+        "cfi": "epubcfi(/6/2)"
+      }
+    ],
+    "expected": "Страница 5"
+  },
+  {
+    "id": "no-page",
+    "chapter": "Page 5",
+    "selectors": [],
+    "expected": "Page 5"
+  },
+  {
+    "id": "conflicting-pages",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 4
+      },
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "expected": null
+  },
+  {
+    "id": "invalid-page",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 0
+      }
+    ],
+    "expected": null
+  },
+  {
+    "id": "named-chapter-from-outline",
+    "chapter": "Страница 5",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "outline": [
+      {
+        "page": 2,
+        "title": "Introduction"
+      },
+      {
+        "page": 5,
+        "title": " The Midnight Owl "
+      }
+    ],
+    "expected": "The Midnight Owl"
+  },
+  {
+    "id": "before-outline",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 1
+      }
+    ],
+    "outline": [
+      {
+        "page": 2,
+        "title": "Introduction"
+      }
+    ],
+    "expected": "Page 1"
+  },
+  {
+    "id": "no-outline",
+    "chapter": "old heading",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "outline": [],
+    "expected": "Page 5"
+  },
+  {
+    "id": "nearest-page-and-depth-first-tie",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 6
+      }
+    ],
+    "outline": [
+      {
+        "page": 5,
+        "title": "Parent"
+      },
+      {
+        "page": 5,
+        "title": "Child"
+      },
+      {
+        "page": 3,
+        "title": "Earlier"
+      },
+      {
+        "page": 8,
+        "title": "Next"
+      }
+    ],
+    "expected": "Child"
+  },
+  {
+    "id": "empty-title-skipped",
+    "selectors": [
+      {
+        "type": "pdf-page",
+        "page": 5
+      }
+    ],
+    "outline": [
+      {
+        "page": 3,
+        "title": "Chapter"
+      },
+      {
+        "page": 5,
+        "title": "  "
+      }
+    ],
+    "expected": "Chapter"
+  }
+]

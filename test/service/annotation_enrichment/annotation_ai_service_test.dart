@@ -13,6 +13,26 @@ void main() {
   final fixtures = jsonDecode(
       File('protocol/notes-rfc/fixtures/ai/analysis.json')
           .readAsStringSync()) as List;
+  test('caps new generated output at seven while retaining the seventh chunk',
+      () async {
+    final fixture =
+        fixtures.firstWhere((f) => f['id'] == 'seven-chunks-new-examples');
+    final payload = jsonDecode(jsonEncode(fixture['result'])) as Map;
+    (payload['chunks'] as List)
+        .add({...payload['chunks'][0] as Map, 'canonicalForm': 'eighth'});
+    final service = AnnotationAiService(
+        resolveRoute: () => _route(),
+        generate: (_, __) async => jsonEncode(payload));
+    final result = await service.analyze(
+        selectedText: fixture['selectedText'],
+        context: fixture['contextText'],
+        bookTitle: '',
+        chapter: '',
+        targetLanguageCode: 'ru',
+        targetLanguageName: 'Russian');
+    expect(result.commentary!.chunks!.map((c) => c.canonicalForm).toList(),
+        [for (final c in fixture['result']['chunks']) c['canonicalForm']]);
+  });
   for (final fixture in fixtures) {
     test('RFC analysis ${fixture['id'] ?? fixture['name']}', () async {
       final payload = fixture['result'] as Map;
@@ -54,7 +74,7 @@ void main() {
       }
     };
     final raw = {
-      'chunks': List.generate(6, (_) => chunk),
+      'chunks': List.generate(8, (_) => chunk),
       'futureCommentary': true
     };
     expect(AnnotationEditorCommentary.fromMap(raw).toMap(), raw);
@@ -129,7 +149,9 @@ void main() {
       'type': 'expression',
       'examples': ["I've had my suspicions for a while."],
     });
-    expect(prompt, contains('0–5 chunks'));
+    expect(prompt, contains('0–7 chunks'));
+    expect(prompt, contains('do not copy selectedText or contextText'));
+    expect(prompt, contains('do not merely swap names or pronouns'));
     expect(prompt, contains('transferable grammar'));
   });
 

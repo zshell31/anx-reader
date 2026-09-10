@@ -215,5 +215,81 @@
         }
       ]
     }
+  },
+  {
+    "id": "seven-chunks-new-examples",
+    "selectedText": "Although she was running out of time, Maya kept an eye on the clock, took care of the children, made up her mind to carry on, and finally broke the ice when the guests turned up.",
+    "contextText": "Although she was running out of time, Maya kept an eye on the clock, took care of the children, made up her mind to carry on, and finally broke the ice when the guests turned up.",
+    "result": {
+      "translation": "Несмотря на нехватку времени, Майя справилась с делами и встретила гостей.",
+      "translationNotes": "",
+      "grammar": "",
+      "usage": "",
+      "chunks": [
+        {
+          "canonicalForm": "run out of",
+          "surfaceForm": "running out of time",
+          "meaning": "исчерпать запас",
+          "type": "phrasal_verb",
+          "examples": [
+            "The hikers ran out of water."
+          ]
+        },
+        {
+          "canonicalForm": "keep an eye on",
+          "surfaceForm": "kept an eye on the clock",
+          "meaning": "следить за",
+          "type": "expression",
+          "examples": [
+            "Please keep an eye on my bag."
+          ]
+        },
+        {
+          "canonicalForm": "take care of",
+          "surfaceForm": "took care of the children",
+          "meaning": "заботиться о",
+          "type": "expression",
+          "examples": [
+            "Volunteers take care of injured birds."
+          ]
+        },
+        {
+          "canonicalForm": "make up one’s mind",
+          "surfaceForm": "made up her mind",
+          "meaning": "решиться",
+          "type": "idiom",
+          "examples": [
+            "I cannot make up my mind about the colour."
+          ]
+        },
+        {
+          "canonicalForm": "carry on",
+          "surfaceForm": null,
+          "meaning": "продолжать",
+          "type": "phrasal_verb",
+          "examples": [
+            "The band carried on despite the rain."
+          ]
+        },
+        {
+          "canonicalForm": "break the ice",
+          "surfaceForm": "broke the ice",
+          "meaning": "разрядить обстановку",
+          "type": "idiom",
+          "examples": [
+            "A quick game can break the ice at a workshop."
+          ]
+        },
+        {
+          "canonicalForm": "turn up",
+          "surfaceForm": "turned up",
+          "meaning": "появиться",
+          "type": "phrasal_verb",
+          "examples": [
+            "My missing keys turned up in a drawer."
+          ]
+        }
+      ]
+    }
   }
 ]

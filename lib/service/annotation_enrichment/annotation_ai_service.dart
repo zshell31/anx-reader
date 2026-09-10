@@ -59,7 +59,7 @@ class AnnotationAiService {
               .map((item) => AiChunk.fromMap(item, generated: true))
               .where((item) =>
                   item.canonicalForm.isNotEmpty && item.meaning.isNotEmpty)
-              .take(5)
+              .take(7)
               .toList(growable: false)
           : null,
     );

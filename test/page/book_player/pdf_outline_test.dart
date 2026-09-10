@@ -18,6 +18,8 @@ void main() {
 
     final result = buildPdfOutlineToc([chapter], 10);
 
+    expect(result.chapters.map((c) => (c.page, c.title)),
+        [(3, 'Chapter 1'), (5, 'Section 1.1')]);
     expect(result.items.single.label, 'Chapter 1');
     expect(result.items.single.startPage, 3);
     expect(result.items.single.startPercentage, 0.2);
@@ -39,5 +41,6 @@ void main() {
 
     expect(result.items.single.startPage, 0);
     expect(result.destinations, isEmpty);
+    expect(result.chapters, isEmpty);
   });
 }

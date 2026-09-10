@@ -1,3 +1,4 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
 import 'dart:collection';
 
 import 'package:anx_reader/service/sync/annotation_protocol.dart';
@@ -252,7 +253,7 @@ class CanonicalAnnotationReadAdapter {
       selectedText: selectedText is String ? selectedText : '',
       annotationContext:
           context is String && context.isNotEmpty ? context : null,
-      chapter: chapter is String && chapter.isNotEmpty ? chapter : null,
+      chapter: annotationChapterLabel(chapter, target['selectors'] as List),
       createdAt: DateTime.parse(annotation['createdAt'] as String),
       updatedAt: DateTime.parse(annotation['updatedAt'] as String),
       activeEnrichments: activeAnnotationEnrichments(annotation),

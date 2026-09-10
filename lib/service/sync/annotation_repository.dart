@@ -1,3 +1,4 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
 import 'dart:typed_data';
 
 import 'package:anx_reader/models/book.dart';
@@ -263,6 +264,28 @@ class AnnotationRepository {
   Future<AnnotationRef> updatePresentation(
           AnnotationRef ref, String type, String color) =>
       _enqueue(() => _updatePresentationByRef(ref, type, color));
+
+  Future<void> refreshPdfChapters(Book book, List<PdfChapter> chapters) =>
+      _enqueue(() async {
+        final fingerprint = canonicalMd5Fingerprint(book.md5);
+        final document = await sharedState.annotationDocument(fingerprint);
+        if (document == null) return;
+        var changed = false;
+        for (final annotation
+            in (document['annotations'] as List).cast<Map<String, dynamic>>()) {
+          if (isProtocolEntityTombstoned(annotation)) continue;
+          final target = annotation['target'] as Map<String, dynamic>;
+          final selectors = target['selectors'] as List;
+          if (annotationPdfPage(selectors) == null) continue;
+          final chapter = annotationChapterLabel(target['chapter'], selectors,
+              outline: chapters);
+          if (target['chapter'] == chapter) continue;
+          target['chapter'] = chapter;
+          annotation['updatedAt'] = _nextTimestamp(annotation);
+          changed = true;
+        }
+        if (changed) await _commit(fingerprint, document);
+      });
 
   Future<AnnotationRef> createBookmark(BookmarkCreation input) =>
       _enqueue(() async {
@@ -702,8 +725,9 @@ class AnnotationRepository {
   String? _editorMaterialSlotForEntity(Map<String, dynamic> entity) {
     final kind = entity['kind'];
     if (kind == 'ai-analysis') return 'ai-analysis';
-    if (const {'translation', 'dictionary', 'audio'}.contains(kind))
+    if (const {'translation', 'dictionary', 'audio'}.contains(kind)) {
       return '$kind:${entity['providerId'] ?? 'unknown'}';
+    }
     return null;
   }
 

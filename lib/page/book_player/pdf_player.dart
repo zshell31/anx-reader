@@ -1,3 +1,5 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
+import 'package:anx_reader/service/sync/annotation_repository.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/page/book_player/pdf_crop.dart';
 import 'package:anx_reader/page/book_player/pdf_crop_editor.dart';
@@ -73,6 +75,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
   SelectionPersistenceSession? _annotationSelectionSession;
   PdfTextSelectionRange? _annotationSelectionRange;
   Map<String, PdfDest> _outlineDestinations = const {};
+  Future<List<PdfChapter>>? _chapters;
   int _viewportGeneration = 0;
   int _wordSelectionGeneration = 0;
 
@@ -161,8 +164,9 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       });
       if (mounted && crop != null) _automaticCrops[pageNumber] = crop;
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _automaticCrops[pageNumber] = const Rect.fromLTWH(0, 0, 1, 1);
+      }
     } finally {
       _cropLoading.remove(pageNumber);
     }
@@ -396,7 +400,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       _refitAfterCrop(_currentPageNumber);
     }
     unawaited(refreshAnnotations());
-    unawaited(_loadOutline(document));
+    _chapters = _loadOutline(document);
+    // Keep selection errors explicit without an unhandled asynchronous exception.
+    unawaited(_chapters!.then<void>((_) {},
+        onError: (Object error, StackTrace stack) {
+      debugPrint('PDF outline could not be loaded: $error');
+    }));
     if (_initialPageOffsetRatio != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -427,12 +436,14 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     });
   }
 
-  Future<void> _loadOutline(PdfDocument document) async {
+  Future<List<PdfChapter>> _loadOutline(PdfDocument document) async {
     final outline = await document.loadOutline();
-    if (!mounted) return;
+    if (!mounted) return const [];
     final toc = buildPdfOutlineToc(outline, document.pages.length);
     _outlineDestinations = toc.destinations;
     ref.read(bookTocProvider.notifier).setToc(toc.items);
+    await annotationRepository.refreshPdfChapters(widget.book, toc.chapters);
+    return toc.chapters;
   }
 
   Widget? _buildContextMenu(
@@ -462,6 +473,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         loadPageSize: _loadPageSize,
         resolvePageOffset: _resolvePageOffset,
         existingSession: existing,
+        chapters: _chapters,
       ),
     );
   }

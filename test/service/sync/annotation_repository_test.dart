@@ -1,3 +1,4 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -77,6 +78,65 @@ void main() {
   tearDown(() async {
     await shared.close();
     await directory.delete(recursive: true);
+  });
+
+  test(
+      'PDF chapter refresh preserves targets and materials and survives WebDAV merge',
+      () async {
+    final original = decodeAnnotationDocument({
+      'schemaVersion': 2,
+      'book': {'fingerprintAlgorithm': 'md5', 'fingerprint': fingerprint},
+      'annotations': [
+        {
+          'id': 'note',
+          'motivation': 'selection',
+          'createdAt': '2026-01-01T00:00:00.000Z',
+          'updatedAt': '2026-09-12T00:00:00.000Z',
+          'target': {
+            'selectedText': 'source',
+            'chapter': 'Страница 5',
+            'future': true,
+            'selectors': [
+              {'type': 'pdf-page', 'page': 5},
+              {'type': 'text-quote', 'exact': 'source'}
+            ]
+          },
+          'enrichments': [
+            {
+              'id': 'personal',
+              'kind': 'personal-note',
+              'content': 'Keep',
+              'createdAt': '2026-01-01T00:00:00.000Z',
+              'updatedAt': '2026-01-01T00:00:00.000Z'
+            }
+          ]
+        }
+      ]
+    });
+    await shared.putAnnotationDocument(original);
+    const chapters = [PdfChapter(page: 3, title: 'Chapter One')];
+    await repository.refreshPdfChapters(localPdf(), chapters);
+    final updated = (await shared.annotationDocument(fingerprint))!;
+    final note = annotationOf(updated, 'note');
+    expect(note['target'], {
+      ...annotationOf(original, 'note')['target'] as Map,
+      'chapter': 'Chapter One'
+    });
+    expect(note['updatedAt'], '2026-09-12T00:00:00.001Z');
+    expect(note['enrichments'], annotationOf(original, 'note')['enrichments']);
+    expect(mergeAnnotationDocuments(original, updated), updated);
+    expect(mergeAnnotationDocuments(updated, original), updated);
+    final notifications = semanticNotifications.length;
+    await repository.refreshPdfChapters(localPdf(), chapters);
+    expect(await shared.annotationDocument(fingerprint), updated);
+    expect(semanticNotifications.length, notifications);
+    note['deletedAt'] = '2026-09-12T00:00:00.002Z';
+    await shared.putAnnotationDocument(updated);
+    await repository.refreshPdfChapters(localPdf(), const []);
+    expect(
+        annotationOf((await shared.annotationDocument(fingerprint))!, 'note')[
+            'target']['chapter'],
+        'Chapter One');
   });
 
   test('creation commits canonical state before notifying listeners', () async {

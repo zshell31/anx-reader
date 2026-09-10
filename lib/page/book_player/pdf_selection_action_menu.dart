@@ -1,3 +1,4 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -23,9 +24,11 @@ class PdfSelectionActionMenu extends StatefulWidget {
     required this.loadPageSize,
     required this.resolvePageOffset,
     this.existingSession,
+    this.chapters,
   });
 
   final Book book;
+  final Future<List<PdfChapter>>? chapters;
   final PdfTextSelectionDelegate selection;
   final Offset primaryAnchor;
   final Offset? secondaryAnchor;
@@ -61,9 +64,8 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
     if (selectionData == null) return null;
     final target = selectionData.target;
     final context = selectionData.context;
-    final chapter = target.page == target.endPage
-        ? 'Page ${target.page}'
-        : 'Pages ${target.page}-${target.endPage}';
+    final chapter =
+        pdfChapterAt(target.page, await widget.chapters ?? const []);
     return _PdfSelectionMenuData(
       target: target,
       context: context,
@@ -143,9 +145,7 @@ class _PdfSelectionActionMenuState extends State<PdfSelectionActionMenu> {
                   book: widget.book,
                   annoCfi: encodePdfReadingPosition(data.target.page),
                   annoContent: data.target.exact,
-                  chapter: data.target.page == data.target.endPage
-                      ? 'Page ${data.target.page}'
-                      : 'Pages ${data.target.page}-${data.target.endPage}',
+                  chapter: data.session.snapshot.chapter,
                   annotationContext: data.context,
                   lookupContext: data.context,
                   persistenceSession: data.session,

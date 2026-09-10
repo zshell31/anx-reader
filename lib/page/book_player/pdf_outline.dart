@@ -1,10 +1,15 @@
+import 'package:anx_reader/service/sync/annotation_chapter.dart';
 import 'package:anx_reader/models/toc_item.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 class PdfOutlineToc {
-  const PdfOutlineToc({required this.items, required this.destinations});
+  const PdfOutlineToc(
+      {required this.items,
+      required this.destinations,
+      required this.chapters});
 
   final List<TocItem> items;
+  final List<PdfChapter> chapters;
   final Map<String, PdfDest> destinations;
 }
 
@@ -13,6 +18,7 @@ PdfOutlineToc buildPdfOutlineToc(
   int pageCount,
 ) {
   final destinations = <String, PdfDest>{};
+  final chapters = <PdfChapter>[];
 
   List<TocItem> convert(List<PdfOutlineNode> nodes, List<int> parentPath) {
     return [
@@ -24,6 +30,13 @@ PdfOutlineToc buildPdfOutlineToc(
           final dest = node.dest;
           if (dest != null) destinations[id] = dest;
           final page = dest?.pageNumber.clamp(1, pageCount) ?? 0;
+          if (dest != null &&
+              dest.pageNumber >= 1 &&
+              dest.pageNumber <= pageCount &&
+              node.title.trim().isNotEmpty) {
+            chapters.add(
+                PdfChapter(page: dest.pageNumber, title: node.title.trim()));
+          }
           return TocItem(
             id: id,
             href: id,
@@ -41,5 +54,6 @@ PdfOutlineToc buildPdfOutlineToc(
   return PdfOutlineToc(
     items: convert(outline, const []),
     destinations: Map.unmodifiable(destinations),
+    chapters: List.unmodifiable(chapters),
   );
 }

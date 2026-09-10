@@ -1,7 +1,7 @@
 repository: /home/zshell/projects/obsidian/notes_rfc
-version: 1.0.2
-revision: 52311bdd2e123d285b4cb742d5ec5db934ee6842
-fixture_revision: 52311bdd2e123d285b4cb742d5ec5db934ee6842
+version: 2.0.0
+revision: d9be9b0ccf3e6e071d892dc05ef7a9ac5155e20e
+fixture_revision: d9be9b0ccf3e6e071d892dc05ef7a9ac5155e20e
 role: producer/consumer + AI + reference Study Note Editor
 status: offline adoption verified; native/provider acceptance pending (RFC PROGRESS.md)
 contracts: canonical-book-v2, ai-analysis, study-editor

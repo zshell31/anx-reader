@@ -1,3 +1,4 @@
+import 'package:anx_reader/widgets/common/request_progress_indicator.dart';
 import 'dart:async';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -207,7 +208,7 @@ class AiChatStreamState extends ConsumerState<AiChatStream> {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: RequestProgressIndicator()),
               error: (error, stack) => Center(
                 child: Text(L10n.of(context).failedToLoadHistoryTip),
               ),

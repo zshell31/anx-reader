@@ -1,3 +1,4 @@
+import 'package:anx_reader/widgets/common/request_progress_indicator.dart';
 import 'dart:math' as math;
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -415,9 +416,9 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                               title: Text(provider.providerName),
                               trailing: const SizedBox.square(
                                   dimension: 18,
-                                  child: CircularProgressIndicator(
+                                  child: RequestProgressIndicator(
                                       strokeWidth: 2)),
-                              children: const [LinearProgressIndicator()],
+                              children: const [RequestLinearProgressIndicator()],
                             )),
                         for (final provider in AnnotationEditorProvider.values)
                           if (draft.sourceResults[provider]
@@ -491,7 +492,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                               ? const SizedBox.square(
                                   dimension: 18,
                                   child:
-                                      CircularProgressIndicator(strokeWidth: 2))
+                                      RequestProgressIndicator(strokeWidth: 2))
                               : null,
                           initiallyExpanded: widget.focusAiChat,
                           children: [
@@ -539,7 +540,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                                   icon: controller.chatLoading
                                       ? const SizedBox.square(
                                           dimension: 20,
-                                          child: CircularProgressIndicator(
+                                          child: RequestProgressIndicator(
                                             strokeWidth: 2,
                                           ),
                                         )
@@ -587,7 +588,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                               child: controller.saving
                                   ? const SizedBox.square(
                                       dimension: 18,
-                                      child: CircularProgressIndicator(
+                                      child: RequestProgressIndicator(
                                         strokeWidth: 2,
                                       ),
                                     )
@@ -671,7 +672,7 @@ class _ProviderButton extends StatelessWidget {
         avatar: state.loading
             ? const SizedBox.square(
                 dimension: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: RequestProgressIndicator(strokeWidth: 2),
               )
             : Icon(_providerIcon(provider), size: 18),
         label: Text(
@@ -757,7 +758,7 @@ class _SourceCardState extends State<_SourceCard> {
                 padding: EdgeInsets.all(12),
                 child: SizedBox.square(
                   dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: RequestProgressIndicator(strokeWidth: 2),
                 ),
               )
             else

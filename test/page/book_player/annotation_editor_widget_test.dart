@@ -29,6 +29,32 @@ void main() {
     await Prefs().initPrefs();
   });
 
+  testWidgets('e-ink pending provider remains visible without ticking frames',
+      (tester) async {
+    Prefs().eInkMode = true;
+    final google = _PendingGoogle();
+    final controller =
+        _controller(draft: _draftWithAllSources(), google: google);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    final card = find.ancestor(
+        of: find.text('Google Translate'), matching: find.byType(Card));
+    await tester.tap(
+        find.descendant(of: card, matching: find.byIcon(Icons.delete_outline)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ActionChip, 'Google Translate'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('pending-google-translate')), findsOneWidget);
+    expect(find.byIcon(Icons.hourglass_empty), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    google.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('refreshed translation'), findsOneWidget);
+  });
+
   testWidgets('RFC default blocks start collapsed', (tester) async {
     final fixture = jsonDecode(
         File('protocol/notes-rfc/fixtures/editor/states.json')

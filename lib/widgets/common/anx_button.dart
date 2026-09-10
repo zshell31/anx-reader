@@ -1,3 +1,4 @@
+import 'package:anx_reader/widgets/common/request_progress_indicator.dart';
 import 'package:flutter/material.dart';
 
 enum AnxButtonType { filled, outlined, text }
@@ -99,7 +100,7 @@ class AnxButton extends StatelessWidget {
       buttonContent = SizedBox(
         width: 24,
         height: 24,
-        child: CircularProgressIndicator(
+        child: RequestProgressIndicator(
           strokeWidth: 2.0,
           color: type == AnxButtonType.filled
               ? Theme.of(context).colorScheme.onPrimary
@@ -161,7 +162,7 @@ class AnxButton extends StatelessWidget {
           ? SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(
+              child: RequestProgressIndicator(
                 strokeWidth: 2.0,
                 color: type == AnxButtonType.filled
                     ? Theme.of(context).colorScheme.onPrimary
@@ -219,7 +220,7 @@ class AnxButton extends StatelessWidget {
           child: SizedBox(
         height: 20,
         width: 20,
-        child: CircularProgressIndicator(
+        child: RequestProgressIndicator(
             strokeWidth: 2,
             color: type == AnxButtonType.filled
                 ? Theme.of(context).colorScheme.onPrimary

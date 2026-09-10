@@ -50,5 +50,25 @@
       "exact": "target 😀"
     },
     "expected": "target 😀"
+  },
+  {
+    "name": "joined context cannot override exact quote",
+    "text": "Before the Night Owl, selected phrase. As luck would have it.",
+    "quote": {
+      "exact": "selected phrase",
+      "prefix": "Before the NightOwl, ",
+      "suffix": ". As luckwould have it."
+    },
+    "expected": null
+  },
+  {
+    "name": "valid context across text runs",
+    "text": "Before the Night Owl, selected phrase. As luck would have it.",
+    "quote": {
+      "exact": "selected phrase",
+      "prefix": "Before the Night Owl, ",
+      "suffix": ". As luck would have it."
+    },
+    "expected": "selected phrase"
   }
 ]

@@ -75,5 +75,31 @@
       "prefix": "First ",
       "suffix": " here. Second target there."
     }
+  },
+  {
+    "id": "context-crosses-neighboring-runs",
+    "page": 5,
+    "spans": [
+      "Before the Night",
+      "Owl, selected phrase. As luck",
+      "would have it."
+    ],
+    "start": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 5
+    },
+    "end": {
+      "layerIndex": 0,
+      "spanIndex": 1,
+      "offset": 20
+    },
+    "fullText": "Before the Night Owl, selected phrase. As luck would have it.",
+    "expected": {
+      "page": 5,
+      "exact": "selected phrase",
+      "prefix": "Before the Night Owl, ",
+      "suffix": ". As luck would have it."
+    }
   }
 ]

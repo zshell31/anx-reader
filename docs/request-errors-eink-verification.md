@@ -75,4 +75,8 @@ versionName=1.15.0, lastUpdateTime=2026-09-10 19:53:57. firstInstallTime remains
 2026-09-02 20:43:03: this was an in-place update, with no uninstall or data clear.
 MainActivity launch returned Status: ok, the app process remained running, and
 the crash buffer was empty. This is a launch smoke check, not a live paid AI test.
-A second device is pending connection; verify its ABI before installing this APK.
+The same verified ARM64 APK was subsequently installed with adb install -r on
+LOMONOSOV3 (A3DE65C3). Android confirms versionCode=6325 and
+lastUpdateTime=2026-09-10 20:00:19; firstInstallTime remains 2026-09-05 00:40:46.
+MainActivity cold launch returned Status: ok (1185 ms), the process remained
+running, and the crash buffer was empty. No uninstall or data clear was used.

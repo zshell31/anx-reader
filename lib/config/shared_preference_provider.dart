@@ -527,6 +527,7 @@ class Prefs extends ChangeNotifier {
   }
 
   PageTurn get pageTurnStyle {
+    if (eInkMode) return PageTurn.noAnimation;
     String? style = prefs.getString('pageTurnStyle');
     if (style == null) return PageTurn.slide;
     return PageTurn.values.firstWhere((element) => element.name == style);

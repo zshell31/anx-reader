@@ -158,6 +158,7 @@ class StyleWidgetState extends State<StyleWidget> {
     return Row(children: [
       Expanded(
         child: DropdownMenu<PageTurn>(
+          enabled: !Prefs().eInkMode,
           label: Text(L10n.of(context).readingPagePageTurningMethod),
           initialSelection: Prefs().pageTurnStyle,
           expandedInsets: const EdgeInsets.only(right: 5),

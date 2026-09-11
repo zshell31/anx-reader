@@ -963,6 +963,12 @@ export class Paginator extends HTMLElement {
 
     if (this.scrolled) return
 
+    // Keep the page stationary until release when page animation is disabled.
+    if (!this.hasAttribute('animated')) {
+      e.preventDefault()
+      return
+    }
+
     if (verticalDrag && horizontalAxis) {
       e.preventDefault()
       // Lock horizontal position during vertical drag (direction locking)
@@ -999,6 +1005,19 @@ export class Paginator extends HTMLElement {
     if (this.scrolled || state?.selecting
       || window.getSelection()?.toString()) {
       this.#touchState = null
+      return
+    }
+
+    if (!this.hasAttribute('animated')) {
+      this.#touchState = null
+      if (!state || state.pinched || globalThis.visualViewport.scale !== 1) return
+      const horizontal = state.axis === 'scrollLeft'
+      if (state.direction !== (horizontal ? 'horizontal' : 'vertical')) return
+      const delta = horizontal ? state.delta.x : state.delta.y
+      if (Math.abs(delta) < 40) return
+      const forward = horizontal && this.#rtl ? delta > 0 : delta < 0
+      if (forward) this.next()
+      else this.prev()
       return
     }
 

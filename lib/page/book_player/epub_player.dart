@@ -245,6 +245,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void changePageTurnStyle(PageTurn pageTurnStyle) {
+    if (Prefs().eInkMode) pageTurnStyle = PageTurn.noAnimation;
     webViewController.evaluateJavascript(source: '''
       changeStyle({
         pageTurnStyle: '${pageTurnStyle.name}',

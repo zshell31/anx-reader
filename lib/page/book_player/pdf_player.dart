@@ -231,25 +231,17 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     final destination = _outlineDestinations[href];
     if (destination == null) return;
     if (_reflowMode) {
-      await _reflowPageController?.animateToPage(
-        destination.pageNumber - 1,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      await _goToReflowPage(destination.pageNumber - 1);
       return;
     }
     if (controller.isReady) {
-      await controller.goToDest(destination);
+      await controller.goToDest(destination, duration: _pageTurnDuration);
     }
   }
 
   Future<void> goToAnnotation(PdfAnnotationTarget target) async {
     if (_reflowMode) {
-      await _reflowPageController?.animateToPage(
-        target.page - 1,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      await _goToReflowPage(target.page - 1);
       return;
     }
     await _goToPageOffset(target.page, target.pageOffsetRatio);
@@ -260,7 +252,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
       return;
     }
     if (offsetRatio == null) {
-      await controller.goToPage(pageNumber: pageNumber);
+      await controller.goToPage(
+          pageNumber: pageNumber, duration: _pageTurnDuration);
       return;
     }
     final pageRect = controller.layout.pageLayouts[pageNumber - 1];
@@ -288,20 +281,31 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     await goToPage(_currentPageNumber + delta);
   }
 
+  Duration get _pageTurnDuration =>
+      Prefs().eInkMode ? Duration.zero : const Duration(milliseconds: 200);
+
+  Future<void> _goToReflowPage(int index) async {
+    if (Prefs().eInkMode) {
+      _reflowPageController?.jumpToPage(index);
+    } else {
+      await _reflowPageController?.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   Future<void> goToPage(int pageNumber) async {
     if (_pageCount < 1) return;
     final next = pageNumber.clamp(1, _pageCount);
     if (next == _currentPageNumber) return;
     if (_reflowMode) {
-      await _reflowPageController?.animateToPage(
-        next - 1,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      await _goToReflowPage(next - 1);
       return;
     }
     if (!controller.isReady) return;
-    await controller.goToPage(pageNumber: next);
+    await controller.goToPage(pageNumber: next, duration: _pageTurnDuration);
   }
 
   void toggleReadingMode() {
@@ -309,7 +313,8 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
     if (_reflowMode) {
       setState(() => _reflowMode = false);
       widget.onReadingModeChanged(false);
-      unawaited(controller.goToPage(pageNumber: _currentPageNumber));
+      unawaited(controller.goToPage(
+          pageNumber: _currentPageNumber, duration: _pageTurnDuration));
       return;
     }
     _reflowPageController?.dispose();
@@ -906,6 +911,7 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
             child: ColoredBox(
               color: Theme.of(context).colorScheme.surface,
               child: PdfReflowView(
+                eInkMode: Prefs().eInkMode,
                 pageCount: _pageCount,
                 pageController: _reflowPageController!,
                 blockLoader: _textBlockLoader,

@@ -17,11 +17,16 @@ function fixture() {
         requestAnimationFrame: fn => frames.push(fn),
     })
     const paginator = vm.runInContext(`new (class {
-        #touchState; #touchScrolled; #pendingRelocate;
+        #touchState; #touchScrolled; #pendingRelocate; #rtl = false;
         #ignoreNativeScroll = false; #paginatedOffset = 100;
         #justAnchored = false; #pendingScrollFrame;
         #container = { scrollLeft: 100 };
         scrollProp = 'scrollLeft'; page = 1; scrolled = false; snaps = 0; events = [];
+        animated = true; nextCalls = 0; prevCalls = 0;
+        hasAttribute() { return this.animated; }
+        next() { this.nextCalls++; }
+        prev() { this.prevCalls++; }
+        set rtl(value) { this.#rtl = value; }
         dispatchEvent(e) { this.events.push(e.type); }
         snap() { this.snaps++; }
         #afterScroll() { this.events.push('relocate'); }
@@ -115,4 +120,35 @@ test('handle-owned gesture holds page even during a transient empty range', () =
     f.select('')
     f.paginator.nativeScroll(80)
     assert.equal(f.paginator.offset, 100)
+})
+
+for (const rtl of [false, true]) {
+    test(`unanimated swipe stays still and turns once on release (rtl=${rtl})`, () => {
+        const f = fixture()
+        f.paginator.animated = false
+        f.paginator.rtl = rtl
+        f.paginator.start(f.event(90))
+        const move = f.event(20)
+        let prevented = false
+        move.preventDefault = () => { prevented = true }
+        f.paginator.move(move)
+        assert.equal(prevented, true)
+        assert.equal(f.paginator.offset, 100)
+        assert.equal(f.paginator.nextCalls + f.paginator.prevCalls, 0)
+        f.paginator.end(f.event(20))
+        f.flush()
+        assert.equal(f.paginator.nextCalls, rtl ? 0 : 1)
+        assert.equal(f.paginator.prevCalls, rtl ? 1 : 0)
+        assert.equal(f.paginator.snaps, 0)
+    })
+}
+
+test('unanimated short drag does not turn a page', () => {
+    const f = fixture()
+    f.paginator.animated = false
+    f.paginator.start(f.event(90))
+    f.paginator.move(f.event(70))
+    f.paginator.end(f.event(70))
+    f.flush()
+    assert.equal(f.paginator.nextCalls + f.paginator.prevCalls, 0)
 })

@@ -4,6 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('E-Ink swipe keeps text still and jumps on release',
+      (tester) async {
+    final controller = PageController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PdfReflowView(
+          eInkMode: true,
+          pageCount: 3,
+          pageController: controller,
+          blockLoader: PdfTextBlockPageLoader(
+              loadPageText: (page) async => PdfPageTextSource(
+                  pageNumber: page, fullText: 'Page $page text.')),
+          translateBlock: (block, context) async => block.text,
+          onPageChanged: (_) {},
+          onTap: () {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(const Offset(700, 300));
+    await gesture.moveBy(const Offset(-100, 0));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveBy(const Offset(-100, 0));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(controller.page, 0);
+    await gesture.up();
+    await tester.pump();
+    expect(controller.page, 1);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('loads the anchored page and translates only built blocks',
       (tester) async {
     final loadedPages = <int>[];

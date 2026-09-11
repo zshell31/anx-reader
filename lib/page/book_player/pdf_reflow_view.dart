@@ -9,6 +9,7 @@ typedef PdfTextBlockTranslator = Future<String> Function(
 class PdfReflowView extends StatelessWidget {
   const PdfReflowView({
     super.key,
+    this.eInkMode = false,
     required this.pageCount,
     required this.pageController,
     required this.blockLoader,
@@ -17,6 +18,7 @@ class PdfReflowView extends StatelessWidget {
     required this.onTap,
   });
 
+  final bool eInkMode;
   final int pageCount;
   final PageController pageController;
   final PdfTextBlockPageLoader blockLoader;
@@ -26,10 +28,12 @@ class PdfReflowView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var dragDistance = 0.0;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: onTap,
       child: PageView.builder(
+        physics: eInkMode ? const NeverScrollableScrollPhysics() : null,
         controller: pageController,
         itemCount: pageCount,
         onPageChanged: (index) => onPageChanged(index + 1),
@@ -39,6 +43,27 @@ class PdfReflowView extends StatelessWidget {
           blockLoader: blockLoader,
           translateBlock: translateBlock,
           onTap: onTap,
+          onHorizontalDragStart: eInkMode ? (_) => dragDistance = 0 : null,
+          onHorizontalDragUpdate: eInkMode
+              ? (details) => dragDistance += details.primaryDelta ?? 0
+              : null,
+          onHorizontalDragEnd: eInkMode
+              ? (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (pageCount < 1 ||
+                      (dragDistance.abs() < 40 && velocity.abs() < 100)) {
+                    return;
+                  }
+                  final delta =
+                      dragDistance.abs() >= 40 ? dragDistance : velocity;
+                  final current = pageController.page?.round() ?? 0;
+                  final rtl = Directionality.of(context) == TextDirection.rtl;
+                  final forward = rtl ? delta > 0 : delta < 0;
+                  final next =
+                      (current + (forward ? 1 : -1)).clamp(0, pageCount - 1);
+                  pageController.jumpToPage(next);
+                }
+              : null,
         ),
       ),
     );
@@ -52,12 +77,18 @@ class _PdfReflowPage extends StatefulWidget {
     required this.blockLoader,
     required this.translateBlock,
     required this.onTap,
+    this.onHorizontalDragStart,
+    this.onHorizontalDragUpdate,
+    this.onHorizontalDragEnd,
   });
 
   final int pageNumber;
   final PdfTextBlockPageLoader blockLoader;
   final PdfTextBlockTranslator translateBlock;
   final VoidCallback onTap;
+  final GestureDragStartCallback? onHorizontalDragStart;
+  final GestureDragUpdateCallback? onHorizontalDragUpdate;
+  final GestureDragEndCallback? onHorizontalDragEnd;
 
   @override
   State<_PdfReflowPage> createState() => _PdfReflowPageState();
@@ -111,6 +142,9 @@ class _PdfReflowPageState extends State<_PdfReflowPage> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: widget.onTap,
+            onHorizontalDragStart: widget.onHorizontalDragStart,
+            onHorizontalDragUpdate: widget.onHorizontalDragUpdate,
+            onHorizontalDragEnd: widget.onHorizontalDragEnd,
             child: LayoutBuilder(builder: (context, constraints) {
               final margin = constraints.maxWidth > 800
                   ? (constraints.maxWidth - 752) / 2

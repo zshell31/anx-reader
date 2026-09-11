@@ -416,9 +416,11 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                               title: Text(provider.providerName),
                               trailing: const SizedBox.square(
                                   dimension: 18,
-                                  child: RequestProgressIndicator(
-                                      strokeWidth: 2)),
-                              children: const [RequestLinearProgressIndicator()],
+                                  child:
+                                      RequestProgressIndicator(strokeWidth: 2)),
+                              children: const [
+                                RequestLinearProgressIndicator()
+                              ],
                             )),
                         for (final provider in AnnotationEditorProvider.values)
                           if (draft.sourceResults[provider]
@@ -443,7 +445,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                             ),
                           ],
                         for (final result in draft.additionalSources)
-                          ExpansionTile(
+                          _EditorExpansionTile(
                               title: Text(result.providerName),
                               children: [
                                 if (result.markdown?.isNotEmpty == true)
@@ -457,7 +459,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                                     label: Text(l10n.commonRemove)),
                               ]),
                         const SizedBox(height: 20),
-                        ExpansionTile(
+                        _EditorExpansionTile(
                           title: Text(l10n.annotationEditorPersonalNote),
                           maintainState: true,
                           initiallyExpanded: widget.focusPersonalNote,
@@ -486,7 +488,7 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        ExpansionTile(
+                        _EditorExpansionTile(
                           title: Text(l10n.annotationEditorAiChat),
                           trailing: controller.chatLoading
                               ? const SizedBox.square(
@@ -618,6 +620,48 @@ class _AnnotationEditorDialogState extends State<AnnotationEditorDialog> {
 }
 
 enum _UnsavedAction { save, discard, cancel }
+
+class _EditorExpansionTile extends StatefulWidget {
+  final Widget title;
+  final Widget? trailing;
+  final bool initiallyExpanded;
+  final bool maintainState;
+  final List<Widget> children;
+
+  const _EditorExpansionTile({
+    required this.title,
+    this.trailing,
+    this.initiallyExpanded = false,
+    this.maintainState = false,
+    required this.children,
+  });
+
+  @override
+  State<_EditorExpansionTile> createState() => _EditorExpansionTileState();
+}
+
+class _EditorExpansionTileState extends State<_EditorExpansionTile> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+        title: widget.title,
+        tilePadding: EdgeInsets.zero,
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        initiallyExpanded: widget.initiallyExpanded,
+        maintainState: widget.maintainState,
+        onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+        trailing: widget.trailing ??
+            AnimatedRotation(
+              turns: _expanded ? 0.25 : 0,
+              duration: Prefs().eInkMode
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
+              child: const Icon(Icons.chevron_right),
+            ),
+        children: widget.children,
+      );
+}
 
 class _ContextSection extends StatefulWidget {
   final String title;

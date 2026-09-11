@@ -55,6 +55,42 @@ void main() {
     expect(find.text('refreshed translation'), findsOneWidget);
   });
 
+  testWidgets(
+      'chat messages share the left edge and sections use right/down arrows',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final draft = _newDraft()
+      ..addAiExchange('Short question', 'Answer')
+      ..addAiExchange('A considerably longer question for alignment', 'Answer');
+    draft.aiMessages.removeWhere((message) => message.role == 'assistant');
+    final controller = _controller(draft: draft);
+    addTearDown(controller.dispose);
+    await _openDialog(tester, controller);
+    final chat = find.ancestor(
+        of: find.text('AI chat'), matching: find.byType(ExpansionTile));
+    final arrow =
+        find.descendant(of: chat, matching: find.byType(AnimatedRotation));
+    expect(tester.widget<AnimatedRotation>(arrow).turns, 0);
+    expect(
+        find.descendant(of: chat, matching: find.byIcon(Icons.chevron_right)),
+        findsOneWidget);
+    await tester.tap(find.text('AI chat'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedRotation>(arrow).turns, 0.25);
+    final left = tester.getTopLeft(find.text('AI chat')).dx;
+    expect(tester.getTopLeft(find.text('Short question')).dx, left);
+    expect(
+        tester
+            .getTopLeft(
+                find.text('A considerably longer question for alignment'))
+            .dx,
+        left);
+    for (final role in find.text('You').evaluate()) {
+      expect(tester.getTopLeft(find.byWidget(role.widget)).dx, left);
+    }
+  });
+
   testWidgets('RFC default blocks start collapsed', (tester) async {
     final fixture = jsonDecode(
         File('protocol/notes-rfc/fixtures/editor/states.json')

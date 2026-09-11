@@ -441,6 +441,7 @@ export class Paginator extends HTMLElement {
   #mediaQueryListener
   #ignoreNativeScroll = false
   #pendingScrollFrame = null
+  #paginatedOffset = null
   #touchState
   #touchScrolled
   #loadingNext = false
@@ -560,20 +561,7 @@ export class Paginator extends HTMLElement {
     // this.#footer = this.#root.getElementById('footer')
 
     this.#observer.observe(this.#container)
-    this.#container.addEventListener('scroll', () => {
-      if (this.#ignoreNativeScroll) return
-      if (this.#justAnchored) {
-        this.#justAnchored = false
-        return
-      }
-      if (this.#pendingScrollFrame)
-        cancelAnimationFrame(this.#pendingScrollFrame)
-      this.#pendingScrollFrame = requestAnimationFrame(() => {
-        this.#pendingScrollFrame = null
-        this.#afterScroll('scroll')
-        if (this.scrolled) this.#handleScrollBoundaries()
-      })
-    })
+    this.#container.addEventListener('scroll', () => this.#onScroll())
 
     const opts = { passive: false }
     this.addEventListener('touchstart', this.#onTouchStart.bind(this), opts)
@@ -847,6 +835,28 @@ export class Paginator extends HTMLElement {
         element.style[overflowProp] = prevOverflow
       })
   }
+  #onScroll() {
+    if (!this.#ignoreNativeScroll && !this.scrolled
+      && this.#paginatedOffset != null
+      && (this.#touchState?.selecting || window.getSelection()?.toString())) {
+      // Android's native handles can scroll a CSS column partway into view.
+      // Only explicit reader navigation may change the page during selection.
+      this.#container[this.scrollProp] = this.#paginatedOffset
+      return
+    }
+    if (this.#ignoreNativeScroll) return
+    if (this.#justAnchored) {
+      this.#justAnchored = false
+      return
+    }
+    if (this.#pendingScrollFrame)
+      cancelAnimationFrame(this.#pendingScrollFrame)
+    this.#pendingScrollFrame = requestAnimationFrame(() => {
+      this.#pendingScrollFrame = null
+      this.#afterScroll('scroll')
+      if (this.scrolled) this.#handleScrollBoundaries()
+    })
+  }
   #onTouchStart(e) {
     const touch = e.changedTouches[0]
     const scrollProp = this.scrollProp
@@ -855,6 +865,7 @@ export class Paginator extends HTMLElement {
       t: e.timeStamp,
       vx: 0, vy: 0,
       pinched: false,
+      selecting: Boolean(window.getSelection()?.toString()),
       direction: 'none',
       startTouch: {
         x: e.touches[0].screenX,
@@ -876,11 +887,13 @@ export class Paginator extends HTMLElement {
     }))
   }
   #onTouchMove(e) {
-    if (window.getSelection()?.toString()) return
-
     const touch = e.changedTouches[0]
     const state = this.#touchState
     if (!state) return
+    // Native handles can briefly collapse the range while crossing words.
+    // Once selection owns this gesture, never reinterpret it as page swiping.
+    state.selecting ||= Boolean(window.getSelection()?.toString())
+    if (state.selecting) return
 
     const deltaX = touch.screenX - state.startTouch.x
     const deltaY = touch.screenY - state.startTouch.y
@@ -971,7 +984,9 @@ export class Paginator extends HTMLElement {
   }
   #onTouchEnd(e) {
     const state = this.#touchState
-    this.dispatchEvent(new CustomEvent('doctouchend', {
+    if (state) state.selecting ||= Boolean(window.getSelection()?.toString())
+    // Reader-level pull/bookmark gestures must not consume a handle release.
+    if (!state?.selecting) this.dispatchEvent(new CustomEvent('doctouchend', {
       detail: {
         touch: e.changedTouches[0],
         touchState: state,
@@ -981,7 +996,8 @@ export class Paginator extends HTMLElement {
     }))
 
     this.#touchScrolled = false
-    if (this.scrolled) {
+    if (this.scrolled || state?.selecting
+      || window.getSelection()?.toString()) {
       this.#touchState = null
       return
     }
@@ -1055,6 +1071,7 @@ export class Paginator extends HTMLElement {
     const easing = opts.easing ?? easeOutSine
     
     const finish = () => {
+      this.#paginatedOffset = this.scrolled ? null : element[scrollProp]
       this.#afterScroll(reason)
       this.#ignoreNativeScroll = false
     }

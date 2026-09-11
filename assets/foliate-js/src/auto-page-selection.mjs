@@ -25,8 +25,8 @@ export class AutoPageSelectionCoordinator {
 
     constructor(machine, options = {}) {
         this.#machine = machine
-        this.#setTimer = options.setTimer ?? setTimeout
-        this.#clearTimer = options.clearTimer ?? clearTimeout
+        this.#setTimer = options.setTimer ?? ((callback, delay) => globalThis.setTimeout(callback, delay))
+        this.#clearTimer = options.clearTimer ?? (timer => globalThis.clearTimeout(timer))
         this.#options = { ...DEFAULT_OPTIONS, ...options }
     }
 

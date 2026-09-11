@@ -324,3 +324,37 @@ test('owner replacement makes callbacks from a destroyed document harmless', asy
     assert.equal(advances, 0)
     assert.equal(coordinator.snapshot.owner, newDoc)
 })
+
+test('default browser timers retain the global receiver for advance, recheck and cancel', async () => {
+    const originalSet = globalThis.setTimeout
+    const originalClear = globalThis.clearTimeout
+    const timers = new FakeTimers()
+    globalThis.setTimeout = function (callback, delay) {
+        assert.equal(this, globalThis, 'browser setTimeout requires Window receiver')
+        return timers.setTimer(callback, delay)
+    }
+    globalThis.clearTimeout = function (id) {
+        assert.equal(this, globalThis, 'browser clearTimeout requires Window receiver')
+        return timers.clearTimer(id)
+    }
+    try {
+        const machine = new SelectionSessionMachine()
+        const coordinator = new AutoPageSelectionCoordinator(machine)
+        const owner = {}
+        const session = machine.select(owner, 'range').session
+        let advances = 0
+        let rechecks = 0
+        coordinator.scheduleAdvance({ owner, generation: session.generation,
+            pageKey: 'page-1', advance: async () => { advances++ },
+            recheck: () => { rechecks++ } })
+        await timers.run()
+        assert.equal(advances, 1)
+        await timers.run()
+        assert.equal(rechecks, 1)
+        coordinator.cancelAll()
+        assert.equal(timers.size, 0)
+    } finally {
+        globalThis.setTimeout = originalSet
+        globalThis.clearTimeout = originalClear
+    }
+})

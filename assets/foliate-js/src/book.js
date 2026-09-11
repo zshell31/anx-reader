@@ -430,7 +430,6 @@ const setSelectionHandler = (view, doc, index) => {
     doc.addEventListener('selectstart', () => {
       const container = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
       if (!container) return;
-      globalThis.originalScrollLeft = container.scrollLeft;
       const current = coordinator.machine.current;
       const autoPage = getAutoPageCoordinator(view);
       if (current?.owner === doc) {
@@ -481,31 +480,12 @@ const setSelectionHandler = (view, doc, index) => {
           generation: session.generation,
           pageKey,
           advance: () => view.next(),
-          afterAdvance: () => {
-            const latestContainer = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
-            if (latestContainer) {
-              globalThis.originalScrollLeft = latestContainer.scrollLeft;
-            }
-          },
           recheck: () => doc.dispatchEvent(new Event('selectionchange')),
         });
         return;
       }
 
-      const preventScroll = () => {
-        const selRange = getSelectionRange(doc.getSelection());
-        if (!selRange || !view.lastLocation || !view.lastLocation.range) return;
 
-        if (view.lastLocation.range.startContainer === selRange.endContainer) {
-          container.scrollLeft = globalThis.originalScrollLeft;
-        }
-      };
-
-      container.addEventListener('scroll', preventScroll);
-
-      doc.addEventListener('pointerup', () => {
-        container.removeEventListener('scroll', preventScroll);
-      }, { once: true });
     })
 
   }

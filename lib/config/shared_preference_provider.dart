@@ -406,6 +406,13 @@ class Prefs extends ChangeNotifier {
     return prefs.getInt('awakeTime') ?? 5;
   }
 
+  bool get keepScreenOn => prefs.getBool('keepScreenOn') ?? false;
+
+  set keepScreenOn(bool value) {
+    prefs.setBool('keepScreenOn', value);
+    notifyListeners();
+  }
+
   set lastShowUpdate(DateTime time) {
     prefs.setString('lastShowUpdate', time.toIso8601String());
     notifyListeners();

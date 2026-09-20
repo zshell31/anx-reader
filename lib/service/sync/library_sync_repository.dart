@@ -10,7 +10,7 @@ import 'package:anx_reader/service/sync/library_protocol.dart';
 import 'package:anx_reader/service/sync/shared_state_database.dart';
 import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
-import 'package:crypto/crypto.dart';
+import 'package:anx_reader/service/file_digest.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
@@ -366,7 +366,7 @@ class LibrarySyncRepository {
     if (!await file.exists()) return null;
     return {
       'algorithm': 'sha256',
-      'digest': (await sha256.bind(file.openRead()).first).toString(),
+      'digest': await fileDigestService.sha256File(file.path),
       'extension': _portableExtensionStatic(book.filePath),
     };
   }
@@ -378,7 +378,7 @@ class LibrarySyncRepository {
     if (!await file.exists()) return null;
     return {
       'algorithm': 'sha256',
-      'digest': (await sha256.bind(file.openRead()).first).toString(),
+      'digest': await fileDigestService.sha256File(file.path),
       'extension': _portableExtensionStatic(book.coverPath),
     };
   }

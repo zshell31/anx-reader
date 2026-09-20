@@ -97,6 +97,8 @@
   "contextMenuShare": "Поделиться",
   "contextMenuNarrate": "Озвучить",
   "readingPageFullScreen": "Режим погружения",
+  "readingPageKeepScreenOn": "Не выключать экран во время чтения",
+  "pdfPageNeedsOcr": "На этой странице нет текстового слоя. Для выделения текста нужно распознавание (OCR).",
   "readingPageScreenTimeout": "Время отключения экрана",
   "readingPagePageTurningMethod": "Способ листания",
   "readingPageOpenExternalLinkTitle": "Открыть внешнюю ссылку",

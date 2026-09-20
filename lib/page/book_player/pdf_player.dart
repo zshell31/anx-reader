@@ -738,6 +738,12 @@ class PdfPlayerState extends ConsumerState<PdfPlayer> {
         }
         final page = pdf.pages[index];
         final pageText = await page.loadStructuredText();
+        if (pageText.fullText.trim().isEmpty) {
+          if (mounted && interactionGeneration == _wordSelectionGeneration) {
+            AnxToast.show(L10n.of(context).pdfPageNeedsOcr);
+          }
+          return null;
+        }
         final point = documentPosition
             .translate(-pageRect.left, -pageRect.top)
             .toPdfPoint(page: page, scaledPageSize: pageRect.size);

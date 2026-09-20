@@ -99,6 +99,8 @@
   "contextMenuShare": "Share",
   "contextMenuNarrate": "Narrate",
   "readingPageFullScreen": "Full Screen",
+  "readingPageKeepScreenOn": "Keep screen on while reading",
+  "pdfPageNeedsOcr": "This page has no text layer. OCR is needed to select text.",
   "readingPageScreenTimeout": "Screen Timeout",
   "readingPagePageTurningMethod": "Page Turning Method",
   "readingPageOpenExternalLinkTitle": "Open External Link",

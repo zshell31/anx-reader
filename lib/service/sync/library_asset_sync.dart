@@ -5,7 +5,7 @@ import 'package:anx_reader/service/sync/library_sync_repository.dart';
 import 'package:anx_reader/service/sync/sync_client_base.dart';
 import 'package:anx_reader/service/sync/sync_diagnostics.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
-import 'package:crypto/crypto.dart';
+import 'package:anx_reader/service/file_digest.dart';
 
 const libraryAssetReleaseSource = 'library-asset-release-v1';
 const libraryAssetPresenceSource = 'library-asset-presence-v1';
@@ -52,9 +52,13 @@ class SyncClientLibraryAssetTransport implements LibraryAssetTransport {
 
   @override
   Future<void> upload(String localPath, List<String> remotePath) async {
+    final watch = Stopwatch()..start();
+    final bytes = await File(localPath).length();
     await client
         .mkdirAll(remotePath.sublist(0, remotePath.length - 1).join('/'));
     await client.uploadFile(localPath, _path(remotePath), replace: false);
+    syncDebug('asset-transfer action=upload bytes=$bytes '
+        'durationMs=${watch.elapsedMilliseconds}');
   }
 
   @override
@@ -89,7 +93,7 @@ class LibraryAssetSyncService {
     DateTime Function()? clock,
   })  : resolveLocalPath = resolveLocalPath ?? getBasePath,
         isReleased = isReleased ?? ((_, __) async => false),
-        contentDigest = contentDigest ?? _sha256File,
+        contentDigest = contentDigest ?? fileDigestService.sha256File,
         _clock = clock ?? DateTime.now;
 
   Future<LibraryAssetSyncResult> syncBook(
@@ -373,9 +377,6 @@ class LibraryAssetSyncService {
     await saveLocalVerification?.call(file.path, verification);
   }
 }
-
-Future<String> _sha256File(String path) async =>
-    (await sha256.bind(File(path).openRead()).first).toString();
 
 class LibraryLocalAssetVerification {
   const LibraryLocalAssetVerification({

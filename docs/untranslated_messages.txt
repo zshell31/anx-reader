@@ -2,6 +2,8 @@
   "ar": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -81,6 +83,8 @@
   "de": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -160,6 +164,8 @@
   "es": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -239,6 +245,8 @@
   "fr": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -318,6 +326,8 @@
   "it": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -397,6 +407,8 @@
   "ja": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -476,6 +488,8 @@
   "ko": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -555,6 +569,8 @@
   "pt": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -634,6 +650,8 @@
   "ro": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -750,6 +768,8 @@
   "tr": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -829,6 +849,8 @@
   "zh": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -894,6 +916,8 @@
   "zh_CN": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -953,6 +977,8 @@
   "zh_LZH": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",
@@ -1032,6 +1058,8 @@
   "zh_TW": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "readingPageKeepScreenOn",
+    "pdfPageNeedsOcr",
     "settingsDictionary",
     "settingsExternalDictionary",
     "dictionaryAskEveryTime",

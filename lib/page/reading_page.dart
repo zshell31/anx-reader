@@ -339,6 +339,7 @@ class ReadingPageState extends ConsumerState<ReadingPage>
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.resumed:
+        resetAwakeTimer();
         epubPlayerKey.currentState?.reconcileSelectionOverlay();
         if (!_readTimeWatch.isRunning) {
           _readTimeWatch.start();
@@ -349,6 +350,9 @@ class ReadingPageState extends ConsumerState<ReadingPage>
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
+        _awakeTimer?.cancel();
+        _awakeTimer = null;
+        unawaited(WakelockPlus.disable());
         if (_readTimeWatch.isRunning) {
           _readTimeWatch.stop();
         }
@@ -385,10 +389,17 @@ class ReadingPageState extends ConsumerState<ReadingPage>
   Future<void> setAwakeTimer(int minutes) async {
     _awakeTimer?.cancel();
     _awakeTimer = null;
-    WakelockPlus.enable();
-    _awakeTimer = Timer.periodic(Duration(minutes: minutes), (timer) {
-      WakelockPlus.disable();
-      _awakeTimer?.cancel();
+    if (Prefs().keepScreenOn) {
+      await WakelockPlus.enable();
+      return;
+    }
+    if (minutes <= 0) {
+      await WakelockPlus.disable();
+      return;
+    }
+    unawaited(WakelockPlus.enable());
+    _awakeTimer = Timer(Duration(minutes: minutes), () {
+      unawaited(WakelockPlus.disable());
       _awakeTimer = null;
     });
   }
@@ -988,61 +999,65 @@ class ReadingPageState extends ConsumerState<ReadingPage>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        child: MouseRegion(
-                          onHover: (PointerHoverEvent detail) {
-                            if (!Prefs().showMenuOnHover) return;
-                            var y = detail.position.dy;
-                            if (y < 30 ||
-                                y > MediaQuery.of(context).size.height - 30) {
-                              showOrHideAppBarAndBottomBar(true);
-                            }
-                          },
-                          child: Focus(
-                            focusNode: _readerFocusNode,
-                            onKeyEvent: _handleReaderKeyEvent,
-                            child: Stack(
-                              children: [
-                                if (_isPdf)
-                                  PdfPlayer(
-                                    key: pdfPlayerKey,
-                                    book: _book,
-                                    initialPosition: widget.cfi,
-                                    showOrHideAppBarAndBottomBar:
-                                        showOrHideAppBarAndBottomBar,
-                                    onCropModeChanged: (enabled) {
-                                      if (mounted) {
-                                        setState(() => _pdfCropMode = enabled);
-                                      }
-                                    },
-                                    onReadingModeChanged: (reflow) {
-                                      if (mounted) {
-                                        setState(() {
-                                          _pdfReflowMode = reflow;
-                                        });
-                                      }
-                                    },
-                                  )
-                                else
-                                  EpubPlayer(
-                                    key: epubPlayerKey,
-                                    book: _book,
-                                    cfi: widget.cfi,
-                                    showOrHideAppBarAndBottomBar:
-                                        showOrHideAppBarAndBottomBar,
-                                    onLoadEnd: onLoadEnd,
-                                    initialThemes: widget.initialThemes,
-                                    updateParent: updateState,
-                                  ),
-                                if (_isResizingAiChat)
-                                  SizedBox.expand(
-                                    child: Container(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surface
-                                          .withAlpha(1),
+                        child: Listener(
+                          onPointerDown: (_) => resetAwakeTimer(),
+                          child: MouseRegion(
+                            onHover: (PointerHoverEvent detail) {
+                              if (!Prefs().showMenuOnHover) return;
+                              var y = detail.position.dy;
+                              if (y < 30 ||
+                                  y > MediaQuery.of(context).size.height - 30) {
+                                showOrHideAppBarAndBottomBar(true);
+                              }
+                            },
+                            child: Focus(
+                              focusNode: _readerFocusNode,
+                              onKeyEvent: _handleReaderKeyEvent,
+                              child: Stack(
+                                children: [
+                                  if (_isPdf)
+                                    PdfPlayer(
+                                      key: pdfPlayerKey,
+                                      book: _book,
+                                      initialPosition: widget.cfi,
+                                      showOrHideAppBarAndBottomBar:
+                                          showOrHideAppBarAndBottomBar,
+                                      onCropModeChanged: (enabled) {
+                                        if (mounted) {
+                                          setState(
+                                              () => _pdfCropMode = enabled);
+                                        }
+                                      },
+                                      onReadingModeChanged: (reflow) {
+                                        if (mounted) {
+                                          setState(() {
+                                            _pdfReflowMode = reflow;
+                                          });
+                                        }
+                                      },
+                                    )
+                                  else
+                                    EpubPlayer(
+                                      key: epubPlayerKey,
+                                      book: _book,
+                                      cfi: widget.cfi,
+                                      showOrHideAppBarAndBottomBar:
+                                          showOrHideAppBarAndBottomBar,
+                                      onLoadEnd: onLoadEnd,
+                                      initialThemes: widget.initialThemes,
+                                      updateParent: updateState,
                                     ),
-                                  ),
-                              ],
+                                  if (_isResizingAiChat)
+                                    SizedBox.expand(
+                                      child: Container(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surface
+                                            .withAlpha(1),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),

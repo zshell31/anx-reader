@@ -13,6 +13,8 @@ import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.Locale
+import java.io.File
+import java.security.MessageDigest
 
 class MainActivity : AudioServiceActivity() {
 
@@ -24,6 +26,38 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        MethodChannel(
+            messenger,
+            "com.anxcye.anx_reader/file_digest",
+            io.flutter.plugin.common.StandardMethodCodec.INSTANCE,
+            messenger.makeBackgroundTaskQueue(),
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "sha256") {
+                result.notImplemented()
+            } else {
+                val path = call.argument<String>("path")
+                if (path == null) {
+                    result.error("INVALID_ARGUMENT", "File path is required", null)
+                } else {
+                    try {
+                        val digest = MessageDigest.getInstance("SHA-256")
+                        File(path).inputStream().use { input ->
+                            val buffer = ByteArray(256 * 1024)
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                digest.update(buffer, 0, count)
+                            }
+                        }
+                        result.success(digest.digest().joinToString("") { "%02x".format(it) })
+                    } catch (e: Exception) {
+                        result.error("FILE_DIGEST_ERROR", e.javaClass.simpleName, null)
+                    }
+                }
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

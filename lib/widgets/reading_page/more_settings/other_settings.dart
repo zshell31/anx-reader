@@ -331,7 +331,16 @@ class _OtherSettingsState extends State<OtherSettings> {
           autoTranslateSelection(),
           autoMarkSelection(),
           autoSummaryPreviousContent(),
-          screenTimeout(),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(L10n.of(context).readingPageKeepScreenOn),
+            value: Prefs().keepScreenOn,
+            onChanged: (value) => setState(() {
+              Prefs().keepScreenOn = value;
+              readingPageKey.currentState?.resetAwakeTimer();
+            }),
+          ),
+          if (!Prefs().keepScreenOn) screenTimeout(),
           pageTurningControl(),
         ],
       ),

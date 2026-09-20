@@ -97,6 +97,7 @@
   "contextMenuShare": "Поделиться",
   "contextMenuNarrate": "Озвучить",
   "readingPageFullScreen": "Режим погружения",
+  "importLocalComplete": "Книга импортирована на устройство. Загрузка в облако выполняется отдельно; её прогресс виден в библиотеке.",
   "readingPageKeepScreenOn": "Не выключать экран во время чтения",
   "pdfPageNeedsOcr": "На этой странице нет текстового слоя. Для выделения текста нужно распознавание (OCR).",
   "readingPageScreenTimeout": "Время отключения экрана",

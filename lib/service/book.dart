@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:anx_reader/dao/book.dart';
@@ -6,6 +7,8 @@ import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/main.dart';
 import 'package:anx_reader/models/book.dart';
+import 'package:anx_reader/models/import_file_check.dart';
+import 'package:anx_reader/providers/sync_status.dart';
 import 'package:anx_reader/models/current_reading_state.dart';
 import 'package:anx_reader/page/home_page.dart';
 import 'package:anx_reader/page/iap_page.dart';
@@ -127,6 +130,7 @@ void _checkDuplicatesAndShowDialog(
       duplicateInfo,
       unsupportedFiles,
       fileList,
+      checks: {for (final check in checkResults) check.filePath: check},
     );
   } catch (e) {
     if (!navigator.mounted) return;
@@ -147,8 +151,9 @@ void _showImportDialog(
   List<File> duplicateFiles,
   Map<String, Book> duplicateInfo,
   List<File> unsupportedFiles,
-  List<File> fileList,
-) {
+  List<File> fileList, {
+  Map<String, ImportFileCheck> checks = const {},
+}) {
   // delete unsupported files
   for (var file in unsupportedFiles) {
     file.deleteSync();
@@ -256,6 +261,8 @@ void _showImportDialog(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (finished && errorFiles.isEmpty)
+                        Text(L10n.of(context).importLocalComplete),
                       Text(L10n.of(context)
                           .importSupportTypes(allowBookExtensions.join(' / '))),
 
@@ -390,7 +397,8 @@ void _showImportDialog(
                                     currentHandlingFile = file.path;
                                   });
                                   try {
-                                    await importBook(file, ref);
+                                    await importBook(file, ref,
+                                        checked: checks[file.path]);
                                     setState(() {
                                       currentHandlingFile = '';
                                     });
@@ -435,8 +443,9 @@ void _showImportDialog(
       });
 }
 
-Future<void> importBook(File file, WidgetRef ref) async {
-  String? md5 = await MD5Service.calculateFileMd5(file.path);
+Future<void> importBook(File file, WidgetRef ref,
+    {ImportFileCheck? checked}) async {
+  String? md5 = await MD5Service.forImport(file, checked);
 
   if (file.path.split('.').last == 'txt') {
     final tempFile = await convertFromTxt(file);
@@ -445,7 +454,8 @@ Future<void> importBook(File file, WidgetRef ref) async {
   }
 
   await getBookMetadata(file, md5: md5, ref: ref);
-  ref.read(bookListProvider.notifier).refresh();
+  await ref.read(bookListProvider.notifier).refresh();
+  unawaited(ref.read(syncStatusProvider.notifier).refresh());
 }
 
 Future<void> pushToReadingPage(

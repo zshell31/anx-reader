@@ -1,3 +1,4 @@
+import { renderPdfCover } from './import-cover.mjs'
 /* global pdfjsLib */
 
 // https://github.com/mozilla/pdf.js/blob/f04967017f22e46d70d11468dd928b4cdc2f6ea1/web/text_layer_builder.css
@@ -611,6 +612,6 @@ export const makePDF = async file => {
         return [index, null]
     }
     book.getTOCFragment = doc => doc.documentElement
-    book.getCover = async () => renderPage(await pdf.getPage(1), true)
+    book.getCover = async () => renderPdfCover(await pdf.getPage(1))
     return book
 }

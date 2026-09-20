@@ -34,7 +34,7 @@ class MainActivity : AudioServiceActivity() {
             io.flutter.plugin.common.StandardMethodCodec.INSTANCE,
             messenger.makeBackgroundTaskQueue(),
         ).setMethodCallHandler { call, result ->
-            if (call.method != "sha256") {
+            if (call.method != "sha256" && call.method != "md5") {
                 result.notImplemented()
             } else {
                 val path = call.argument<String>("path")
@@ -42,7 +42,7 @@ class MainActivity : AudioServiceActivity() {
                     result.error("INVALID_ARGUMENT", "File path is required", null)
                 } else {
                     try {
-                        val digest = MessageDigest.getInstance("SHA-256")
+                        val digest = MessageDigest.getInstance(if (call.method == "md5") "MD5" else "SHA-256")
                         File(path).inputStream().use { input ->
                             val buffer = ByteArray(256 * 1024)
                             while (true) {

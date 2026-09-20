@@ -5,9 +5,24 @@ import 'package:anx_reader/models/import_file_check.dart';
 import 'package:anx_reader/models/md5_calculating_result.dart';
 import 'package:anx_reader/models/md5_statistics.dart';
 import 'package:anx_reader/utils/log/common.dart';
-import 'package:crypto/crypto.dart';
+import 'package:anx_reader/service/file_digest.dart';
 
 class MD5Service {
+  static Future<String?> forImport(File file, ImportFileCheck? checked) async {
+    final stat = await file.stat();
+    final original = checked?.fingerprintStat;
+    if (checked?.filePath == file.path &&
+        checked?.md5 != null &&
+        original != null &&
+        stat.type == FileSystemEntityType.file &&
+        stat.size == original.size &&
+        stat.modified == original.modified &&
+        stat.changed == original.changed) {
+      return checked!.md5;
+    }
+    return calculateFileMd5(file.path);
+  }
+
   static Future<String?> calculateFileMd5(String filePath) async {
     try {
       final file = File(filePath);
@@ -15,9 +30,7 @@ class MD5Service {
         return null;
       }
 
-      final bytes = await file.readAsBytes();
-      final digest = md5.convert(bytes);
-      return digest.toString();
+      return await fileDigestService.md5File(filePath);
     } catch (e) {
       AnxLog.severe('Error calculating MD5 for $filePath: $e');
       return null;
@@ -95,6 +108,7 @@ class MD5Service {
     List<ImportFileCheck> results = [];
 
     for (final filePath in filePaths) {
+      final stat = await File(filePath).stat();
       final md5 = await calculateFileMd5(filePath);
       Book? duplicateBook;
 
@@ -105,6 +119,7 @@ class MD5Service {
       results.add(ImportFileCheck(
         filePath: filePath,
         md5: md5,
+        fingerprintStat: stat,
         isDuplicate: duplicateBook != null && !duplicateBook.isDeleted,
         duplicateBook: duplicateBook,
       ));

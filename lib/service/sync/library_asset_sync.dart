@@ -1,3 +1,4 @@
+import 'package:anx_reader/service/sync/library_transfer_progress.dart';
 import 'dart:io';
 
 import 'package:anx_reader/service/sync/library_protocol.dart';
@@ -54,11 +55,19 @@ class SyncClientLibraryAssetTransport implements LibraryAssetTransport {
   Future<void> upload(String localPath, List<String> remotePath) async {
     final watch = Stopwatch()..start();
     final bytes = await File(localPath).length();
-    await client
-        .mkdirAll(remotePath.sublist(0, remotePath.length - 1).join('/'));
-    await client.uploadFile(localPath, _path(remotePath), replace: false);
-    syncDebug('asset-transfer action=upload bytes=$bytes '
-        'durationMs=${watch.elapsedMilliseconds}');
+    libraryTransferProgress.update(localPath, 0, bytes);
+    try {
+      await client
+          .mkdirAll(remotePath.sublist(0, remotePath.length - 1).join('/'));
+      await client.uploadFile(localPath, _path(remotePath),
+          replace: false,
+          onProgress: (sent, total) =>
+              libraryTransferProgress.update(localPath, sent, total));
+      syncDebug('asset-transfer action=upload bytes=$bytes '
+          'durationMs=${watch.elapsedMilliseconds}');
+    } finally {
+      libraryTransferProgress.finish(localPath);
+    }
   }
 
   @override

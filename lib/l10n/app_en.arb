@@ -99,6 +99,7 @@
   "contextMenuShare": "Share",
   "contextMenuNarrate": "Narrate",
   "readingPageFullScreen": "Full Screen",
+  "importLocalComplete": "Imported to this device. Cloud upload runs separately; its progress is shown in the library.",
   "readingPageKeepScreenOn": "Keep screen on while reading",
   "pdfPageNeedsOcr": "This page has no text layer. OCR is needed to select text.",
   "readingPageScreenTimeout": "Screen Timeout",

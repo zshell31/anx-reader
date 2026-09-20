@@ -1,3 +1,4 @@
+import { compactCover } from './import-cover.mjs'
 console.log('book.js')
 console.log('AnxUA', navigator.userAgent)
 
@@ -1771,7 +1772,7 @@ const onExternalLink = (link) => callFlutter('onExternalLink', link)
 const onSetToc = () => callFlutter('onSetToc', reader.toc)
 
 const getMetadata = async () => {
-  const cover = await reader.view.book.getCover()
+  const cover = await compactCover(await reader.view.book.getCover())
   if (cover) {
     // cover is a blob, so we need to convert it to base64
     const fileReader = new FileReader()

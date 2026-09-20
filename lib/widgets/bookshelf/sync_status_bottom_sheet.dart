@@ -1,3 +1,5 @@
+import 'package:anx_reader/providers/library_transfer_progress.dart';
+import 'package:path/path.dart' as path;
 import 'package:anx_reader/enums/book_sync_status.dart';
 import 'package:anx_reader/enums/sync_trigger.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
@@ -26,7 +28,17 @@ class SyncStatusBottomSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final syncState = ref.watch(syncProvider);
+    final baseState = ref.watch(syncProvider);
+    final transfers = ref.watch(libraryTransfersProvider).valueOrNull;
+    final active = transfers?.values.firstOrNull;
+    final syncState = active == null
+        ? baseState
+        : baseState.copyWith(
+            isSyncing: true,
+            fileName: path.basename(active.path),
+            count: active.sent,
+            total: active.total,
+          );
     final theme = Theme.of(context);
     final l10n = L10n.of(context);
 

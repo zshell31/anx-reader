@@ -2,6 +2,7 @@
   "ar": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -83,6 +84,7 @@
   "de": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -164,6 +166,7 @@
   "es": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -245,6 +248,7 @@
   "fr": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -326,6 +330,7 @@
   "it": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -407,6 +412,7 @@
   "ja": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -488,6 +494,7 @@
   "ko": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -569,6 +576,7 @@
   "pt": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -650,6 +658,7 @@
   "ro": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -768,6 +777,7 @@
   "tr": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -849,6 +859,7 @@
   "zh": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -916,6 +927,7 @@
   "zh_CN": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -977,6 +989,7 @@
   "zh_LZH": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",
@@ -1058,6 +1071,7 @@
   "zh_TW": [
     "contextMenuDictionary",
     "contextMenuGoogleTranslate",
+    "importLocalComplete",
     "readingPageKeepScreenOn",
     "pdfPageNeedsOcr",
     "settingsDictionary",

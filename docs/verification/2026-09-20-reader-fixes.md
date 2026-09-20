@@ -89,3 +89,36 @@ pre-existing context-after-await infos in drag/drop and book replacement handler
 Follow-up release installed with `adb install -r` successfully; Android reports
 lastUpdateTime 2026-09-20 21:03:40. Manual import/deletion verification remains
 with the user as requested.
+
+## Follow-up: import cost and visible upload progress
+
+Fresh device log confirmed the optimized SHA-256 took 514 ms for the 243,829,116
+byte OCR book. Upload took 101,330 ms; its old screen-dependent PNG cover was
+22,636,781 bytes and took another 9,211 ms. Final status calculation took 189 ms.
+The remaining local import performed MD5 twice using a whole-file Dart buffer.
+
+- MD5 now uses Android MessageDigest on the existing background task queue;
+  the portable implementation streams in an isolate. The canonical MD5 identity
+  is unchanged. Duplicate-check results are reused only while staged file path,
+  size, modification time and change time still match; changed files are hashed
+  again. TXT retains its original-source fingerprint behavior.
+- New PDF covers render independently of viewport/DPR, at most 1000 pixels on
+  the long edge, without upscaling, and encode JPEG at quality 0.82. Large embedded
+  covers also become bounded JPEGs. Existing imported covers are not rewritten.
+- Local import completion has its own message and refreshes local availability.
+  Immutable-asset uploads report transient per-file bytes and percent to the book
+  card and sync detail sheet, including uploads outside the legacy sync helper.
+  Failed/completed transfers clear active progress in finally. No canonical
+  progress fields or wire-format changes; prior cross-client unaffected findings
+  apply. A progress value of 100% means bytes sent; success still requires the
+  upload operation to complete.
+
+Validation: 27 Dart hashing/import/asset tests, one real book-card/sync-sheet
+widget test, and three JS cover tests passed. Web bundle rebuilt; existing three
+webpack top-level-await target warnings remain. No on-device timing claim for
+this follow-up; the user requested manual device verification themselves.
+Final targeted analyzer: no issues found. Release arm64 APK rebuilt successfully;
+verified only arm64 native libraries and inclusion of the new cover module.
+Debug symbols stored outside the repository in `/tmp/anx-import-speed-symbols`.
+Release installed successfully with `adb install -r`; Android reports
+lastUpdateTime 2026-09-20 21:22:02. User data preserved; no debug build installed.

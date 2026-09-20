@@ -1,3 +1,4 @@
+import 'package:anx_reader/providers/library_transfer_progress.dart';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/enums/book_sync_status.dart';
 import 'package:anx_reader/models/book.dart';
@@ -49,6 +50,11 @@ class BookItem extends ConsumerWidget {
             }) ??
             BookSyncStatusEnum.checking;
 
+    final transfers = ref.watch(libraryTransfersProvider).valueOrNull;
+    final transfer =
+        transfers?[book.fileFullPath] ?? transfers?[book.coverFullPath];
+    if (transfer != null) bookSyncStatus = BookSyncStatusEnum.uploading;
+
     return GestureDetector(
       onTap: () {
         pushToReadingPage(ref, context, book);
@@ -89,7 +95,7 @@ class BookItem extends ConsumerWidget {
           ),
           const SizedBox(height: 5),
           SizedBox(
-            height: 55,
+            height: transfer == null ? 55 : 72,
             child: Column(
               children: [
                 Row(
@@ -116,6 +122,15 @@ class BookItem extends ConsumerWidget {
                       ),
                   ],
                 ),
+                if (transfer != null)
+                  Row(children: [
+                    Expanded(
+                        child:
+                            LinearProgressIndicator(value: transfer.fraction)),
+                    const SizedBox(width: 4),
+                    Text('${((transfer.fraction ?? 0) * 100).floor()}%',
+                        style: const TextStyle(fontSize: 10)),
+                  ]),
                 Row(
                   children: [
                     Expanded(

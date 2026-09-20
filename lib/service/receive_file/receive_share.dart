@@ -28,7 +28,7 @@ void receiveShareIntent(WidgetRef ref) {
         files.add(sourceFile);
       }
     }
-    importBookList(files, navigatorKey.currentContext!, ref);
+    importBookList(files, navigatorKey.currentContext!);
     handler.resetInitialSharedMedia();
   }
 

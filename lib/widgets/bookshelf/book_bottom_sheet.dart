@@ -38,6 +38,7 @@ class BookBottomSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> handleDelete(BuildContext context) async {
+      final container = ProviderScope.containerOf(context, listen: false);
       Navigator.pop(context);
       final tombstone = Book(
         id: book.id,
@@ -55,12 +56,14 @@ class BookBottomSheet extends ConsumerWidget {
         updateTime: DateTime.now(),
       );
       await bookDao.updateBook(tombstone);
+      container.invalidate(bookListProvider);
       if (tombstone.md5 != null) {
         await annotationSyncRuntime.publishBook(tombstone);
       }
-      ref.read(bookListProvider.notifier).refresh();
-      File(book.fileFullPath).delete();
-      File(book.coverFullPath).delete();
+      for (final path in [book.fileFullPath, book.coverFullPath]) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
     }
 
     void handleDetail(BuildContext context) {

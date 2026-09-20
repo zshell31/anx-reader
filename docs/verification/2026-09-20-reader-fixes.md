@@ -56,3 +56,36 @@ or annotation migration. Existing source file and annotations are preserved.
 - OCR output: `~/Books/Solo/SoloRPG Field Guide - Full pages OCR.pdf`, also copied
   to the phone's Download folder. Title: Solo RPG Field Guide (OCR).
   SHA-256: 1bd60cfb0f96a4fcbbd0b07c15fe1cc021c880428e189a756221a396a0d5dd70.
+
+## Follow-up: import after picker and deletion refresh
+
+Release log symbolization with the 6325 build's saved symbols identifies:
+
+- `BookshelfPageState._importBook` line 100: `State.context` null-check after
+  the originating bookshelf was disposed while Android's picker was open.
+- `BookBottomSheet.build.handleDelete` line 61: `WidgetRef.read` after the
+  bottom sheet had been popped. The database tombstone was already saved,
+  explaining why restarting hid the deleted book.
+
+The OCR source is present in `/sdcard/Books/` (plural), 243,829,116 bytes;
+Android reports approximately 60 GB free. These observed crashes are lifecycle
+errors, not missing text or damaged OCR.
+
+Picker completion now targets the app navigator; the import dialog owns its
+Consumer ref. Duplicate checking also retains the navigator instead of using
+an obsolete context. Import cannot be dismissed/restarted midway through saving.
+Metadata save completes before its caller refreshes the list. Deletion captures
+the ProviderContainer before closing the sheet and invalidates the bookshelf
+immediately after local persistence. File cleanup tolerates already-missing files.
+
+Canonical membership, identities and annotation deletion semantics are unchanged;
+the cross-client unaffected conclusions above still apply. Two widget regression
+tests pass, including disposing the launching page before completing the picker.
+User will perform live import/deletion verification; no debug installation.
+
+Follow-up validation: release arm64 APK rebuilt successfully (39.4 MB), symbols
+stored in `/tmp/anx-import-symbols`. Targeted analysis reports no errors and three
+pre-existing context-after-await infos in drag/drop and book replacement handlers.
+Follow-up release installed with `adb install -r` successfully; Android reports
+lastUpdateTime 2026-09-20 21:03:40. Manual import/deletion verification remains
+with the user as requested.

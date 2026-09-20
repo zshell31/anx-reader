@@ -73,32 +73,32 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
     return File(sourcePath).copy(targetPath);
   }
 
-  Future<void> _importBook() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: true,
-    );
+  Future<void> _importBook() => importBooksFromPicker(context, () async {
+        FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          allowMultiple: true,
+        );
 
-    if (result == null) {
-      return;
-    }
+        if (result == null) {
+          return null;
+        }
 
-    List<PlatformFile> files = result.files;
-    AnxLog.info('importBook files: ${files.toString()}');
-    List<File> fileList = [];
-    // FilePicker on Windows will return files with original path,
-    // but on Android it will return files with temporary path.
-    // So we need to save the files to the temp directory.
-    if (!AnxPlatform.isAndroid) {
-      fileList = await Future.wait(files.map((file) async {
-        return _copyToTempFile(sourcePath: file.path!, fileName: file.name);
-      }).toList());
-    } else {
-      fileList = files.map((file) => File(file.path!)).toList();
-    }
+        List<PlatformFile> files = result.files;
+        AnxLog.info('importBook files: ${files.toString()}');
+        List<File> fileList = [];
+        // FilePicker on Windows will return files with original path,
+        // but on Android it will return files with temporary path.
+        // So we need to save the files to the temp directory.
+        if (!AnxPlatform.isAndroid) {
+          fileList = await Future.wait(files.map((file) async {
+            return _copyToTempFile(sourcePath: file.path!, fileName: file.name);
+          }).toList());
+        } else {
+          fileList = files.map((file) => File(file.path!)).toList();
+        }
 
-    importBookList(fileList, context, ref);
-  }
+        return fileList;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +481,7 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
                   fileName: file.name,
                 ));
               }
-              importBookList(files, context, ref);
+              importBookList(files, context);
               setState(() {
                 _dragging = false;
               });
